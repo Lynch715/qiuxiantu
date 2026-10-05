@@ -6871,7 +6871,7 @@ function listBlock(title,arr,cls){
 function changeLines(d){
   const out=[];
   const ch=d.playerChanges||{};
-  if(num(S.lingliLast)>0||lastDeltas['灵力']) out.push(`灵力 +${num(S.lingliLast)+num(lastDeltas['灵力'])}${S.player.realm&&atBottleneck(S.player)?'（已到瓶颈，可以冲关）':''}`);
+  if(num(S.lingliLast)>0||lastDeltas['灵力']) out.push(`灵力 +${Math.round(num(S.lingliLast)+num(lastDeltas['灵力']))}${S.player.realm&&atBottleneck(S.player)?'（已到瓶颈，可以冲关）':''}`);
   for(const k of ['体魄','神识','心性','谈吐']){ const v=lastDeltas[k]; if(v) out.push(`${k} ${v>0?'+':''}${v}`); }
   if(lastDeltas['气血']) out.push(`气血 ${lastDeltas['气血']>0?'+':''}${lastDeltas['气血']}`);
   if(lastDeltas['伤愈']&&lastDeltas['伤愈'].length) out.push(`伤愈：${lastDeltas['伤愈'].join('、')}`);
