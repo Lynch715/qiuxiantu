@@ -1,0 +1,16 @@
+{
+  "name": "求仙途",
+  "short_name": "求仙途",
+  "description": "代码掌骰子、掌记账，大模型讲故事的修仙人生模拟器",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#E4ECE6",
+  "theme_color": "#E4ECE6",
+  "icons": [
+    {"src": "icon/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "icon/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "icon/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
