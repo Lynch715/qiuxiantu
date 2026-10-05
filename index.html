@@ -2195,6 +2195,59 @@ function applyRealm(judge){
   }
   if(judge.engineDeath) S.engineDeath=judge.engineDeath;
 }
+
+/* ================= 境界尊卑 =================
+   修真界以境界论高低。引擎先算出双方差几个大境界，把该有的礼数写死交给模型，不让模型自己去比。 */
+const KIN_RE=/父|母|爹|娘|爷|奶|祖|兄|弟|姐|妹|哥|嫂|叔|姑|舅|姨|妻|夫|妾|道侣|恋人|情人|师父|师尊|师傅|子|女|未婚|青梅|指腹/;
+function isKinOf(n){
+  if(!n) return false;
+  const r=typeof relOf==='function'?relOf(playerName(),n.name):null;
+  if(r&&['亲属','夫妻','妾室','恋人','师徒'].includes(r.type)) return true;
+  if(n.parents&&(n.parents.father===playerName()||n.parents.mother===playerName())) return true;
+  return KIN_RE.test(String(n.relation||''));
+}
+function realmGapOf(n){                       // 主角比对方高几个大境界（凡人算 -1 层）
+  const pm=majorOf(S.player), nm=majorOf(n);
+  if(pm<0) return 0;
+  return pm-nm;
+}
+function respectBonus(n,type,attr){            // 说服、威胁低阶之人的判定加值
+  const g=realmGapOf(n); if(g<=0||isKinOf(n)) return 0;
+  let b=Math.min(20,8*g);
+  if(/威胁|威压|恫吓|逼/.test(String(type||''))||attr==='武功') b+=5;
+  return b;
+}
+function playerAddressRule(){
+  const p=S.player, sn=surnameOf(p.name), pm=majorOf(p), rt=realmText(p.realm);
+  if(pm<=0) return `主角眼下只是炼气小修：自称「我」「在下」，见了筑基以上的修士自称「晚辈」；同辈叫他「${sn}道友」「${sn}师${p.gender==='女'?'妹':'弟'}」「小${sn}」之类。`;
+  const hon=pm>=3?`「${sn}老祖」「${sn}前辈」`:(pm>=2?`「${sn}前辈」「${sn}真人」`:`「${sn}前辈」`);
+  return `主角已是${rt}修士，修真界以境界论尊卑：境界比他低一个大境界以上的人，称他${hon}，同门晚辈称他「${sn}师叔」${pm>=2?`或「${sn}师叔祖」`:''}，见面先行礼、自称「晚辈」；凡人称他「仙师」${pm>=2?'「上仙」':''}。主角自己说话自称「我」「在下」${pm>=2?'「本座」（看他性子）':''}，不再自称晚辈——只有面对境界比他高的人才执晚辈礼。同境界的人叫他「${sn}道友」。主角境界涨了，旧识的称呼和态度要跟着改过来，别还叫他「小${sn}」。`;
+}
+function realmStance(n){
+  const p=S.player; if(!p||!n||majorOf(p)<0) return '';
+  const g=realmGapOf(n), nm=majorOf(n), pm=majorOf(p);
+  const sect=S.sect&&n.faction&&S.sect.name===n.faction;
+  const ta=n.gender==='女'?'她':'他', CN=['零','一','两','三','四','五','六','七','八','九'], cn=k=>CN[Math.abs(k)]||String(Math.abs(k));
+  let t;
+  if(isKinOf(n)){
+    t=`是主角的${n.relation||'亲近之人'}，称呼照旧不改。`;
+    if(g>=1) t+=`但主角如今境界高${ta}${cn(g)}个大境界，${ta}说话多了分寸，有事先跟主角商量，不再随口管教或差使。`;
+    else if(g<=-1) t+=`${ta}境界比主角高，仍以长辈或亲近的口吻相待。`;
+    return t;
+  }
+  if(nm<0) t=`凡人。见了修士称「仙师」${pm>=2?'「上仙」':''}，自称「小人」「小的」「民女」之类，恭恭敬敬，见面可以跪拜，不敢直视。`;
+  else if(g>=2) t=`比主角低${cn(g)}个大境界。见面先行礼，称「前辈」${sect?'（同门称「师叔祖」）':''}，自称「晚辈」；说话斟酌，不敢顶撞，主角吩咐的小事不敢推辞，主角没发话不敢先走。`;
+  else if(g===1) t=`比主角低一个大境界。称「前辈」${sect?'（同门称「师叔」）':''}，自称「晚辈」，客客气气、守规矩，不敢随意说笑。`;
+  else if(g===0) t=`与主角同一大境界，平辈论交，叫「道友」「师兄」「师姐」，按资历和交情来。`;
+  else if(g===-1) t=`比主角高一个大境界。主角在${ta}面前该执晚辈礼、称前辈；${ta}以长辈口吻待主角。`;
+  else t=`比主角高${cn(g)}个大境界。主角在${ta}面前是小辈，该行礼称前辈；${ta}未必把主角放在眼里。`;
+  if(g>=1&&nm>=0){
+    const hostile=n.alignment==='邪道'||num(n['好感度'])<25||(S.vendettas||[]).some(v=>v.name===n.name&&v.heat>0)||/桀骜|傲|狂|倔/.test(String(n.personality||''));
+    if(hostile) t+='此人嘴上可以不服软，但心里忌惮主角的修为，不会当面挑衅，动手前要掂量。';
+    if(/长老|宗主|掌门|执事|家主|堂主|峰主/.test(String(n.identity||''))) t+=`${ta}职位虽高，境界却不如主角；修真界以修为论高低，${ta}对主角也得客气。`;
+  }
+  return t;
+}
 function realmStatusLine(){
   const x=S&&S.xs; if(!x) return '';
   const m=num(S.months), out=[];
@@ -3602,7 +3655,7 @@ function tickVendettas(months){
     if(!n||!n.alive){ v.heat=0; continue; }
     if(num(v.cool)>0){ v.cool=Math.max(0,num(v.cool)-months); continue; }   // 刚交过手，消停一阵
     if(n['好感度']>=45){ v.heat=Math.max(0,v.heat-15*months); v.eta=null; continue; }
-    const r=vRatio(n), nerve=vNerve(r);
+    const r=vRatio(n), nerve=realmGapOf(n)>=1?0:vNerve(r);   // 境界低一截，亲自上门是送死
     if(nerve<=0){
       // 亲自来是送死，他自己也明白
       if(!v.gaveUp){ v.gaveUp=true; news(`${v.name}打听清楚了你如今的身手，没敢再露面`); }
@@ -4164,7 +4217,7 @@ function stateBlocks(action){
   const near=S.npcs.filter(isRelevantNpc).sort((a,b)=>Number(asArr(S.scene&&S.scene.present).includes(b.name))-Number(asArr(S.scene&&S.scene.present).includes(a.name))).slice(0,16);
   const far=S.npcs.filter(n=>n.alive&&!near.includes(n)).slice(-40);
   const gone=S.npcs.filter(n=>!n.alive).slice(-30);
-  const npcBrief=near.map(n=>({name:n.name,gender:n.gender,age:n.age,identity:n.identity,faction:n.faction,alignment:n.alignment,personality:n.personality,portrait:npcPortrait(n),境界:realmText(n.realm),灵根:lgText(n.linggen),标签:n.tags||[],与旁人:relsOfName(n.name).slice(-6).map(r=>relOther(r,n.name)+'·'+r.type),近况:(n.life||[]).slice(-2).map(x=>x.text),relation:n.relation,好感度:n['好感度'],爱恋值:n['爱恋值'],mood:n.mood,secret:n.secret,secretKnown:n.secretKnown,notes:n.notes,location:n.location||'未知',在场:asArr(S.scene&&S.scene.present).includes(n.name),学自主角的功法:(n.fromPlayer||[]),与主角的往来:(n.memory||[]).slice(-M.npcMem)}));
+  const npcBrief=near.map(n=>({name:n.name,gender:n.gender,age:n.age,identity:n.identity,faction:n.faction,alignment:n.alignment,personality:n.personality,portrait:npcPortrait(n),境界:realmText(n.realm),灵根:lgText(n.linggen),标签:n.tags||[],与旁人:relsOfName(n.name).slice(-6).map(r=>relOther(r,n.name)+'·'+r.type),近况:(n.life||[]).slice(-2).map(x=>x.text),relation:n.relation,对主角:realmStance(n),好感度:n['好感度'],爱恋值:n['爱恋值'],mood:n.mood,secret:n.secret,secretKnown:n.secretKnown,notes:n.notes,location:n.location||'未知',在场:asArr(S.scene&&S.scene.present).includes(n.name),学自主角的功法:(n.fromPlayer||[]),与主角的往来:(n.memory||[]).slice(-M.npcMem)}));
   const farText=far.length?far.map(n=>`${n.name}（${n.identity||''}${n.relation?'，'+n.relation:''}）`).join('；'):'（无）';
   const goneText=gone.length?gone.map(n=>n.name).join('、'):'（无）';
   const vols=(S.volumes||[]).slice(-M.vol).map(v=>`〔第${v.from}至${v.to}回〕${String(v.text||'').slice(0,M.volLen)}`).join('\n')||'（尚无）';
@@ -4186,7 +4239,8 @@ function stateBlocks(action){
 【当前场景】${S.scene?`主角现在${S.scene.location||'未知地点'}。未了结的事：${asArr(S.scene.unresolved).join('；')||'无'}`:'见最近剧情'}
 ${worldThreadBlock(action)}
 【实际在场人物】${asArr(S.scene&&S.scene.present).join('、')||'未确认，不可假定所有旧识都在这里'}
-【主角姓名】${p.name}${p.biaozi?`（字${p.biaozi}）`:''}——姓「${surnameOf(p.name)}」。叙述、自称、旁人称呼一律用这个名字：自称用「我」「在下」「晚辈」，旁人按辈分叫「${surnameOf(p.name)}道友」「${surnameOf(p.name)}师${p.gender==='女'?'妹':'弟'}」「小${surnameOf(p.name)}」之类。绝不可换成别的姓或别的名字。
+【主角姓名】${p.name}${p.biaozi?`（字${p.biaozi}）`:''}——姓「${surnameOf(p.name)}」。叙述和旁人称呼一律用这个名字，绝不可换成别的姓或别的名字。
+【称呼与尊卑】${playerAddressRule()}【眼下要紧的人】里每个人的「对主角」一栏写明了此人见主角该有的礼数，照办。
 【主角面板】${JSON.stringify(pb)}（称号：${titleOf(p)}；修士榜位次：${rankText()}）
 ${S.sect&&!S.sect.own?`【宗门】${S.sect.name}${sectRank(S.sect.contrib)}，贡献${S.sect.contrib}${sectNext(S.sect.contrib)?`（攒到${sectNext(S.sect.contrib).need}升${sectNext(S.sect.contrib).name}）`:''}；剧情里称呼、差事都照这个位阶写\n`:''}【生计】身上${p.money}块下品灵石，每月开销约${upkeepPerMonth()}块${S.destitute?'；主角灵石已经用尽，日子捉襟见肘':''}；年岁${p.age}，寿元${lifespanOf(p)}（${ageNote()}）
 【修为】${realmText(p.realm)}；灵根${lgText(p.linggen)}；灵力${Math.floor(num(p.lingli))}/${lingliNeed(p.realm)}${atBottleneck(p)?'（已到瓶颈，灵力攒不进去了，冲关要玩家自己发起）':''}${num(p.breakCD)>0?`；冲关受挫，还要调养${p.breakCD}个月`:''}；本境界一次闭关最长${durationText(closeMaxMonths())}
@@ -4389,6 +4443,7 @@ function convoPrompt(npc, line, roll, gift){
   if(num(npc.gave)>0) t.push(`此前已接济过主角${num(npc.gave)}块灵石`);
   return t.join('；');})()}
 【主角】${p.name}（姓${surnameOf(p.name)}，称呼时用这个姓，不可写错），${p.gender}，${p.age}岁，${p.identity||p.backgroundType}，称号「${titleOf(p)}」；${realmText(p.realm)}，${lgText(p.linggen)}；谈吐${p.attributes['谈吐']}，神识${p.attributes['神识']}，心性${p.attributes['心性']}；声望${p['声望']}凶名${p['凶名']}；气血${p.hp}/100。
+【境界之别】${npc.name}${realmStance(npc)||'——'}
 【主角已会的功法（他早就会了，不要再教、不要再送对应的玉简）】${(p.arts||[]).length?p.arts.map(a=>`${a.name}（${a.style}，熟练${a.level}）`).join('；'):'尚无功法'}
 【主角行囊里的玉简】${((p.items&&p.items['玉简'])||[]).length?p.items['玉简'].map(x=>x.name).join('、'):'无'}
 ${(npc.fromPlayer||[]).length?`【你这几门功夫是主角教的】${npc.fromPlayer.join('、')}——你绝不可能反过来把它们「传」给他，也拿不出对应的玉简
@@ -4399,9 +4454,10 @@ ${convoVols?`【前尘卷录】\n${convoVols}\n`:''}${convoSum?`【前情提要�
 【对话至今】
 ${log}
 【主角这一句/这一举动】${gift?`（赠送【${gift.name}】：${gift.desc||''}）`:''}${line}
-${parenBlock(line,true)}${fdm().freeAct?'【引擎掷骰】本局言出法随，不做说服判定：主角说什么就办成什么，attempt 填 null。':`【引擎掷骰】骰${roll}，本次骰面修正【${rollMod(roll)>=0?'+':''}${rollMod(roll)}】。若主角这句话是说服、欺骗、威胁、求情、讨价、套话、打探秘密之类有成败之分的尝试，请设定need（${fdm().freeAct?'随口小事30，普通请求40，违背其利益55，触及秘密65':'随口小事40，普通请求55，违背其利益70，触及秘密或底线85'}），判定总值＝主角相关属性（已含本局气运加成${fdm().check>0?'+'+fdm().check:'0'}：说服/欺骗/套话用谈吐${p.attributes['谈吐']+fdm().check}，以修为威压用战力${attrVal(p,'武功')+fdm().check}，论道辨法用神识${p.attributes['神识']+fdm().check}）${rollMod(roll)>=0?'+':''}${rollMod(roll)}，总值≥need为成功，写入attempt并按成败作答。平常闲聊attempt为null。`}
+${parenBlock(line,true)}${fdm().freeAct?'【引擎掷骰】本局言出法随，不做说服判定：主角说什么就办成什么，attempt 填 null。':`【引擎掷骰】骰${roll}，本次骰面修正【${rollMod(roll)>=0?'+':''}${rollMod(roll)}】。若主角这句话是说服、欺骗、威胁、求情、讨价、套话、打探秘密之类有成败之分的尝试，请设定need（${fdm().freeAct?'随口小事30，普通请求40，违背其利益55，触及秘密65':'随口小事40，普通请求55，违背其利益70，触及秘密或底线85'}），判定总值＝主角相关属性（已含本局气运加成${fdm().check>0?'+'+fdm().check:'0'}：说服/欺骗/套话用谈吐${p.attributes['谈吐']+fdm().check}，以修为威压用战力${attrVal(p,'武功')+fdm().check}，论道辨法用神识${p.attributes['神识']+fdm().check}）${respectBonus(npc)>0?`，再加境界压制+${respectBonus(npc)}（主角高出${['','一','两','三','四','五','六','七','八'][realmGapOf(npc)]||realmGapOf(npc)}个大境界；若是威胁、以修为威压，另加+5，共+${respectBonus(npc,'威胁')}）`:''}${rollMod(roll)>=0?'+':''}${rollMod(roll)}，总值≥need为成功，写入attempt并按成败作答。平常闲聊attempt为null。`}
 规则：
 - ${fdm().freeAct?`说话带着${npc.name}的身份、性格、心情的腔调——但本局言出法随，腔调归腔调，事情一律照主角说的办。`:`说话完全符合${npc.name}的身份、性格、心情与好感。好感低时冷淡敌意，好感高时亲近；可以拒绝、撒谎、反问、发脾气，甚至拂袖而去（endTalk为true）。`}对方是长辈、仇人、爱人，语气都要不同。
+- 修真界以境界论尊卑：称呼和礼数照【境界之别】来。主角境界高出一截时，你再不服气心里也发怵，innerThought 里要写出这份忌惮；主角境界比你高，你不会用教训小辈的口气跟他说话。
 - 描写${npc.name}的相貌衣着时须与portrait画像相符，不要另编。
 - 每次回复60-160字，可含动作神态（写在括号里），对话用「」。
 - innerThought：${npc.name}此刻真实想法（20-50字），可以与嘴上说的完全相反。
@@ -5025,7 +5081,7 @@ function applyTurn(d, action, judge){
     if(u.secretRevealed&&!n.secretKnown){ n.secretKnown=true; S.stats.secrets++; ledger(`探知${n.name}的秘密：${n.secret||'一桩隐情'}`); }
     if(u.location)n.location=plain(u.location);
   }
-  for(const nn of (d.newNpcs||[])){ if(nn&&nn.name&&!S.npcs.find(x=>x.name===nn.name)){ const o=normNpc(nn); o.lastSeen=S.turn; S.npcs.push(o); } }
+  for(const nn of (d.newNpcs||[])){ if(nn&&nn.name&&!S.npcs.find(x=>x.name===nn.name)){ const o=normNpc(nn); o.lastSeen=S.turn; if(!isKinOf(o)){ const g=realmGapOf(o); if(g>=1) o['好感度']=clamp(num(o['好感度'])+(g>=2?10:5)); } S.npcs.push(o); } }
   // 心愿
   for(const q of (d.questUpdates||[])){
     const t=S.quests.find(x=>x.title===q.title)||S.quests.find(x=>q.title&&(x.title.includes(q.title)||q.title.includes(x.title)));
@@ -6515,7 +6571,7 @@ function validateConvo(d,npc,roll){
   if(d.attempt){
     const a=d.attempt,attr=a.attr||'谈吐';
     if(!['武功','谈吐','神识','悟性','体魄','心性'].includes(attr)||typeof a.need!=='number'||a.need<0||a.need>100)throw new Error('对话判定属性或难度无效');
-    const total=attrVal(S.player,attr)+fdm().check+rollMod(roll),success=total>=a.need;
+    const total=attrVal(S.player,attr)+fdm().check+rollMod(roll)+(npc?respectBonus(npc,a.type,attr):0),success=total>=a.need;
     if(a.success!==success)throw new Error('对话成败与引擎矛盾：总值'+total+'，难度'+a.need+'，请按'+(success?'成功':'失败')+'重写言行与effects');
     a.total=total;a.attr=attr;
   }
