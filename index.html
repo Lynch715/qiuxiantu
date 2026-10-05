@@ -625,6 +625,17 @@ body{background:var(--bg);background-image:none;font-family:var(--font-body)}
   #inputbar{background:linear-gradient(180deg,transparent,rgba(228,236,230,.95) 40%)}
   .optkey{padding:2px 3.5% 0;gap:10px}
 }
+
+/* ===== 界面审计修补 ===== */
+.field input[type=checkbox],.crbase input[type=checkbox],input[type=checkbox]{width:16px;height:16px;padding:0;margin:0 4px 0 0;flex:0 0 auto;accent-color:var(--jade);vertical-align:-3px}
+.crbase label{font-size:13.5px;color:var(--ink-2);cursor:pointer}
+.ntext q{color:#22598A;font-weight:600}
+.bub.them q,.bub q{color:#22598A}
+
+q{quotes:"「" "」" "『" "』"}
+/* 捏人页：按钮行贴底，盖住弹窗底部留白，后面的内容不再从按钮下面露出来 */
+#createMask .mbtnrow{position:sticky;bottom:-28px;margin:16px -32px -28px;padding:12px 32px 20px;background:var(--panel);border-top:1px solid var(--line);z-index:2}
+@media (max-width:900px){#createMask .mbtnrow{bottom:-20px;margin:14px -18px -20px;padding:10px 18px calc(14px + env(safe-area-inset-bottom))}}
 </style>
 </head>
 <body>
@@ -684,13 +695,13 @@ body{background:var(--bg);background-image:none;font-family:var(--font-body)}
       <div class="card"><h3>❈ 身世</h3><div id="pStory">—</div></div>
     </div>
     <div class="tabpane" id="tab-bag">
-      <div class="card"><h3>⚔ 法器</h3><div id="bagWeapons"></div></div>
-      <div class="card"><h3>📖 功法玉简</h3><div id="bagManuals"></div></div>
-      <div class="card"><h3>🌿 丹药 <small>冲关丹冲关时自动服下</small></h3><div id="bagMeds"></div></div>
-      <div class="card"><h3>📜 符箓</h3><div id="bagTalis"></div></div>
-      <div class="card"><h3>☠ 毒物</h3><div id="bagPoisons"></div></div>
-      <div class="card"><h3>💎 灵材</h3><div id="bagBooks"></div></div>
-      <div class="card"><h3>🎒 其他</h3><div id="bagMisc"></div></div>
+      <div class="card"><h3>❈ 法器</h3><div id="bagWeapons"></div></div>
+      <div class="card"><h3>❈ 功法玉简</h3><div id="bagManuals"></div></div>
+      <div class="card"><h3>❈ 丹药 <small>冲关丹冲关时自动服下</small></h3><div id="bagMeds"></div></div>
+      <div class="card"><h3>❈ 符箓</h3><div id="bagTalis"></div></div>
+      <div class="card"><h3>❈ 毒物</h3><div id="bagPoisons"></div></div>
+      <div class="card"><h3>❈ 灵材</h3><div id="bagBooks"></div></div>
+      <div class="card"><h3>❈ 其他</h3><div id="bagMisc"></div></div>
     </div>
     <div class="tabpane" id="tab-people">
       <div id="graphWrap"></div>
@@ -865,7 +876,7 @@ body{background:var(--bg);background-image:none;font-family:var(--font-body)}
     <div class="mbtnrow stickyrow">
       <button class="mbtn" onclick="document.getElementById('npcMask').classList.remove('on')">合上</button>
       <button class="mbtn" id="npcRecruitBtn" style="display:none">⛩ 招入门下</button>
-      <button class="mbtn gold" id="npcTalkBtn">💬 交谈</button>
+      <button class="mbtn gold" id="npcTalkBtn">交谈</button>
       <button class="mbtn primary" id="npcDuelBtn">⚔ 切磋</button>
     </div>
   </div>
@@ -1293,12 +1304,14 @@ function avRing(n,me){
   if(n&&n['爱恋值']!=null) return '#A65578';
   return n&&n.alignment==='邪道'?'#6B4E7A':(n&&n.alignment==='正派'?'#3F7A55':'#7D8A82');
 }
+const AV_ZOOM=1.1;
 function avCellStyle(slot){
   const i=AV_SLOTS.indexOf(slot);
   if(i<0||!AV_SHEET) return null;
-  const col=i%AV_COLS, row=Math.floor(i/AV_COLS);
-  const bx=AV_COLS>1?(col/(AV_COLS-1)*100):0, by=AV_ROWS>1?(row/(AV_ROWS-1)*100):0;
-  return `background-image:url(${AV_SHEET});background-size:${AV_COLS*100}% ${AV_ROWS*100}%;background-position:${bx}% ${by}%`;
+  const col=i%AV_COLS, row=Math.floor(i/AV_COLS), k=AV_ZOOM;
+  // 图集里格子紧挨着、头顶贴边裁，整格取会带出邻格的细边：放大 k 倍，按格子中心对准
+  const pos=(c,n)=>((0.5-(c+0.5)*k)/(1-n*k)*100).toFixed(3);
+  return `background-image:url(${AV_SHEET});background-size:${(AV_COLS*k*100).toFixed(2)}% ${(AV_ROWS*k*100).toFixed(2)}%;background-position:${pos(col,AV_COLS)}% ${pos(row,AV_ROWS)}%`;
 }
 // 没图就退回原来的首字圆牌，绝不开天窗
 function avatarFace(n,cls,size,me){
@@ -5554,7 +5567,7 @@ function startDuel(opp, o){
   $('duelTitle').textContent=(duel.friendly?'切磋':'斗法')+' · '+opp.name;
   $('duelSub').textContent=(duel.reason||'')+(duel.lethal?'　⚠ 对方不会留手，此战可能致命':'　点到为止');
   { const pr=p.realm, orr=npcRealmOf(opp), gap=(orr?realmIndex(orr):0)-(pr?realmIndex(pr):0), bigGap=orr&&pr&&orr.major!==pr.major;
-    const feel=(bigGap&&gap>0)?'灵压沉沉压过来，境界比你高出一截':(bigGap&&gap<0)?'修为比你低了一个大境界，但不可轻敌':gap>=3?'气息比你浑厚不少':gap<=-3?'气息比你弱些，不可轻敌':'与你修为相仿，胜负难料';
+    const feel=(bigGap&&gap>0)?'灵压沉沉压过来，境界比你高出一截':(bigGap&&gap<0)?(orr.major<0?'只是凡人，经不起修士一击，出手要留分寸':`修为比你低了${['','一','两','三','四','五','六','七'][pr.major-orr.major]||(pr.major-orr.major)}个大境界，但不可轻敌`):gap>=3?'气息比你浑厚不少':gap<=-3?'气息比你弱些，不可轻敌':'与你修为相仿，胜负难料';
     $('duelLog').innerHTML=`<div class="r sys">${esc(opp.name)}${feel}。你${pr?realmText(pr):''}，战力${duel.pW}（含法器）；对方${orr?realmText(orr):'境界不明'}，战力约${duel.oppW}。</div>`; }
   renderDuel();
   $('duelMask').classList.add('on');
@@ -6636,7 +6649,7 @@ async function convoSend(text, gift){
     if(convo!==myConvo||S!==owner||request!==convoRequest) return;          // 等回复的当口玩家已经告辞了，就当没说过
     if(gift){if(gift.virtual){if(S.player.money<50)throw new Error('灵石不够');S.player.money-=50;}else removeOneItem(gift);}
     let html=esc(d.reply||'……');
-    if(d.attempt&&d.attempt.type){ const a=d.attempt; const md=rollMod(roll); html+=`<span class="chk ${a.success?'ok':'no'}">🎲 ${esc(a.type)}：${esc(a.attr||'谈吐')} 掷${roll}（${md>=0?'+':'−'}${Math.abs(md)}）${a.total?'→ '+a.total:''} vs 难${a.need||'?'} ${a.success?'✓ 成':'✗ 败'}</span>`; }
+    if(d.attempt&&d.attempt.type){ const a=d.attempt; const md=rollMod(roll); html+=`<span class="chk ${a.success?'ok':'no'}">${esc(a.type)}：${esc(a.attr||'谈吐')} 掷${roll}（${md>=0?'+':'−'}${Math.abs(md)}）${a.total?'→ '+a.total:''} vs 难${a.need||'?'} ${a.success?'✓ 成':'✗ 败'}</span>`; }
     const canRead=S.player.attributes['谈吐']>=60;
     if(d.innerThought) html+=canRead?`<span class="thought">〔心声〕${esc(d.innerThought)}</span>`:`<span class="thought locked">〔${esc(n.name)}神色难辨〕</span>`;
     wait.innerHTML=html;
@@ -6892,9 +6905,9 @@ function renderGraph(){
     edges+=`<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="${ec}" stroke-width="${n.alive?w:1}" stroke-dasharray="${n.alive?'none':'4 4'}" opacity=".65" stroke-linecap="round"/>`;
     const slot=avSlotOf(n), si=AV_SLOTS.indexOf(slot), ring=avRing(n);
     const face=(si>=0&&AV_SHEET)?(()=>{
-      const d=r*2, col=si%AV_COLS, row=Math.floor(si/AV_COLS);
+      const D=r*2*AV_ZOOM, col=si%AV_COLS, row=Math.floor(si/AV_COLS);
       return `<clipPath id="gav${i}"><circle cx="${x}" cy="${y}" r="${r}"/></clipPath>
-      <image href="${AV_SHEET}" x="${x-r-col*d}" y="${y-r-row*d}" width="${AV_COLS*d}" height="${AV_ROWS*d}"
+      <image href="${AV_SHEET}" x="${x-(col+0.5)*D}" y="${y-(row+0.5)*D}" width="${AV_COLS*D}" height="${AV_ROWS*D}"
         clip-path="url(#gav${i})" opacity="${n.alive?1:.5}" style="${n.alive?'':'filter:grayscale(1)'}"/>
       <circle cx="${x}" cy="${y}" r="${r-1}" fill="none" stroke="${n.alive?ring:'#999'}" stroke-width="2.5"/>`;
     })():`<circle cx="${x}" cy="${y}" r="${r}" fill="${n.alive?ring:'#999'}" stroke="#F5F9F6" stroke-width="1.5"/>
@@ -6908,9 +6921,9 @@ function renderGraph(){
   });
   const mSlot=avSlotOf(S.player), mi=AV_SLOTS.indexOf(mSlot), mr=21;
   const meFace=(mi>=0&&AV_SHEET)?(()=>{
-    const d=mr*2, col=mi%AV_COLS, row=Math.floor(mi/AV_COLS);
+    const D=mr*2*AV_ZOOM, col=mi%AV_COLS, row=Math.floor(mi/AV_COLS);
     return `<clipPath id="gavme"><circle cx="${cx}" cy="${cy}" r="${mr}"/></clipPath>
-    <image href="${AV_SHEET}" x="${cx-mr-col*d}" y="${cy-mr-row*d}" width="${AV_COLS*d}" height="${AV_ROWS*d}" clip-path="url(#gavme)"/>
+    <image href="${AV_SHEET}" x="${cx-(col+0.5)*D}" y="${cy-(row+0.5)*D}" width="${AV_COLS*D}" height="${AV_ROWS*D}" clip-path="url(#gavme)"/>
     <circle cx="${cx}" cy="${cy}" r="${mr-1}" fill="none" stroke="#3C7D62" stroke-width="3"/>`;
   })():`<circle cx="${cx}" cy="${cy}" r="${mr}" fill="#3C7D62" stroke="#F5F9F6" stroke-width="2"/>
     <text x="${cx}" y="${cy+5}" text-anchor="middle" font-size="14" fill="#F5F9F6">${esc(S.player.name[0])}</text>`;
@@ -7121,7 +7134,7 @@ function questLines(d){
 function diceHtml(judge){
   if(!judge) return '';
   const f=fateInfo(judge.fate);
-  let h=`<span class="die ${f.cls}">🎲 天命 <b>${judge.fate}</b> ${f.label}</span>`;
+  let h=`<span class="die ${f.cls}">天命 <b>${judge.fate}</b> ${f.label}</span>`;
   if(judge.check){ const c=judge.check; h+=`<span class="die ${c.success?'good':'bad'}">${c.attr}${c.val} 掷<b>${c.roll}</b>（${c.mod>=0?'+':'−'}${Math.abs(c.mod)}）→ <b>${c.total}</b> vs 难${c.need} ${c.success?'✓ 成':'✗ 败'}${c.crit?' · '+c.crit:''}</span>`; }
   if(judge.worldEvent) h+=`<span class="die world">🌍 ${esc(judge.worldEvent.slice(0,22))}${judge.worldEvent.length>22?'…':''}</span>`;
   return `<div class="dicebar">${h}</div>`;
@@ -7207,10 +7220,10 @@ function renderOptions(opts){
     if(mo>0&&o.type!=='talk')tag+=`<span class="tag rest">耗时 ${durationText(mo)}</span>`;
     if(o.type==='check'&&o.check&&o.check.attr){
       const dc=Math.max(20,num(o.check.need)+diff().dc), ch=optChance(o.check.attr,o.check.need);
-      tag+=`<span class="tag check">🎲 ${esc(o.check.attr)} 难${dc} · 约${ch}%</span>`;
+      tag+=`<span class="tag check">判定·${esc(o.check.attr)} 难${dc} · 约${ch}%</span>`;
     }
     else if(o.type==='duel'&&o.duel&&o.duel.opponent) tag+=`<span class="tag duel">⚔ 斗法${o.duel.lethal?'·生死':''}</span>`;
-    else if(o.type==='talk'&&o.target) tag+=`<span class="tag talk">💬 面谈·${esc(o.target)}</span>`;
+    else if(o.type==='talk'&&o.target) tag+=`<span class="tag talk">面谈·${esc(o.target)}</span>`;
     else if(o.type==='rest') tag+=`<span class="tag rest">休整</span>`;
     b.innerHTML=`<span class="num">${i+1}</span>${esc(o.text)}${tag}${o.hint?`<span class="hint">└ ${esc(o.hint)}</span>`:''}`;
     b.onclick=()=>act(o.text,o);
@@ -8456,7 +8469,7 @@ const DEMO_CHAPTER=`<div class="chapter">
   <div class="chapmark">样张 · 楔子</div><div class="chaptime">玄元历1261年 季春 · 上旬</div>
   <div class="action-echo" style="margin-top:20px">➤ 这是一段样张，用来说明每一回合长什么样。要真的开局，请先填入你自己的 API 密钥。</div>
   <div class="dicebar">
-    <span class="die bad">🎲 天命 <b>5</b> 不顺</span>
+    <span class="die bad">天命 <b>5</b> 不顺</span>
     <span class="die bad">谈吐42 掷<b>7</b>（−14）→ <b>28</b> vs 难55 ✗ 败</span>
     <span class="die world">🌍 青云宗三个月后开山收徒</span>
   </div>
