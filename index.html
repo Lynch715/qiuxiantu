@@ -275,7 +275,7 @@ body{
 .die.great{border-color:var(--gold);color:var(--gold);background:rgba(168,134,47,.12);font-weight:700}
 .die.world{border-color:var(--blue);color:var(--blue)}
 .ntext{margin-top:10px}
-.ntext p{line-height:2.0;font-size:16.5px;text-align:justify;text-indent:2em;margin-bottom:8px}
+.ntext p{line-height:2.0;font-size:calc(var(--reading-size,16px) + .5px);text-align:justify;text-indent:2em;margin-bottom:8px}
 .ntext q{color:var(--accent);quotes:"「" "」";font-weight:600}
 @media (max-width:900px){.ntext p{text-align:left}}
 .subblock{margin-top:14px;border-top:1px dashed var(--paper-edge);padding-top:10px}
@@ -468,17 +468,17 @@ body{
   #tabs button{padding:12px 0;font-size:14px;letter-spacing:2px}
   #tabs button[data-tab]{font-size:13px;letter-spacing:1px}
   .csort button{font-size:11.5px;padding:3px 7px}
-  #story{padding:14px 3.5%;-webkit-overflow-scrolling:touch}
-  .chapter{padding:20px 16px 16px;margin-bottom:14px;border-radius:7px}
+  #story{padding:12px 2.5%;-webkit-overflow-scrolling:touch}
+  .chapter{padding:20px 12px 14px;margin-bottom:14px;border-radius:7px}
   .chapter .chapmark{left:14px;font-size:12px;padding:2px 9px 4px}
   .chapter .chaptime{font-size:11.5px;right:12px}
-  .ntext p{font-size:15.5px;line-height:1.95;margin-bottom:7px}
+  .ntext p{font-size:var(--reading-size,16px);line-height:1.9;margin-bottom:7px}
   .subblock li{font-size:13.5px}
-  #choices{padding:5px 3.5% 2px;max-height:26vh;gap:4px;-webkit-overflow-scrolling:touch}
+  #choices{padding:4px 2.5% 2px;max-height:19vh;gap:3px;-webkit-overflow-scrolling:touch}
   .opt{padding:6px 9px;font-size:12.5px;border-radius:6px}
   .opt:hover{transform:none}
   .opt:active{transform:scale(.985);border-color:var(--accent)}
-  .opt .hint{font-size:10.5px}
+  .opt .hint{font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #loading{padding:6px 3.5%;font-size:13px}
   #inputbar{padding:10px 3.5% calc(12px + env(safe-area-inset-bottom));gap:8px;background:linear-gradient(180deg,transparent,rgba(228,236,230,.9) 40%)}
   #freeInput{font-size:16px;padding:12px 14px}
@@ -837,7 +837,7 @@ q{quotes:"「" "」" "『" "』"}
     </div>
     <div class="field">
       <label for="cfgFont">阅读字号</label>
-      <select id="cfgFont"><option value="16">标准</option><option value="18">较大</option><option value="20">大字</option></select>
+      <select id="cfgFont"><option value="16">标准</option><option value="18">较大</option><option value="20">大字</option><option value="22">特大</option><option value="24">超大</option></select>
       <div class="note">也可以双指放大页面。</div>
     </div>
     <div class="field">
@@ -9467,7 +9467,7 @@ $('btnSettings').onclick=openSettings;
 ['cfgBase','cfgKey','cfgModel','cfgThink'].forEach(id=>$(id).addEventListener('change',saveCfgFromFields));
 $('cfgFreedom').addEventListener('change',applyFreedomChange);
 $('cfgProse').addEventListener('change',()=>{ if(!S) return; const v=$('cfgProse').value; if(!PROSE[v]||v===S.prose) return; S.prose=v; saveGame(); $('cfgProseNote').textContent='已换成「'+PROSE[v].label+'」'; toast('文笔已换成「'+PROSE[v].label+'」，下一回合起生效'); });
-function applyReadingSize(){const n=[16,18,20].includes(Number(cfg.fontSize))?Number(cfg.fontSize):16;document.documentElement.style.setProperty('--reading-size',n+'px');}
+function applyReadingSize(){const n=[16,18,20,22,24].includes(Number(cfg.fontSize))?Number(cfg.fontSize):16;document.documentElement.style.setProperty('--reading-size',n+'px');}
 $('cfgFont').addEventListener('change',()=>{cfg.fontSize=Number($('cfgFont').value);localStorage.setItem(LS_CFG,JSON.stringify(cfg));applyReadingSize();});
 function memNote(){
   const M=MEM();
