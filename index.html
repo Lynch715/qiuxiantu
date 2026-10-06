@@ -781,6 +781,11 @@ q{quotes:"「" "」" "『" "』"}
       <div class="note" id="crFreeNote"></div>
     </div>
     <div class="field">
+      <label>文笔 <small style="color:var(--ink-soft);font-weight:400">—— 故事用什么口气讲，设置里随时能换</small></label>
+      <div class="seg" id="crProse" style="flex-wrap:wrap"></div>
+      <div class="note" id="crProseNote" style="line-height:1.75"></div>
+    </div>
+    <div class="field">
       <label>道途凶险 <small style="color:var(--ink-soft);font-weight:400">—— 敌手强弱与判定门槛</small></label>
       <div class="seg" id="crDiff">
         <button data-v="easy">逍遥<small style="display:block;font-size:10px;letter-spacing:0">判定宽松·敌手较弱</small></button><button data-v="normal" class="sel">寻常<small style="display:block;font-size:10px;letter-spacing:0">标准</small></button><button data-v="hard">修罗<small style="display:block;font-size:10px;letter-spacing:0">判定严苛·敌手凶狠</small></button>
@@ -841,6 +846,11 @@ q{quotes:"「" "」" "『" "』"}
         <option value="off">关闭 —— 出剧情快，推荐</option>
         <option value="on">开启 —— 剧情更缜密但等待更久</option>
       </select>
+    </div>
+    <div class="field" id="cfgProseWrap">
+      <label>本局文笔（随时可换，下一回合起生效）</label>
+      <select id="cfgProse"></select>
+      <div class="note" id="cfgProseNote"></div>
     </div>
     <div class="field" id="cfgFreeWrap">
       <label>本局自由度（可随时改，立刻生效）</label>
@@ -1711,7 +1721,7 @@ function stripStrict(t,free){
 function fillRules(t){
   const f=fdm();
   const gate=f.loveGate>0?Math.max(0,f.loveGate+tagAdd(S&&S.player,'loveGate')):f.loveGate;   // 风流多情：恋爱门槛 −10
-  return stripStrict(t,!!f.freeAct).replace(/\{\{CHOSEN\}\}/g,f.chosen).replace(/\{\{LOVE\}\}/g,gate).replace(/\{\{SECRET\}\}/g,f.secretGate);
+  return stripStrict(t,!!f.freeAct).replace(/\{\{TONE_LABEL\}\}/g,prose().label).replace(/\{\{TONE\}\}/g,prose().rules).replace(/\{\{CHOSEN\}\}/g,f.chosen).replace(/\{\{LOVE\}\}/g,gate).replace(/\{\{SECRET\}\}/g,f.secretGate);
 }
 const TONE_NOTE='（上面【本局自由度】一段是本局的口径；它与前面通则说法不一时，以本局口径为准。）';
 function worldRules(){ return fillRules(WORLD_RULES)+'\n'+fdm().tone+'\n'+TONE_NOTE; }
@@ -4398,14 +4408,13 @@ function pickWorldEvent(action){
 const WORLD_RULES = `你是一个修仙文字游戏引擎。世界是一片架空的修真大陆：有宗门、修仙世家、散修、魔道，也有凡人王朝和市井；修士修炼、炼丹、炼器、画符、布阵、驯养灵兽、闯秘境、逛坊市、斗法、结道侣、收弟子，也为灵石、资源和寿元算计。
 铁律：
 - 严禁出现系统流（面板提示、任务奖励）、穿越、重生、科幻、星际、鬼魂灵异、现代称谓与事物。
-- 文风：学《凡人修仙传》——平实的白话，讲日子，讲利害，人物都在为灵石、丹药、修为、寿元打算盘；不煽情，不堆辞藻，不写文言腔。调子轻松，带点冷幽默（见下面「幽默」一条）。白描：不形容人，写他做了什么；人物不把自己的动机说出口。称呼用修真界的叫法（道友、师兄、师叔、前辈、晚辈、宗主、长老），功法、法器、丹药、宗门用修仙风格的名字。人物言行须符合其年龄、身份、境界和性格。除JSON键名和引擎规定的固定取值（如 type 的 normal/check/duel/talk/rest）外一律使用中文。
+- 文风：本局文笔「{{TONE_LABEL}}」：{{TONE}}不管哪种文笔，都讲日子、讲利害，人物都在为灵石、丹药、修为、寿元打算盘；不堆辞藻，不写文言腔。白描：不形容人，写他做了什么；人物不把自己的动机说出口。称呼用修真界的叫法（道友、师兄、师叔、前辈、晚辈、宗主、长老），功法、法器、丹药、宗门用修仙风格的名字。人物言行须符合其年龄、身份、境界和性格。除JSON键名和引擎规定的固定取值（如 type 的 normal/check/duel/talk/rest）外一律使用中文。
 - 修仙的手感（这是修仙，不是武侠）：
   · 先看修为：见人先放神识探对方境界，或被对方灵压压住；看不透的人更要小心。境界高一截，说话的分量、礼数、口气全变。
   · 东西是修仙的东西：储物袋、传音符、玉简、遁光、飞剑、禁制、聚灵阵、蒲团、丹炉、灵田、灵兽袋。不写刀剑酒肆、内力轻功。
   · 时间是长的：闭关以年计，出关先算过了多久、外头少了谁；凡人亲友会老、会死；寿元是悬在头上的一把刀。
   · 人情是利害：「道友」底下是算计；救命之恩记一辈子，也可能拿来要挟；正道修士照样杀人夺宝，只是做得干净；帮人要么有利可图，要么还一段因果。
   · 主线不是报仇。修真界的人追的是长生、资源、境界、机缘；恩怨有，但不是每个人身上都背着血仇。
-- 幽默：冷幽默，从人物的算计、抠门、怕死、境界落差、一本正经的较真里出来，不靠旁白抖机灵。一个场面至多一两处，点到就走，不解释笑点。不写网络梗、现代口头禅、吐槽腔。生死、寿尽、亲人离世这类时候收住，照实写。
 - 不写武侠词：江湖、武林、大侠、少侠、女侠、内力、内功、轻功、点穴、封穴。
 - 不要网文腔：嘴角勾起、眼中闪过一丝、心中五味杂陈、空气仿佛凝固、不禁、缓缓说道、意味深长、淡淡地、不由得、目光如炬这类话一概不写；不排比，不在段尾抒情、总结、升华。
 - 对话：所有人物对话一律用「」包裹，严禁用其他引号；用前面的动作带出说话人，少写「他说道」。身份越高话越短。
@@ -4481,37 +4490,94 @@ NPC规则：
 - 风闻仅在有新消息时提供；平静回合可为空，不要反复播报旧事。`;
 
 const STYLE_BANNED=['首先','其次','总而言之','综上所述','不禁','不由得','嘴角勾起','嘴角微微上扬','嘴角上扬','眼中闪过一丝','眸中闪过一丝','心中一暖','心头一暖','心中五味杂陈','空气仿佛凝固','缓缓说道','意味深长地','深邃的目光','一股莫名的','仿佛在诉说','目光如炬','一股暖流','命运的齿轮','江湖','武林','大侠','少侠','女侠','内力','内功','轻功','点穴','封穴'];
-const STYLE_SYSTEM = `你是一个修仙文字游戏的叙事引擎，笔法学《凡人修仙传》：平实的白话，讲日子，讲利害；不堆辞藻，不写文言腔，不煽情。调子轻松，带点冷幽默：笑点从人物的算计、抠门、怕死、境界落差、一本正经的较真里出来，旁白不抖机灵，点到就走；生死离别时收住，照实写。这是修仙不是武侠：见人先探修为，用的是储物袋、传音符、遁光、禁制，闭关以年计，人情底下是利害。白描，人物不说出自己的动机；场景一笔，细节一处；段落短，手机上一段不超过四行；每段停在动作或一句话上，不写感想。对话用「」包裹，用前面的动作带出说话人。
-这些词不要用（引擎会查，用了打回重写）：${STYLE_BANNED.join('、')}。
-
-下面两段是文风范例，只学笔法与节奏，不要抄内容：
-
-范例一：
-坊市东头那间铺子，门口挂着半截竹帘。韩七把三块下品灵石排在柜上，一块一块推过去。
-掌柜拿起一块对着光看了看，又放下。
-「止血散两瓶。聚气丹，只够半瓶。」
-「上月还是一块一瓶。」
-「上月黑风谷还没封。」掌柜把灵石收进抽屉，没再抬头。
-韩七站了一会儿，把那半瓶拿了。
-
-范例二：
-那道青光是贴着地面过来的。周婉只来得及把护身符往胸前一按，符纸就烧成了灰，人往后滑出去一丈多，后背撞在石壁上。
-她喉头发甜，硬咽了回去。对面那人收了飞剑，剑尖上一滴血都没沾。
-「筑基中期。」他看了她一眼，「这点修为，也敢来抢。」
-
-范例三：
-洞府门口那层禁制是旧的，灵光淡得快看不见了。厉青没急着进，先放一缕神识贴着石壁绕了一圈。
+/* ================= 文笔风格 =================
+   玩家开局选、设置里可切。只换叙述语气：文风说明、范例、风格禁用词、温度、母题权重。数值判定一概不动。 */
+const PROSE={
+  cold:{label:'冷峻',hint:'凡人流·平实算账，不动声色',temp:0.75,
+    rules:'平实，算账，不动声色。不写心理活动，不找笑点，句子短，结论留给读者；不煽情。',
+    banned:['！','心想','暗想','心中暗道'], motifW:{'资源':20},
+    examples:[`洞府门口那层禁制是旧的，灵光淡得快看不见了。厉青在三丈外站定，放一缕神识贴着石壁绕了一圈，又绕了一圈。
+里头没人。石床一张，床脚三只储物袋，袋口的封印都被人抹过。
+他没碰那几只袋子，只看地上的灰。脚印有两种，一深一浅，深的那个往外走时步子乱了。
+厉青退出来，在洞口补了一道禁制，朝深脚印去的方向看了一眼，转身往反方向走。`,
+`出关时，洞府外的灵田荒了一半。厉青算了算，十一年。
+杂役处换了管事。他把身份玉牌递过去，等对方翻完名册，问起刘婶家的小儿子。
+「下山了。娶了亲，前年来过信，他娘没了。」
+厉青点点头，把那瓶养气丹收回储物袋，回洞府补了一道禁制，接着翻那本没参透的玉简。`]},
+  wit:{label:'诙谐',hint:'冷幽默·抠门怕死，点到就走',temp:0.85,
+    rules:'轻松带冷幽默：笑点从人物的算计、抠门、怕死、境界落差、一本正经的较真里出来，旁白不抖机灵；一个场面至多一两处，点到就走，不解释笑点；不写网络梗、吐槽腔；生死、寿尽、亲人离世时收住，照实写。',
+    banned:['哈哈','笑死','绝了','离谱','吐槽','666','yyds'], motifW:{},
+    examples:[`洞府门口那层禁制是旧的，灵光淡得快看不见了。厉青没急着进，先放一缕神识贴着石壁绕了一圈。
 里头没人，只有一张石床，床脚堆着三只储物袋。他蹲下去一只只翻开。
 空的。第三只里头躺着一张纸条：「来晚了吧。」
-厉青把纸条叠好收进自己的储物袋，好歹是张纸，能记账。走之前他在门口补了一道禁制，想了想，也留了一张：「我也是。」
-
-范例四：
-出关那天，洞府外的灵田荒了一半，剩下一半让不知谁家的灵鹤啄了个干净。厉青掐指算了算，这一闭就是十一年。
+厉青把纸条叠好收进自己的储物袋，好歹是张纸，能记账。走之前他在门口补了一道禁制，想了想，也留了一张：「我也是。」`,
+`出关那天，洞府外的灵田荒了一半，剩下一半让不知谁家的灵鹤啄了个干净。厉青掐指算了算，这一闭就是十一年。
 山下杂役处换了人。新来的管事捏着他的身份玉牌翻来覆去看：「师兄这牌子，是哪一年的样式？」
 他问起刘婶家的小儿子。管事翻了翻名册：「早下山了，回凡人地界娶的亲。前年托人捎过信，说他娘没了。」
-厉青站了一会儿，把带回来的那瓶养气丹收回了储物袋。
+厉青站了一会儿，把带回来的那瓶养气丹收回了储物袋。`]},
+  hot:{label:'热血',hint:'有劲头·敢拼敢追，斗法痛快',temp:0.9,
+    rules:'有劲头，长短句交替：一句里可以连着几个动作往前推，再用一个短句收住，不要通篇短句。斗法写得痛快，主角敢拼敢追；情绪落在动作上，不喊口号，不排比。',
+    banned:['热血沸腾','战意滔天','燃烧吧','我命由我不由天','绝不认输','无尽的','！！'], motifW:{'仇怨':10,'道途':30},
+    examples:[`禁制只剩一层薄光，厉青懒得找门路，并指一点，那层光应声碎成一地星屑。神识扫进去，石室空空，三只储物袋丢在床脚，封印全被人抹了。
+地上的脚印还新，看步子是往北去的，最多走了半日。
+厉青把袋子往地上一扔，遁光拔地而起，贴着林梢一路往北追下去。半日的路，天黑前追得上。`,
+`出关那天，厉青一掌推开洞门，十一年攒下的灵力在经脉里滚过一圈，震得洞口的碎石簌簌往下掉。
+荒了的灵田他顾不上看，径直下山进了杂役处，把玉牌往桌上一拍，问刘婶家的小儿子去了哪儿。管事被他吓了一跳，翻着名册说：「下山了，前年来过信，说他娘没了。」
+厉青握着那瓶养气丹在门口站了片刻，转身出门，遁光直往山下去。凡人地界不远，人不在了，坟总还在。`]},
+  bleak:{label:'苍凉',hint:'仙逆一路·时间与孤独',temp:0.8,
+    rules:'时间、孤独、执念。景色一个场面只写一处，不堆；偶尔一句带古意，不写半文半白；情绪压着，落在物件和动作上，不说出来，不感慨。',
+    banned:['岁月静好','唏嘘','寂寥','呜呼','兮','沧海桑田','宿命般'], motifW:{'长生':20,'因果':20},
+    examples:[`山腰这处洞府，禁制只剩一层薄光，像冬天窗纸上的霜。厉青放出神识，石壁冰凉，里头空了很久。
+石床上落着灰，床脚三只储物袋，封印都已抹去。不知是哪一年的人来过，拿走了该拿的，走了。
+他在洞口站到日落，替这处没了主人的洞府补上一道禁制。补完才想起，自己也不知道是替谁补的。`,
+`出关那天，灵田里长满了草，草里站着一只灵鹤，不怕人。十一年，厉青想，在凡人那里是半辈子。
+杂役处的管事换了个年轻人，翻了很久的名册才找到刘婶家小儿子的名字。旁边一行小字：下山，娶妻。再旁边是更小的一行，前年添的：母殁。
+厉青把那瓶养气丹收了回去。丹是十一年前炼的，药性早散了，他一直没想起来。`]},
+  warm:{label:'温情',hint:'种田流·灵田洞府烟火气',temp:0.85,
+    rules:'过日子的烟火气：灵田、洞府、吃食、家人、徒弟、邻里。暖，但不甜腻；好事坏事都落在具体的小东西上。',
+    banned:['暖暖的','温馨','幸福感','甜甜的','宠溺'], motifW:{'家族':15,'情':12,'仇怨':2},
+    examples:[`洞府门口的禁制旧得快散了。厉青放神识进去转了一圈，没人，只有石床和三只空了的储物袋。
+他正要走，看见石床底下塞着一只小木盒，打开是半包没吃完的灵米糕，硬得能砸核桃。
+厉青想起自己洞府里那袋，也放了快半年了。他把木盒放回原处，回去的路上顺手采了一把凝露草，打算明早熬粥。`,
+`出关那天，十一年没人打理的灵田荒了一半，另一半冒出几棵他没种过的苗，不知是哪只鸟衔来的种子。厉青蹲下看了半天，没舍得拔。
+杂役处换了管事。他问起刘婶家的小儿子，管事翻名册：「下山了，娶了亲，前年来信，说他娘没了。」
+厉青把养气丹收回储物袋。下山那天，他去刘婶坟前坐了一会儿，把丹搁在碑前，跟她说，这回是真炼成了。`]},
+  web:{label:'网文',hint:'爽文节奏·扮猪吃虎、打脸、钩子',temp:0.95,
+    rules:'网文节奏：每回合一个爽点或反转（扮猪吃虎、打脸、亮底牌、捡漏），写一笔旁人的反应；段尾可以留钩子；主角可以有一两句短促的心里话。不玩网文梗；系统流照样不写。',
+    banned:['恐怖如斯','倒吸一口凉气','此子断不可留','众人震惊','叮！'], motifW:{'仇怨':10,'求知':13},
+    examples:[`洞府门口的禁制只剩薄薄一层，换了旁人，多半要绕着走。厉青却一眼看出，这禁制是故意留旧的。
+他没动手，神识贴着石壁绕了一圈，果然在门槛下摸到一处藏得极深的阵眼。布阵的人很老道，可惜阵眼嵌的是下品灵石，灵力早漏了七成。
+「就这？」
+他一脚踩碎阵眼，进了洞府。三只储物袋全空，最里头那只却多一层夹缝，夹缝里躺着一枚玉简，上面只有一行字：后来者，北山见。`,
+`出关那天，厉青灵力一放，洞口的碎石哗啦啦落了一地。十一年，炼气五阶到炼气九阶。
+杂役处的新管事接过他的玉牌，眼皮都没抬：「哪年的牌子？早作废了，重办交三块灵石。」
+厉青没说话，只把炼气九阶的灵压放出一线。管事手里的笔掉了：「师、师兄要问什么？」
+「刘婶家的小儿子。」
+「下山了，前年来信，说他娘没了。」
+厉青收了灵压，站了一会儿，把养气丹揣回储物袋。走到门口又折回来，往桌上放了三块灵石：「牌子，还是重办一个。」`]}
+};
+const PROSE_DEFAULT='wit';
+let pendingProse=null;                       // 开局时还没有 S，先记在这里
+function curProse(){ const k=(typeof S!=='undefined'&&S&&S.prose)||pendingProse||PROSE_DEFAULT; return PROSE[k]?k:PROSE_DEFAULT; }
+function prose(){ return PROSE[curProse()]; }
+function styleTemp(){ return prose().temp; }
+function styleBanned(){ return STYLE_BANNED.concat(prose().banned); }
+function styleSystem(){
+  const st=prose();
+  return `你是一个修仙文字游戏的叙事引擎。本局文笔「${st.label}」：${st.rules}
+不管哪种文笔都守这几条：白描，人物不说出自己的动机；场景一笔，细节一处；段落短，手机上一段不超过四行；不堆辞藻，不写文言腔。对话用「」包裹，用前面的动作带出说话人。这是修仙不是武侠：见人先探修为，用的是储物袋、传音符、遁光、禁制，闭关以年计，人情底下是利害。
+这些词不要用（引擎会查，用了打回重写）：${styleBanned().join('、')}。
+
+下面两段是本局文笔的范例，同一件事换别的文笔会写得完全不同。只学笔法与节奏，不要抄内容：
+
+范例一：
+${st.examples[0]}
+
+范例二：
+${st.examples[1]}
 
 叙述一律用中文；除JSON键名和引擎规定的固定取值（如 type 的 normal/check/duel/talk/rest）外不得出现英文。`;
+}
 
 
 const JSON_RULE = `你必须只输出一个合法的JSON对象，不要输出任何其他文字，不要用markdown代码块包裹。所有字符串内的换行用\\n表示。`;
@@ -4545,7 +4611,8 @@ const MOTIFS=[
   {name:'仇怨',w:5,hint:'有具体对象和利害，比如家传的宝物被人夺了；要写灭门血仇也可以'}
 ];
 function rollMotifs(){
-  const n=Math.random()<0.5?2:3, out=[], pool=MOTIFS.slice();
+  const w=prose().motifW||{};
+  const n=Math.random()<0.5?2:3, out=[], pool=MOTIFS.map(m=>Object.assign({},m,w[m.name]!=null?{w:w[m.name]}:{}));
   while(out.length<n&&pool.length){ const tot=pool.reduce((a,m)=>a+m.w,0); let r=Math.random()*tot; const i=pool.findIndex(m=>(r-=m.w)<=0); out.push(pool.splice(i<0?pool.length-1:i,1)[0]); }
   return out;
 }
@@ -4980,7 +5047,7 @@ async function callLLM(prompt, onPartial, opt){
   opt=opt||{};lastFinish=null;
   if(!cfg.key){openSettings();throw new Error('请先在设置中填写密钥');}
   const url=cfg.base.replace(/\/+$/,'')+'/chat/completions';
-  const body={model:cfg.model||'deepseek-v4-flash',messages:opt.noSystem?[{role:'user',content:prompt}]:[{role:'system',content:STYLE_SYSTEM},{role:'user',content:prompt}],temperature:opt.temperature!=null?opt.temperature:0.85,max_tokens:opt.maxTokens||7000,stream:true,response_format:{type:'json_object'}};
+  const body={model:cfg.model||'deepseek-v4-flash',messages:opt.noSystem?[{role:'user',content:prompt}]:[{role:'system',content:styleSystem()},{role:'user',content:prompt}],temperature:opt.temperature!=null?opt.temperature:styleTemp(),max_tokens:opt.maxTokens||7000,stream:true,response_format:{type:'json_object'}};
   if(/deepseek/i.test(body.model))body.thinking={type:cfg.think?'enabled':'disabled'};
   const ac=typeof AbortController!=='undefined'?new AbortController():null;
   const ms=opt.timeout||90000;let timer=null,total=null;
@@ -5165,7 +5232,7 @@ function styleIssues(text,kind,opts){
     if(n>hi) out.push(`正文${n}字，太长（这类回合${r[0]}-${r[1]}字）`); }
   if(/[“”『』]/.test(t)||/"[^"]{1,80}"/.test(t)) out.push('对白要用「」，不要用“”或『』');
   if(/(?:^|\n)[\u4e00-\u9fa5]{1,6}[：:]\s*[「“『]/.test(t)) out.push('对白不要写成「某某：」剧本格式');
-  const hit=STYLE_BANNED.filter(w=>t.includes(w));
+  const hit=styleBanned().filter(w=>t.includes(w));
   if(hit.length) out.push('删掉这些套话：'+hit.join('、'));
   return out;
 }
@@ -5278,6 +5345,7 @@ function applyInit(d, opts){
   S = newStateShell();
   S.difficulty=(opts&&opts.difficulty)||'normal';
   S.freedom=(opts&&opts.freedom)||'mid';
+  S.prose=PROSE[opts&&opts.prose]?opts.prose:PROSE_DEFAULT; pendingProse=null;
   if(keepWorld) S.world=keepWorld;
   const p = d.player;
   p.biaozi = p.biaozi||null;
@@ -7186,7 +7254,7 @@ async function convoSend(text, gift){
   myConvo.request=controller;
   const roll=convoAttempt(n,text);   // 引擎先定成败；模型看不到骰子
   try{
-    const d=fixNames(await llmJSON(convoPrompt(n,text,roll,gift),raw=>{ if(convo===myConvo&&S===owner&&request===convoRequest&&t0(raw)) wait.innerHTML=esc(t0(raw)); },{maxTokens:2500,temperature:0.85,timeout:90000,signal:controller&&controller.signal,validate:d=>validateConvo(d,n,roll),style:{field:'reply',kind:'talk',noLen:fdm().freeAct&&parenReqs(text).length>0}}));
+    const d=fixNames(await llmJSON(convoPrompt(n,text,roll,gift),raw=>{ if(convo===myConvo&&S===owner&&request===convoRequest&&t0(raw)) wait.innerHTML=esc(t0(raw)); },{maxTokens:2500,temperature:styleTemp(),timeout:90000,signal:controller&&controller.signal,validate:d=>validateConvo(d,n,roll),style:{field:'reply',kind:'talk',noLen:fdm().freeAct&&parenReqs(text).length>0}}));
     if(convo!==myConvo||S!==owner||request!==convoRequest) return;          // 等回复的当口玩家已经告辞了，就当没说过
     if(gift){if(gift.virtual){if(S.player.money<50)throw new Error('灵石不够');S.player.money-=50;}else removeOneItem(gift);}
     let html=esc(d.reply||'……');
@@ -8169,7 +8237,7 @@ function setBusy(b,msg){
   $('loading').classList.toggle('on',b);
   if(msg) $('loadingText').textContent=msg;
   $('sendBtn').disabled=b;
-  for(const id of ['btnNew','btnImport','cfgFreedom','cfgMem'])if($(id))$(id).disabled=b;
+  for(const id of ['btnNew','btnImport','cfgFreedom','cfgMem','cfgProse'])if($(id))$(id).disabled=b;
   if($('cancelTurn'))$('cancelTurn').hidden=!b||!activeTurnAbort;
   document.querySelectorAll('.opt').forEach(x=>x.disabled=b);
 }
@@ -8179,7 +8247,8 @@ const BACKGROUNDS=[
  ['普通农家','山脚下种地，偶尔看见御剑的人飞过'],['药农人家','进山采药卖给宗门，认得不少灵草'],['猎户人家','进山打猎，见过妖兽'],['铁匠人家','打凡铁，也替低阶修士修补法器'],
  ['孤儿','无父无母，在镇上讨生活'],['道观收养','被山野小观收养，学了些粗浅吐纳'],
 ];
-let crSel={gender:'随机',bg:'随机',difficulty:'normal',freedom:'mid',avatar:null};
+let crSel={gender:'随机',bg:'随机',difficulty:'normal',freedom:'mid',avatar:null,prose:PROSE_DEFAULT};
+function proseNote(k){ const st=PROSE[k]||PROSE[PROSE_DEFAULT]; return `<b>${st.label}</b>　${esc(st.hint)}<div style="margin-top:6px;white-space:pre-line;color:var(--ink)">${esc(st.examples[0])}</div>`; }
 // 捏人时按性别列出可选的脸；性别随机就把男女都摆出来
 function renderAvatarPick(){
   const box=$('crAvatar');
@@ -8232,10 +8301,13 @@ function openCreate(){
     grid.querySelectorAll('.bgopt').forEach(el=>el.onclick=()=>{ grid.querySelectorAll('.bgopt').forEach(x=>x.classList.remove('sel')); el.classList.add('sel'); crSel.bg=BACKGROUNDS[+el.dataset.i][0]; });
     $('crGender').querySelectorAll('button').forEach(b=>b.onclick=()=>{ $('crGender').querySelectorAll('button').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); crSel.gender=b.dataset.v; crSel.avatar=null; renderAvatarPick(); });
     $('crDiff').querySelectorAll('button').forEach(b=>b.onclick=()=>{ $('crDiff').querySelectorAll('button').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); crSel.difficulty=b.dataset.v; });
+    $('crProse').innerHTML=Object.entries(PROSE).map(([k,v])=>`<button data-v="${k}" class="${k===crSel.prose?'sel':''}">${v.label}</button>`).join('');
+    $('crProse').querySelectorAll('button').forEach(b=>b.onclick=()=>{ $('crProse').querySelectorAll('button').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); crSel.prose=b.dataset.v; $('crProseNote').innerHTML=proseNote(crSel.prose); });
     $('crFree').querySelectorAll('button').forEach(b=>b.onclick=()=>{ $('crFree').querySelectorAll('button').forEach(x=>x.classList.remove('sel')); b.classList.add('sel'); crSel.freedom=b.dataset.v; $('crFreeNote').textContent=freedomNote(crSel.freedom); });
   }
   $('crCancel').style.display=S?'block':'none';
   $('crFreeNote').textContent=freedomNote(crSel.freedom);
+  $('crProseNote').innerHTML=proseNote(crSel.prose);
   renderAvatarPick();
   $('createMask').classList.add('on');
 }
@@ -8244,7 +8316,7 @@ $('crStart').onclick=()=>{
   const bg=BACKGROUNDS.find(b=>b[0]===crSel.bg);
   $('createMask').classList.remove('on');
   const xb=crSel.xbase; crSel.xbase=null;
-  startNewGame({name:$('crName').value.trim()||null,gender:crSel.gender,bg:crSel.bg,bgDesc:bg?bg[1]:'',difficulty:crSel.difficulty,freedom:crSel.freedom,avatar:crSel.avatar,xbase:xb});
+  startNewGame({name:$('crName').value.trim()||null,gender:crSel.gender,bg:crSel.bg,bgDesc:bg?bg[1]:'',difficulty:crSel.difficulty,freedom:crSel.freedom,avatar:crSel.avatar,xbase:xb,prose:crSel.prose});
 };
 
 async function startNewGame(opts){
@@ -8256,6 +8328,7 @@ async function startNewGame(opts){
   if(opts.startMonth==null) opts.startMonth=Math.floor(Math.random()*12);
   if(!opts.xbase) opts.xbase=rollXianBase();
   if(!opts.bonds) opts.bonds={zhifu:Math.random()<0.15, qingmei:Math.random()<0.30};
+  pendingProse=PROSE[opts.prose]?opts.prose:PROSE_DEFAULT;
   $('story').innerHTML=''; $('choices').innerHTML='';
   S=null; saveWipe();
   setBusy(true,'天地初开，正在铸造你的修真界身世……');
@@ -9038,6 +9111,9 @@ function openSettings(){
   $('cfgThink').value=cfg.think?'on':'off';
   $('cfgFont').value=String(cfg.fontSize||16);
   $('cfgFreeWrap').style.display=S?'block':'none';
+  $('cfgProseWrap').style.display=S?'block':'none';
+  $('cfgProse').innerHTML=Object.entries(PROSE).map(([k,v])=>`<option value="${k}">${v.label} —— ${v.hint}</option>`).join('');
+  if(S){ $('cfgProse').value=curProse(); $('cfgProseNote').textContent=''; }
   $('cfgMemWrap').style.display=S?'block':'none';
   if(S){ $('cfgFreedom').value=S.freedom||'mid'; $('cfgFreeNote').textContent=freedomNote(S.freedom||'mid');
          $('cfgMem').value=S.memLong===false?'short':'long'; $('cfgMemNote').textContent=memNote(); }
@@ -9060,6 +9136,7 @@ function applyFreedomChange(){
 $('btnSettings').onclick=openSettings;
 ['cfgBase','cfgKey','cfgModel','cfgThink'].forEach(id=>$(id).addEventListener('change',saveCfgFromFields));
 $('cfgFreedom').addEventListener('change',applyFreedomChange);
+$('cfgProse').addEventListener('change',()=>{ if(!S) return; const v=$('cfgProse').value; if(!PROSE[v]||v===S.prose) return; S.prose=v; saveGame(); $('cfgProseNote').textContent='已换成「'+PROSE[v].label+'」'; toast('文笔已换成「'+PROSE[v].label+'」，下一回合起生效'); });
 function applyReadingSize(){const n=[16,18,20].includes(Number(cfg.fontSize))?Number(cfg.fontSize):16;document.documentElement.style.setProperty('--reading-size',n+'px');}
 $('cfgFont').addEventListener('change',()=>{cfg.fontSize=Number($('cfgFont').value);localStorage.setItem(LS_CFG,JSON.stringify(cfg));applyReadingSize();});
 function memNote(){
