@@ -3782,14 +3782,29 @@ function syncSect(){
     S.sect.own=true;
     return;
   }
-  const fn=p.faction;
+  let fn=plain(p.faction);
   const isSect=fn&&!/散人|散修|凡人|^无$|^$/.test(fn);
   if(!isSect){ if(S.sect){ news(`主角已不再属于${S.sect.name}`); S.sect=null; } return; }
+  fn=p.faction=ensureSectListed(fn);
+  if(S.sect&&!S.sect.own&&S.sect.name!==fn&&ensureSectListed(plain(S.sect.name))===fn) S.sect.name=fn;   // 只是叫法不同（某宗外门/某宗），不算改换门庭
   if(!S.sect||S.sect.name!==fn){
     const old=S.sect;
     if(old) betraySect(old.name,fn);
     S.sect={name:fn, contrib:(p.linggen&&num(p.linggen.mult)>=1.5)?12:0, joined:S.turn, own:false};   // 好灵根直接收进外门
   }
+}
+// 主角入的宗门一定要在天下势力里：模型写的「青云宗外门」认成「青云宗」；表里没有的补进去
+function ensureSectListed(fn){
+  if(!S.world) return fn;
+  const fs=S.world.factions=S.world.factions||[];
+  if(fs.some(f=>f.name===fn)) return fn;
+  const base=fn.replace(/(?:外门|内门|杂役处|真传|亲传|弟子|执事|长老|门下|一脉|分舵|分院|别院|山门)+$/,'');
+  const hit=fs.find(f=>f.name===base)||fs.find(f=>f.name.length>=2&&(fn.startsWith(f.name)||f.name.startsWith(base)&&base.length>=2));
+  if(hit) return hit.name;
+  const nm=base.length>=2?base:fn;
+  const f={name:nm,alignment:/魔|血|阴|煞|鬼|邪|毒|尸/.test(nm)?'邪道':'正派',power:rnd(30,50),leader:'',desc:'主角拜入的宗门'};
+  fs.push(f); if(typeof ensureFactionMeta==='function') ensureFactionMeta(f);
+  return nm;
 }
 // 宗门月例：位阶越高、宗门越强，拿得越多
 function sectStipend(){
@@ -5183,7 +5198,7 @@ function stateBlocks(action){
   const pb=Object.assign({},p); delete pb.backstory; delete pb.avatar; delete pb.avatarLocked;
   for(const k of ['realm','linggen','lingli','breakCD','lifeBonus','cultMode','cultMul','scarPower','bottleneckNoted','lifespan','tags','prep']) delete pb[k];
   pb.attributes=Object.assign({},p.attributes); delete pb.attributes['武功'];
-  if(p.items){ pb.items={}; for(const c in p.items) pb.items[c]=(p.items[c]||[]).map(it=>{ if(!it||typeof it!=='object') return it; const o=Object.assign({},it); delete o.bonus; return o; }); }
+  if(p.items){ pb.items={}; for(const c in p.items) pb.items[c]=(c==='法器'||c==='玉简'?(p.items[c]||[]).map(it=>({item:it,count:1})):stackItems(p.items[c])).map(({item:it,count})=>{ if(!it||typeof it!=='object') return it; const o=Object.assign({},it); delete o.bonus; if(count>1) o.count=count; return o; }); }
   return `【当前时间】${S.date}（第${S.turn}回合）
 【当前场景】${S.scene?`主角现在${S.scene.location||'未知地点'}。未了结的事：${asArr(S.scene.unresolved).join('；')||'无'}`:'见最近剧情'}
 ${worldThreadBlock(action)}
@@ -5301,7 +5316,8 @@ ${judge.convo?convoAfterReq():`请推演本回合。要求：
 - 数值变化必须符合规则并如实写入playerChanges与npcUpdates（全部用增减量）。受伤写hp负值，休养写hp正值。年龄由引擎按光阴推算，age 一律填 null。
 - playerChanges.money 只记下品灵石。凡人的银两铜钱不是灵石：十两银子大约折一块下品灵石，几两碎银就是 0。
   日常吃穿住用引擎每月已经扣过，不要再写负数；只有剧情里真付出去一笔钱（买东西、过路费、罚款、打赏、请人办事），才写负数，moneyReason写一句付给谁、为什么；买到的东西写进itemsAdd。
-  itemsRemove 一项只拿走一件：交出两颗同名丹药就写两次，或写 {"name":"回春丹","count":2}。
+  行囊里丹药、符箓、毒药、灵材有数量（面板里的count）。得到几件就在itemsAdd里写count，如 {"name":"回春丹","count":3}；名字里不要带数量。
+  用掉、交出、卖掉的写itemsRemove：一项只拿走一件，几件写 {"name":"回春丹","count":2}。主角在剧情里服下丹药、祭出符箓，也要写进itemsRemove；手里没有的东西不能用。
 - 对白写进叙述里，用「」引起来，像小说那样交代谁说的；不要写成「某某：『……』」这种剧本格式。
 - 主角修习功法、与人切磋、受指点时，用playerChanges.artsTrain长熟练度；新学的功法写artsAdd并注明style与level。
 - 闭关只写这段光阴里的日子与心境，不要写灵力涨了多少、突破没有——那是引擎的账。闭关的剧情150-300字就够，多写出关时外头变了什么（谁来过、谁走了、出了什么事），
@@ -5956,6 +5972,8 @@ function applyInit(d, opts){
   p.personality=p.personality||[];
   const it = p.items||{};
   p.items = {'法器':(it['法器']||[]).map(normWeapon),'玉简':it['玉简']||[],'丹药':it['丹药']||[],'符箓':it['符箓']||[],'毒药':it['毒药']||[],'灵材':it['灵材']||[],'其他':it['其他']||[]};
+  for(const c in p.items) p.items[c]=p.items[c].map(x=>typeof x==='string'?{name:x,desc:''}:x).filter(x=>x&&x.name);
+  normBag(p);
   p.attributes=p.attributes||{};
   p.attributes['谈吐']=clamp(num(p.attributes['谈吐']));
   p.money=Math.max(0,num(p.money));
@@ -6089,10 +6107,83 @@ function capGrade(p,it,what){
   return it;
 }
 // 按名字取走 n 件（同名的一件一件拿，不整类清空）。返回实际拿走几件
+/* ================= 行囊数量 =================
+   存的时候一件一条（老代码都按条取用），显示和告诉模型时按名字合并成「回春丹 ×3」。
+   模型常把数量写进名字里（回春丹×3、三颗回春丹、火球符（两张）），入囊前拆开。 */
+const STACK_CATS=['丹药','符箓','毒药','灵材'];
+const ITEM_UNIT='(?:颗|枚|张|粒|瓶|份|块|株|道|个|丸|根|片|贴|包|支|只)';
+function splitItemCount(raw){
+  let name=plain(raw).replace(/[《》「」【】]/g,'').trim(), n=1, m;
+  const U=ITEM_UNIT, N='(\\d+|[一二两三四五六七八九十]+)', S_='\\s*';
+  if((m=name.match(new RegExp('^(.+?)'+S_+'[×xX*＊]'+S_+'(\\d+)'+S_+U+'?$')))) { name=m[1]; n=+m[2]; }
+  else if((m=name.match(new RegExp('^(.+?)'+S_+'[（(]'+S_+N+S_+U+S_+'[）)]$')))) { name=m[1]; n=cnToNum(m[2]); }
+  else if((m=name.match(new RegExp('^'+N+S_+U+'(.{2,})$')))) { name=m[2]; n=cnToNum(m[1]); }
+  else if((m=name.match(new RegExp('^(.{2,}?)'+N+U+'$')))) { name=m[1]; n=cnToNum(m[2]); }
+  name=name.trim(); if(!name) return {name:plain(raw),n:1};
+  return {name,n:Math.max(1,Math.min(20,Math.round(num(n)||1)))};
+}
+function itemCountOf(it,cat){
+  const c=num(it&&(it.count!=null?it.count:it.qty!=null?it.qty:it['数量']));
+  const sp=STACK_CATS.includes(cat)?splitItemCount(it&&it.name):{name:plain(it&&it.name),n:1};
+  return {name:sp.name, n:Math.max(1,Math.min(20,Math.round(c>1?c:sp.n)))};
+}
+// 往行囊里放 n 件：返回放进去的件数
+function addItems(p,cat,item){
+  if(!item||!plain(item.name)) return 0;
+  p.items[cat]=p.items[cat]||[];
+  const {name,n}=itemCountOf(item,cat);
+  for(let k=0;k<n;k++){ const one=Object.assign({},item,{name}); delete one.count; delete one.qty; delete one['数量']; p.items[cat].push(cat==='法器'?normWeapon(one):one); }
+  return n;
+}
+// 老存档、开局身世里写成「回春丹×3」一条的，拆成三条
+function normBag(p){
+  if(!p||!p.items) return;
+  for(const cat of STACK_CATS){
+    const list=p.items[cat]; if(!Array.isArray(list)) continue;
+    if(!list.some(it=>it&&(itemCountOf(it,cat).n>1||itemCountOf(it,cat).name!==it.name))) continue;
+    const out=[]; for(const it of list){ if(!it||!it.name){ continue; } const {name,n}=itemCountOf(it,cat); for(let k=0;k<n;k++){ const one=Object.assign({},it,{name}); delete one.count; delete one.qty; delete one['数量']; out.push(one); } }
+    p.items[cat]=out;
+  }
+}
+// 按名字合并：[{name,desc,count,first}]
+function stackItems(list){
+  const m=new Map();
+  (list||[]).forEach((x,i)=>{ if(!x||!x.name) return; const k=x.name+(x.relic?'#'+x.relic:''); if(!m.has(k)) m.set(k,{item:x,count:0,first:i}); m.get(k).count++; });
+  return [...m.values()];
+}
+function bagCount(p,name){ let c=0; for(const cat in (p.items||{})) for(const x of p.items[cat]||[]) if(x&&x.name===name) c++; return c; }
 function takeItems(p,name,n){
   n=Math.max(1,Math.round(num(n)||1)); let got=0; name=plain(name); if(!name) return 0;
+  if(!bagCount(p,name)){ const sp=splitItemCount(name); if(sp.name!==name){ name=sp.name; if(n===1) n=sp.n; } }
+  if(!bagCount(p,name)){   // 名字差几个字（「火球符」对「下品火球符」）：认最像的那一件
+    let best=null; for(const cat in p.items) for(const x of p.items[cat]||[]) if(x&&x.name&&x.name.length>=2&&(x.name.includes(name)||name.includes(x.name))&&(!best||Math.abs(x.name.length-name.length)<Math.abs(best.length-name.length))) best=x.name;
+    if(best) name=best;
+  }
   for(const cat in p.items){ const list=p.items[cat]; for(let i=list.length-1;i>=0&&got<n;i--){ if(list[i]&&list[i].name===name){ list.splice(i,1); got++; } } if(got>=n) break; }
   return got;
+}
+/* 剧情里主角用了丹药、符箓、毒药，模型却没写 itemsRemove：引擎照正文扣一件。
+   只认主角自己用的：那一句里出现了别的人名、又没有主角名字的，不扣。 */
+const USE_VERB={'丹药':'服下|吞下|吃下|咽下|服了|吞了|含了|嚼了|塞进嘴|服用','符箓':'祭出|甩出|捏碎|激发|拍出|打出|贴上|点燃|催动|撕开|扔出|掷出|抖出|拍在|用了|捏了|燃了','毒药':'下了|撒出|弹出|抹上|下在|洒了|倒进|撒了'};
+function autoConsume(p,text,already){
+  const out=[]; text=String(text||''); if(!text) return out;
+  const others=(S.npcs||[]).map(n=>n.name).filter(nm=>nm&&nm!==p.name&&nm.length>=2);
+  for(const cat of ['丹药','符箓','毒药']){
+    for(const g of stackItems(p.items[cat])){
+      const nm=g.item.name; if(!nm||already.has(nm)) continue;
+      const esc_=nm.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+      const re=new RegExp('('+USE_VERB[cat]+')[^。！？\n]{0,8}'+esc_,'g');
+      let m, used=0;
+      while((m=re.exec(text))&&used<g.count){
+        const st=Math.max(text.lastIndexOf('。',m.index),text.lastIndexOf('！',m.index),text.lastIndexOf('？',m.index),text.lastIndexOf('\n',m.index))+1;
+        const seg=text.slice(st,m.index);
+        if(others.some(o=>seg.includes(o))&&!seg.includes(p.name)) continue;
+        used++;
+      }
+      if(used){ const got=takeItems(p,nm,used); if(got) out.push([nm,got]); }
+    }
+  }
+  return out;
 }
 function itemRemoveList(raw){
   const out=[]; for(const x of (Array.isArray(raw)?raw:asArr(raw))){
@@ -6235,14 +6326,16 @@ function applyTurn(d, action, judge){
         const known=p.arts.find(x=>x.name===bareArtName(item.name));
         if(known){ known.level=clamp(num(known.level)+2); lastDeltas['功法·'+known.name]=num(lastDeltas['功法·'+known.name])+2; ch.itemsAdd[cat]=ch.itemsAdd[cat].filter(x=>x!==item); continue; }
       }
-      if(p.items[cat].some(x=>x.name===item.name&&cat!=='丹药'&&cat!=='符箓'&&cat!=='灵材')) continue;   // 同名法器、玉简不重复入囊
-      const cnt=Math.min(10,Math.max(1,Math.round(num(item.count)||1)));
-      for(let k=0;k<cnt;k++){ const one=Object.assign({},item); delete one.count; p.items[cat].push(cat==='法器'?normWeapon(one):one); }
-      ledger(`得到${cat}【${item.name}】${cnt>1?'×'+cnt:''}`);
+      if(!STACK_CATS.includes(cat)&&p.items[cat].some(x=>x.name===item.name)) continue;   // 同名法器、玉简不重复入囊
+      const cnt=addItems(p,cat,item), nm=itemCountOf(item,cat).name;
+      ledger(`得到${cat}【${nm}】${cnt>1?'×'+cnt:''}`);
     }
   }
   // 交出、卖掉、用掉：按件数取，一次写一个名字就只拿一件
-  if(ch.itemsRemove) for(const [nm,n] of itemRemoveList(ch.itemsRemove)) takeItems(p,nm,n);
+  const removedNames=new Set();
+  if(ch.itemsRemove) for(const [nm,n] of itemRemoveList(ch.itemsRemove)){ takeItems(p,nm,n); removedNames.add(splitItemCount(nm).name); removedNames.add(nm); }
+  for(const cat in (ch.itemsAdd||{})) for(const it of ch.itemsAdd[cat]||[]) if(it&&it.name) removedNames.add(itemCountOf(it,cat).name);   // 这回刚得到又用掉的，交给模型自己记
+  for(const [nm,n] of autoConsume(p,d.narrative,removedNames)){ ledger(`剧情里用掉了【${nm}】${n>1?'×'+n:''}`); lastDeltas['用掉']=(lastDeltas['用掉']?lastDeltas['用掉']+'、':'')+nm+(n>1?'×'+n:''); }
   if(refused.length){ capNote(`判定失败，拒收：${refused.join('、')}`); lastDeltas['未到手']=refused.slice(0,4).join('、')+(refused.length>4?'等':''); }
   if(failed){ ch.artsAdd=[]; ch.itemsAdd={}; }   // 没到手的不在「本回变化」里显示
   // 大凶：引擎先定死的损失，模型改不了
@@ -7660,9 +7753,9 @@ function applyConvoEffects(n, eff, attemptOk){
     }
     if(!risky||!c.canItem){ out.push(`${n.name}到底没舍得把【${it.name}】给你`); continue; }
     const cat=(p.items[it.cat]!==undefined)?it.cat:'其他';
-    p.items[cat]=p.items[cat]||[];
-    p.items[cat].push(cat==='法器'?normWeapon({name:it.name, desc:it.desc||'', bonus:num(it.bonus)}):{name:it.name, desc:it.desc||''});
-    gain(out,`${n.name}给了你【${it.name}】`);
+    const gc=Math.min(5,itemCountOf(it,cat).n), gname=itemCountOf(it,cat).name;
+    addItems(p,cat,cat==='法器'?{name:gname, desc:it.desc||'', bonus:num(it.bonus)}:{name:gname, desc:it.desc||'', count:gc});
+    gain(out,`${n.name}给了你【${gname}】${gc>1?'×'+gc:''}`);
   }
   for(const nm of (eff.take||[]).slice(0,2)){
     if(!nm) continue;
@@ -8063,8 +8156,9 @@ function renderPanel(){
 }
 function itemHtml(list,color,tag){
   if(!list||!list.length) return '<div class="empty">空空如也</div>';
-  return list.map((x,i)=>{ const pl=tag==='药'?pillOf(x.name):null;
-    return `<div class="item"><span class="itag" style="background:${color}">${tag}</span><b>${esc(x.name)}</b>${x.relic?'<span style="color:var(--ink-2);opacity:.55;font-size:12px"> ◇</span>':''}${tag==='器'?`<span style="color:var(--accent);font-size:13px">（${esc(x.grade||gradeText(x.bonus||1))}，战力+${weaponPower(x)}）</span>`:''}<div class="idesc">${esc(x.desc||'')}${pl?`<span style="color:#7A8A80">　${esc(pl.desc)}</span>`:''}</div>${tag==='药'&&!(pl&&pl.brk!=null)?`<button class="mbtn" data-pill="${i}" style="margin-top:5px;padding:3px 12px;font-size:13px">服下</button>`:''}</div>`; }).join('');
+  const groups=tag==='器'?list.map((x,i)=>({item:x,count:1,first:i})):stackItems(list);
+  return groups.map(({item:x,count:cn,first:i})=>{ const pl=tag==='药'?pillOf(x.name):null;
+    return `<div class="item"><span class="itag" style="background:${color}">${tag}</span><b>${esc(x.name)}</b>${cn>1?`<b style="color:var(--accent);margin-left:4px">×${cn}</b>`:''}${x.relic?'<span style="color:var(--ink-2);opacity:.55;font-size:12px"> ◇</span>':''}${tag==='器'?`<span style="color:var(--accent);font-size:13px">（${esc(x.grade||gradeText(x.bonus||1))}，战力+${weaponPower(x)}）</span>`:''}<div class="idesc">${esc(x.desc||'')}${pl?`<span style="color:#7A8A80">　${esc(pl.desc)}</span>`:''}</div>${tag==='药'&&!(pl&&pl.brk!=null)?`<button class="mbtn" data-pill="${i}" style="margin-top:5px;padding:3px 12px;font-size:13px">服下</button>`:''}</div>`; }).join('');
 }
 function manualHtml(list){
   if(!list||!list.length) return '<div class="empty">空空如也</div>';
@@ -8083,6 +8177,7 @@ function manualHtml(list){
   }).join('');
 }
 function renderBag(){
+  normBag(S.player);
   const it=S.player.items;
   $('bagWeapons').innerHTML=itemHtml(it['法器'],'#5E6F8A','器');
   $('bagManuals').innerHTML=manualHtml(it['玉简']);
@@ -8330,9 +8425,10 @@ function renderWorld(){
       +`<div style="font-size:12px;color:var(--ink-soft);margin-top:5px">${S.ranked?'你已在榜。':'尚未入榜——胜过一位榜上人物才算数。'}上门挑战要跋涉三个月，${cooldownText()}${num(S.world.vacant)>0?`　⚑ 榜上尚有 ${S.world.vacant} 个空缺`:''}</div>`;
     $('wRanking').querySelectorAll('button[data-ch]').forEach(b=>b.onclick=()=>challengeRanked(b.dataset.ch));
   }
-  const fs=S.world&&S.world.factions||[];
+  if(S.player&&S.world&&S.player.faction&&!/散人|散修|凡人|^无$/.test(S.player.faction)&&!(S.clan&&S.clan.name===S.player.faction)) { S.player.faction=ensureSectListed(plain(S.player.faction)); if(S.sect&&!S.sect.own&&S.sect.name!==S.player.faction&&ensureSectListed(plain(S.sect.name))===S.player.faction) S.sect.name=S.player.faction; }
+  const fs=(S.world&&S.world.factions||[]).slice().sort((a,b)=>(b.name===S.player.faction)-(a.name===S.player.faction));
   $('wFactions').innerHTML=fs.length?fs.map(f=>{ const tr=num(f.trend), lg=(f.log||[]).slice(-1)[0], recent=lg&&curYear()-num(lg.y)<=5;
-    return `<div class="faction"><div class="fl"><span><b>${esc(f.name)}</b> <small>${esc(f.alignment)} · ${f.own?esc(f.leader):'宗主 '+esc(f.leader)+(f.lRealm?'（'+esc(realmText(f.lRealm))+'）':'')}</small></span><small>势力 ${f.power}${tr>0?' <b style="color:#3F7A55">↑'+tr+'</b>':tr<0?' <b style="color:#9B4A3C">↓'+(-tr)+'</b>':''}</small></div>${recent?`<div style="font-size:12px;color:var(--ink-soft)">近况：${esc(lg.text)}（${esc(lg.date||'')}）</div>`:''}<div class="bar" style="height:6px"><i style="width:${pw(f.power)}%;background:${f.alignment==='邪道'?'#6B4E7A':f.alignment==='正派'?'#3F7A55':'#7D8A82'}"></i></div><div style="font-size:12.5px;color:var(--ink-soft);margin-top:2px">${esc(f.desc)}</div></div>`;}).join(''):'<div class="empty">尚无</div>';
+    return `<div class="faction"><div class="fl"><span><b>${esc(f.name)}</b>${f.name===S.player.faction?' <small style="color:var(--accent)">【你在此门】</small>':''} <small>${esc(f.alignment)} · ${f.own?esc(f.leader):'宗主 '+esc(f.leader)+(f.lRealm?'（'+esc(realmText(f.lRealm))+'）':'')}</small></span><small>势力 ${f.power}${tr>0?' <b style="color:#3F7A55">↑'+tr+'</b>':tr<0?' <b style="color:#9B4A3C">↓'+(-tr)+'</b>':''}</small></div>${recent?`<div style="font-size:12px;color:var(--ink-soft)">近况：${esc(lg.text)}（${esc(lg.date||'')}）</div>`:''}<div class="bar" style="height:6px"><i style="width:${pw(f.power)}%;background:${f.alignment==='邪道'?'#6B4E7A':f.alignment==='正派'?'#3F7A55':'#7D8A82'}"></i></div><div style="font-size:12.5px;color:var(--ink-soft);margin-top:2px">${esc(f.desc)}</div></div>`;}).join(''):'<div class="empty">尚无</div>';
   $('wFactions').insertAdjacentHTML('beforeend',worldThreadsHtml());
   const vd=(S.vendettas||[]).filter(v=>v.heat>0);
   $('wVendetta').innerHTML=vd.length?vd.slice().sort((a,b)=>b.heat-a.heat).map(v=>{
