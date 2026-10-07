@@ -1611,7 +1611,7 @@ function advanceTime(n){
     if(p.money>=per){p.money-=per;cost+=per;}
     else{cost+=p.money;p.money=0;starve++;}
     const beforeY=Math.floor(S.months/12); S.months=Math.floor(S.elapsedDays/30);
-    if(Math.floor(S.months/12)>beforeY){p.age++;agingTick();npcYearTick();eggYear();relicYear();}
+    if(Math.floor(S.months/12)>beforeY){p.age++;agingTick();npcYearTick();factionYear();eggYear();relicYear();}
     cultivateMonth();
     scheduleMonth();
     npcMonth();
@@ -2932,6 +2932,149 @@ function ensureTianjiao(){
   S.world.tianjiao=S.world.tianjiao||[];
   while(S.world.tianjiao.filter(x=>x.alive!==false).length<8) S.world.tianjiao.push(makeTianjiaoOne());
   return S.world.tianjiao;
+}
+/* ================= 势力消长 =================
+   宗门（玩家自己开的除外）每年由引擎记一次账：小起伏、往底子回拉、宗主加减；宗主会老会死会换；
+   弱到撑不住就散，隔些年冒出新宗门。大起大落交给修真界大事，事件结束时引擎结算。 */
+const FAC_MAX=10;
+function curYear(){ return Math.floor(num(S&&S.months)/12); }
+function facLeaderRealm(power){ const major=power>=70?4:power>=45?3:2; return {major,minor:rnd(1,3),perfect:false,ascended:false}; }
+function facLog(f,text,dv){ f.log=f.log||[]; f.log.push({y:curYear(),date:S.date||'',text:String(text).slice(0,40),dv:num(dv)}); while(f.log.length>8) f.log.shift(); }
+function ensureFactionMeta(f){
+  if(f.base==null) f.base=clamp(num(f.power));
+  if(f.lastPower==null) f.lastPower=num(f.power);
+  if(!plain(f.leader)) f.leader=makeRankName(Math.random()<0.25?'女':'男');
+  if(!f.lRealm){
+    const npc=findNpc(f.leader), r=(S.world.ranking||[]).find(x=>x.name===f.leader);
+    f.lRealm=npc&&npc.realm?JSON.parse(JSON.stringify(npc.realm)):r&&r.realm?JSON.parse(JSON.stringify(r.realm)):facLeaderRealm(num(f.power));
+    f.lAge=npc?num(npc.age):r&&r.age?num(r.age):Math.round(realmLifespan(f.lRealm)*(0.35+Math.random()*0.35));
+    f.lSince=curYear()-rnd(5,60);
+  }
+  f.log=f.log||[];
+}
+function facSetLeader(f,name,realm){
+  f.leader=name; const npc=findNpc(name);
+  f.lRealm=npc&&npc.realm?JSON.parse(JSON.stringify(npc.realm)):realm||facLeaderRealm(Math.max(0,num(f.power)-15));
+  f.lAge=npc?num(npc.age):Math.round(realmLifespan(f.lRealm)*(0.3+Math.random()*0.25));
+  f.lSince=curYear();
+}
+function facSucceed(f,why){
+  const old=f.leader, nm=makeRankName(Math.random()<0.25?'女':'男');
+  const r=f.lRealm?{major:Math.max(2,f.lRealm.major-(Math.random()<0.6?1:0)),minor:rnd(1,3),perfect:false,ascended:false}:null;
+  facSetLeader(f,nm,r);
+  f.power=clamp(num(f.power)-rnd(1,3));
+  facLog(f,`${why}，${nm}接任宗主`,-2);
+  news(`${f.name}${why}，由${nm}接任宗主`);
+  rememberKnowledge(`${f.name}换了宗主：${old}之后是${nm}`,'风闻','已证实');
+}
+function facByName(n){ return n?((S.world&&S.world.factions)||[]).find(f=>f.name===n&&!f.own)||null:null; }
+function facPool(filter){ return ((S.world&&S.world.factions)||[]).filter(f=>f&&f.name&&!f.own&&(!filter||filter(f))); }
+function seedReady(i){
+  const w=worldState(); w.seedYear=w.seedYear||{};
+  if(!w.seedSeen.includes(i)) return true;
+  if(w.seedYear[i]==null) w.seedYear[i]=curYear();     // 老存档：从现在起算一个甲子
+  return curYear()-num(w.seedYear[i])>=60;
+}
+// 大事种子填上真实宗门；填不上就用原来的泛称
+function fillWorldSeed(i){
+  const seed=WORLD_EVENTS[i], kind=seed[2], tpl=seed[3];
+  if(!kind||!tpl) return seed[0];
+  const fx={kind}; const pickF=list=>list.length?pick(list):null;
+  if(kind==='vein'){ const a=pickF(facPool()); const b=a&&pickF(facPool(f=>f!==a)); if(!a||!b) return seed[0]; fx.A=a.name; fx.B=b.name; }
+  else if(kind==='demon'){ const m=pickF(facPool(f=>f.alignment==='邪道')), z=pickF(facPool(f=>f.alignment!=='邪道')); if(!z) return seed[0]; fx.M=m?m.name:''; fx.Z=z.name; }
+  else if(kind==='dry'){ const lo=facPool(f=>num(f.power)<45); const a=pickF(lo.length?lo:facPool()); if(!a) return seed[0]; fx.A=a.name; }
+  else { const a=pickF(facPool(f=>kind!=='recruit'||f.alignment!=='邪道')); if(!a) return seed[0]; fx.A=a.name; if(kind==='seclude'){ ensureFactionMeta(a); fx.L=a.leader; } }
+  let text=tpl.replace('{A}',fx.A||'').replace('{B}',fx.B||'').replace('{Z}',fx.Z||'').replace('{L}',fx.L||'').replace('{M}',fx.M||'');
+  if(kind==='demon'&&!fx.M) text=text.replace('一伙的魔修','一伙魔修');
+  const w=worldState(); w.seedMap=w.seedMap||{}; w.seedMap[text]={i,fx};
+  const keys=Object.keys(w.seedMap); if(keys.length>30) delete w.seedMap[keys[0]];
+  return text;
+}
+// 大事结束：模型写了结果就按结果里的胜负，看不出来引擎掷
+function facWinner(text,a,b){
+  const t=String(text||''), W='(?:胜|占|得手|赢|夺|拿下|压过|收下|笑到最后)', L='(?:败|退|让|输|失|吃了亏|折了|认栽)';
+  const sc=(x,y)=>(new RegExp(x+'[^，。；]{0,10}'+W).test(t)?1:0)+(new RegExp(y+'[^，。；]{0,10}'+L).test(t)?1:0);
+  const sa=sc(a,b), sb=sc(b,a);
+  return sa>sb?a:sb>sa?b:(Math.random()<0.5?a:b);
+}
+function facResolve(e,text){
+  const fx=e.fx; if(!fx||fx.done) return; fx.done=true;
+  const t=String(text||'');
+  if(fx.kind==='vein'){
+    const A=facByName(fx.A), B=facByName(fx.B); if(!A||!B) return;
+    const win=facWinner(t,A.name,B.name), wf=win===A.name?A:B, lf=wf===A?B:A, d1=rnd(6,10), d2=rnd(6,10);
+    wf.power=clamp(num(wf.power)+d1); lf.power=clamp(num(lf.power)-d2);
+    facLog(wf,`与${lf.name}争灵脉得手`,d1); facLog(lf,`与${wf.name}争灵脉落败`,-d2); fx.win=wf.name;
+  }else if(fx.kind==='seclude'){
+    const A=facByName(fx.A); if(!A) return; ensureFactionMeta(A);
+    if(fx.L&&A.leader!==fx.L) return;     // 宗主已经换过了
+    const died=/坐化|陨落|身死|没能出关|死在关中|再没出来|魂灯灭/.test(t)?true:/出关|突破|功成|破关/.test(t)?false:Math.random()<0.5;
+    if(died){ facSucceed(A,`宗主${A.leader}死关未成，坐化关中`); A.power=clamp(num(A.power)-5); facLog(A,'宗主坐化，长老争位',-5); }
+    else{ const r=A.lRealm; if(r.major<5){ r.major++; r.minor=1; } A.lAge=Math.min(num(A.lAge),Math.round(realmLifespan(r)*0.6)); A.power=clamp(num(A.power)+5); facLog(A,`宗主${A.leader}破关而出，晋${realmText(r)}`,5); }
+    fx.died=died;
+  }else if(fx.kind==='demon'){
+    const M=facByName(fx.M), Z=facByName(fx.Z);
+    if(M){ M.power=clamp(num(M.power)-5); facLog(M,'门下魔修被正道追剿',-5); }
+    if(Z){ Z.power=clamp(num(Z.power)+3); facLog(Z,'追剿魔修，名声见长',3); }
+  }else if(fx.kind==='dry'){
+    const A=facByName(fx.A); if(A){ A.power=clamp(num(A.power)-8); facLog(A,'灵脉枯竭，搬了山门',-8); }
+  }else if(fx.kind==='recruit'){
+    const A=facByName(fx.A); if(A){ A.power=clamp(num(A.power)+2); facLog(A,'开山收了一批新弟子',2); }
+  }
+}
+function facAutoResult(e){
+  const fx=e.fx;
+  if(fx.kind==='vein'){ const w=Math.random()<0.5?fx.A:fx.B, l=w===fx.A?fx.B:fx.A; return `${w}占下了那条灵脉，${l}退走`; }
+  if(fx.kind==='seclude'){ return Math.random()<0.5?`${fx.A}宗主${fx.L}没能出关，坐化在死关里`:`${fx.A}宗主${fx.L}破关而出，长老们各自收了心思`; }
+  if(fx.kind==='demon') return fx.M?`${fx.Z}追剿得手，${fx.M}的人退回了老巢`:`${fx.Z}把那伙魔修赶出了凡人地界`;
+  if(fx.kind==='dry') return `${fx.A}搬了山门，元气大伤`;
+  if(fx.kind==='recruit') return `${fx.A}收徒已毕，山门重又闭上`;
+  return '事情过去了';
+}
+function factionYear(){
+  const w=S.world; if(!w||!Array.isArray(w.factions)) return;
+  worldState();
+  const y=curYear();
+  for(const f of w.factions.slice()){
+    if(!f||!f.name||f.own) continue;
+    ensureFactionMeta(f);
+    // 宗主：认识的人按人物表；榜上的人按榜；其余引擎记年纪
+    const npc=findNpc(f.leader), rk=(w.ranking||[]).find(x=>x.name===f.leader);
+    if(npc){ f.lRealm=npc.realm?JSON.parse(JSON.stringify(npc.realm)):f.lRealm; f.lAge=num(npc.age); if(npc.alive===false) facSucceed(f,`宗主${f.leader}亡故`); }
+    else if(rk&&rk.alive===false) facSucceed(f,`宗主${f.leader}辞世`);
+    else{
+      f.lAge=num(f.lAge)+1;
+      if(f.lAge>=realmLifespan(f.lRealm)) facSucceed(f,`宗主${f.leader}寿元耗尽坐化`);
+      else if(Math.random()<0.01) facSucceed(f,pick([`宗主${f.leader}走火入魔`,`宗主${f.leader}外出游历未归`,`宗主${f.leader}遭人暗算`,`宗主${f.leader}闭关不出，传了位`]));
+      else if(Math.random()<0.04){ const r=f.lRealm; if(r.minor<realmMinorMax(r.major)) r.minor++; else if(r.major<5&&Math.random()<0.25){ r.major++; r.minor=1; facLog(f,`宗主${f.leader}晋${realmText(r)}`,1); } }
+    }
+    // 一年的小起伏，往底子回拉
+    let dv=rnd(-3,3)+Math.round((num(f.base)-num(f.power))*0.08);
+    if(f.lRealm&&f.lRealm.major>=4) dv+=1;
+    if(y-num(f.lSince)<3) dv-=2;
+    if(S.player&&S.player.faction===f.name) f.power=Math.max(8,clamp(num(f.power)+dv)); else f.power=clamp(num(f.power)+dv);
+    // 撑不住就散
+    f.low=num(f.power)<8?num(f.low)+1:0;
+    const atWar=S.clan&&S.clan.war&&S.clan.war.foe===f.name;
+    if(f.low>=3&&!atWar&&!(S.player&&S.player.faction===f.name)){
+      w.factions=w.factions.filter(x=>x!==f); w.goneFactions=w.goneFactions||[]; w.goneFactions.push(f.name);
+      news(`${f.name}撑不下去了，山门一散，弟子各投别家`);
+      rememberKnowledge(`${f.name}已经散了`,'风闻','已证实');
+    }
+  }
+  // 隔些年冒出一家新宗门
+  const live=w.factions.filter(f=>!f.own);
+  if(live.length<FAC_MAX&&Math.random()<1/30){
+    const al=Math.random()<0.5?'正派':Math.random()<0.5?'邪道':'中立';
+    const nm=typeof randClanName==='function'?randClanName():'新立宗门';
+    const p0=rnd(15,25), f={name:nm,alignment:al,power:p0,base:rnd(25,40),lastPower:p0,leader:'',desc:al==='邪道'?'新近冒出来的一伙魔修，行事不择手段':'新近开山立派的宗门，根基尚浅'};
+    w.factions.push(f); ensureFactionMeta(f); f.lSince=y; facLog(f,'开山立派',0);
+    news(`修真界新冒出一家${nm}，宗主${f.leader}`);
+  }
+  // 一年的涨跌记成箭头；风闻只提变动最大的那家
+  let big=null;
+  for(const f of w.factions){ if(f.own) continue; f.trend=num(f.power)-num(f.lastPower); f.lastPower=num(f.power); if(Math.abs(f.trend)>=4&&(!big||Math.abs(f.trend)>Math.abs(big.trend))) big=f; }
+  if(big) news(`这一年${big.name}${big.trend>0?'声势见涨':'颇显颓势'}`);
 }
 function tianjiaoYear(){
   const list=ensureTianjiao();
@@ -4506,7 +4649,7 @@ function addWorldThread(x, action){
   // 复发要引用旧事件，同时交代不同的新原因；已结束事件永不原地重开。
   const prior=x.recurrenceOf&&w.threads.find(e=>e.id===x.recurrenceOf&&e.stage==='结束');
   const cause=plain(x.cause||action).slice(0,180);
-  if(old||retired){
+  if((old&&old.stage!=='结束')||(old||retired)&&!x.reseed){
     if(!prior||!cause||cause===prior.cause||cause===prior.result||sameMatter(cause,prior.cause)) return null;
   }
   if(w.threads.filter(e=>e.stage==='酝酿'||e.stage==='发生'||e.stage==='升级').length>=8) return null;   // 搁置的留作背景，不占前台额度
@@ -4530,6 +4673,7 @@ function closeWorldThread(e, result, cause){
   e.stage='结束'; e.result=plain(result)||'事件已结束'; e.text=e.result; e.updated=S.turn;
   e.cause=plain(cause)||e.cause; e.day=num(S.elapsedDays)||num(S.months)*30;
   const w=worldState(); if(!w.closedTitles.includes(e.title)) w.closedTitles.push(e.title);
+  if(e.fx&&!e.fx.done) facResolve(e,e.result);
   ledger(`修真界事件「${e.title}」结束：${e.result}`); syncWorldEvents();
 }
 function tickWorldThreads(){
@@ -4537,10 +4681,14 @@ function tickWorldThreads(){
   for(const e of w.threads){
     if(e.stage==='结束') continue;
     e.actorState=e.actorState||e.actors.map(name=>({name,alive:true}));
-    const gone=e.actorState.filter(a=>a.alive).map(a=>a.name).filter(name=>{const n=S.npcs.find(n=>n.name===name);return n?n.alive===false:(S.clan&&S.clan.annexed||[]).includes(name);});
+    const gone=e.actorState.filter(a=>a.alive).map(a=>a.name).filter(name=>{const n=S.npcs.find(n=>n.name===name);return n?n.alive===false:(S.clan&&S.clan.annexed||[]).includes(name)||(w.goneFactions||[]).includes(name);});
     if(gone.length){
       closeWorldThread(e,`${gone.join('、')}已亡故或所属势力已除名，原事件无法继续`, '人物与势力变动');
       news(`「${e.title}」的原局面已经结束`); continue;
+    }
+    // 宗门之间的大事放了半年没人管：世界不等主角，引擎自己出结果
+    if(e.fx&&!e.fx.done&&num(S.elapsedDays)-num(e.day)>=180){
+      const res=facAutoResult(e); closeWorldThread(e,res,'修真界自己的动向'); news(res); continue;
     }
     // 无新变化只退出前台，不能虚构胜负、死亡或玩家完成任务。
     if(e.stage!=='搁置'&&num(S.elapsedDays)-num(e.day)>=180){
@@ -4552,10 +4700,11 @@ function tickWorldThreads(){
 function recordWorldTurn(d, action, judge){
   const w=worldState(); const changes=[];
   if(judge&&judge.worldEvent){
-    const seed=WORLD_EVENTS.findIndex(x=>x[0]===judge.worldEvent);
-    if(seed>=0&&!w.seedSeen.includes(seed)){
-      const e=addWorldThread({title:judge.worldEvent,stage:'酝酿',source:'seed',cause:'修真界自己的动向'},action);
-      if(e){w.seedSeen.push(seed); S.lastWorldEventTurn=S.turn;}
+    const map=(w.seedMap||{})[judge.worldEvent];
+    const seed=map?map.i:WORLD_EVENTS.findIndex(x=>x[0]===judge.worldEvent);
+    if(seed>=0&&seedReady(seed)){
+      const e=addWorldThread({title:judge.worldEvent,stage:'酝酿',source:'seed',cause:'修真界自己的动向',reseed:true,actors:map&&map.fx?[map.fx.A,map.fx.B,map.fx.M,map.fx.Z].filter(Boolean):[]},action);
+      if(e){ if(!w.seedSeen.includes(seed)) w.seedSeen.push(seed); w.seedYear=w.seedYear||{}; w.seedYear[seed]=curYear(); e.seed=seed; if(map&&map.fx) e.fx=JSON.parse(JSON.stringify(map.fx)); S.lastWorldEventTurn=S.turn; }
     }
   }
   for(const x of d.newWorldEvents||[]){
@@ -4633,20 +4782,20 @@ const WORLD_STATE_RULES=`
 
 /* ================= 世界事件 ================= */
 const WORLD_EVENTS=[
- ['附近一座宗门开山收徒，凡人与散修蜂拥而至',3],
- ['两宗为一条新探到的灵脉起了争执，弟子之间已经见了血',3],
+ ['附近一座宗门开山收徒，凡人与散修蜂拥而至',3,'recruit','{A}开山收徒，凡人与散修蜂拥而至'],
+ ['两宗为一条新探到的灵脉起了争执，弟子之间已经见了血',3,'vein','{A}与{B}为一条新探到的灵脉起了争执，弟子之间已经见了血'],
  ['修士榜上一位金丹前辈坐化，洞府里的遗物去向不明',2],
  ['山里有处古修士洞府露了出来，几拨人马都在打它的主意',2],
- ['一伙魔修在凡人地界抓人炼功，正道宗门派弟子追剿',3],
+ ['一伙魔修在凡人地界抓人炼功，正道宗门派弟子追剿',3,'demon','一伙{M}的魔修在凡人地界抓人炼功，{Z}派弟子追剿'],
  ['坊市里有人高价收购某样灵材，价钱一天一个样',2],
  ['妖兽潮自深山涌出，山下几个镇子人心惶惶',2],
  ['某世家嫡子与某宗真传结为道侣，大摆宴席，各方都去送礼',2],
  ['天降异象，有人说是重宝出世，有人说是有大能渡劫',2],
  ['一位元婴老祖寿元将尽，几家宗门都在打他身后洞府的主意',2],
  ['坊市的筑基丹断了货，黑市价钱翻了三倍',2],
- ['某宗宗主闭了死关，几位长老之间暗里较上了劲',2],
+ ['某宗宗主闭了死关，几位长老之间暗里较上了劲',2,'seclude','{A}宗主{L}闭了死关，几位长老之间暗里较上了劲'],
  ['与主角有关的某位人物近日境况大变（由你决定是谁、变了什么，须有因果）',3],
- ['一条灵脉忽然枯了，靠它吃饭的小宗门正商量着搬山门',2],
+ ['一条灵脉忽然枯了，靠它吃饭的小宗门正商量着搬山门',2,'dry','一条灵脉忽然枯了，靠它吃饭的{A}正商量着搬山门'],
  ['有人在坊市摆摊卖「祖传」功法玉简，十块下品灵石一枚，据说真有人练出了点名堂',1],
  ['一位隐世的老修士现身坊市，据说在找传人',1],
  ['凡人王朝换了皇帝，新君想请一位仙师坐镇',1],
@@ -4682,14 +4831,14 @@ function pickWorldEvent(action){
   if(/练功|练剑|修炼|闭关|疗伤|休养|继续调查|继续追查|不要打扰|不管|不追/.test(action||'')) return null;
   if(S.turn-S.lastWorldEventTurn<3||w.threads.filter(e=>e.stage!=='结束'&&e.stage!=='搁置').length>=3||Math.random()>0.2*tagMul(S.player,'luck')*(S.player&&gateOf(S.player.realm)===4&&atBottleneck(S.player)&&S.player.cultMode!=='闭关'?1.5:1)) return null;
   const candidates=WORLD_EVENTS.map((e,i)=>({text:e[0],weight:e[1],i})).filter(e=>{
-    if(w.seedSeen.includes(e.i)||w.threads.some(t=>sameMatter(t.title,e.text))||w.closedTitles.some(t=>sameMatter(t,e.text)))return false;
+    if(!seedReady(e.i)||w.threads.some(t=>t.stage!=='结束'&&t.seed===e.i))return false;
     if(/大雪/.test(e.text)&&num(S.months)%12>=2&&num(S.months)%12<10)return false;
     if(/两大宗门|宗主之位/.test(e.text)&&w.factions.filter(f=>!f.own).length<2)return false;
     if(/名宿/.test(e.text)&&!w.ranking.some(r=>r.alive!==false))return false;
     return true;
   });
   let r=Math.random()*candidates.reduce((a,e)=>a+e.weight,0);
-  for(const e of candidates){r-=e.weight;if(r<=0)return e.text;}
+  for(const e of candidates){r-=e.weight;if(r<=0)return fillWorldSeed(e.i);}
   return null;
 }
 
@@ -5167,7 +5316,7 @@ ${judge.convo?convoAfterReq():`请推演本回合。要求：
 - 寿元除了冲关，只有奇遇能长（延寿灵果、千年灵药、高人施法之类），写进playerChanges.lifespan（增量）与lifespanReason（一句话缘由），并在剧情里把这场奇遇写足。寻常疗伤进补一律不许加寿元；给多少由引擎裁定，你只管提。
 - 初次登场的新NPC写入newNpcs（完整面板含secret，不得简化）；一回合最多添2人，宁可少不可滥。已有NPC的变化写入npcUpdates；若剧情揭开了某NPC的秘密，写secretRevealed:true。
 - npcEvents只写主角本回亲眼看见的相识NPC小事，没有就留空；NPC之间的婚嫁、生死、突破由引擎结算，你不要自己编。
-- rumors只写修真界新的风闻，没有新消息就留空。修士榜人物或势力有变动时写rankingUpdates/factionUpdates。
+- rumors只写修真界新的风闻，没有新消息就留空。修士榜人物或势力有变动时写rankingUpdates/factionUpdates。宗门势力和宗主每年由引擎记账、会涨会跌会换人，以上面势力表为准；主角插手让某家得利或吃亏时，factionUpdates的power写增减（-10到10），reason写一句缘由。
 - 修士榜有空缺时，可用rankingAdd补一位新上榜的修士（给出姓名、所属、境界realm、一句成名评价），境界要与榜末相当，要像是修真界本就有这么个人，别硬造。
 - ${OPTIONS_RULE}
 - 若本回合要动手较量，按斗法制度填duel并把剧情收在动手前；否则duel为null。
@@ -5184,7 +5333,7 @@ ${JSON_RULE}
 "newNpcs":[${NPC_SCHEMA}],
 "npcEvents":[],"rumors":[],"newVendettas":[{"name":"","reason":"","lethal":false}],
 "questUpdates":[{"title":"","progress":0,"status":"进行中"}],"newQuests":[{"title":"","desc":""}],
-"rankingUpdates":[{"name":"","alive":true,"note":null}],"rankingAdd":[{"name":"","gender":"男/女","faction":"","realm":"","note":"一句成名评价","age":0}],"factionUpdates":[{"name":"","power":0,"leader":null}],
+"rankingUpdates":[{"name":"","alive":true,"note":null}],"rankingAdd":[{"name":"","gender":"男/女","faction":"","realm":"","note":"一句成名评价","age":0}],"factionUpdates":[{"name":"","power":0,"reason":"","leader":null}],
 "duel":null或{"opponent":"NPC姓名","lethal":false,"reason":"为何动手"},
 "options":[],
 "gameOver":false,"ending":null}
@@ -6165,8 +6314,8 @@ function applyTurn(d, action, judge){
   for(const f of (d.factionUpdates||[])){
     const t=(S.world.factions||[]).find(x=>x.name===f.name);
     if(!t||t.own) continue;                      // 本派的数字只认引擎的账
-    if(f.power) t.power=clamp(t.power+num(f.power));
-    if(f.leader) t.leader=f.leader;
+    if(f.power){ const dv=Math.max(-10,Math.min(10,Math.round(num(f.power)))); t.power=clamp(t.power+dv); if(dv) facLog(t,plain(f.reason||f.note)||(dv>0?'声势渐起':'吃了亏'),dv); }
+    if(f.leader&&plain(f.leader)!==t.leader){ facSetLeader(t,plain(f.leader)); }
   }
   if(typeof clanSyncFaction==='function') clanSyncFaction();
   // 完成先销账，随后更新关注列表，避免空列表把完成误记为搁置。
@@ -8182,7 +8331,8 @@ function renderWorld(){
     $('wRanking').querySelectorAll('button[data-ch]').forEach(b=>b.onclick=()=>challengeRanked(b.dataset.ch));
   }
   const fs=S.world&&S.world.factions||[];
-  $('wFactions').innerHTML=fs.length?fs.map(f=>`<div class="faction"><div class="fl"><span><b>${esc(f.name)}</b> <small>${esc(f.alignment)} · ${esc(f.leader)}</small></span><small>势力 ${f.power}</small></div><div class="bar" style="height:6px"><i style="width:${pw(f.power)}%;background:${f.alignment==='邪道'?'#6B4E7A':f.alignment==='正派'?'#3F7A55':'#7D8A82'}"></i></div><div style="font-size:12.5px;color:var(--ink-soft);margin-top:2px">${esc(f.desc)}</div></div>`).join(''):'<div class="empty">尚无</div>';
+  $('wFactions').innerHTML=fs.length?fs.map(f=>{ const tr=num(f.trend), lg=(f.log||[]).slice(-1)[0], recent=lg&&curYear()-num(lg.y)<=5;
+    return `<div class="faction"><div class="fl"><span><b>${esc(f.name)}</b> <small>${esc(f.alignment)} · ${f.own?esc(f.leader):'宗主 '+esc(f.leader)+(f.lRealm?'（'+esc(realmText(f.lRealm))+'）':'')}</small></span><small>势力 ${f.power}${tr>0?' <b style="color:#3F7A55">↑'+tr+'</b>':tr<0?' <b style="color:#9B4A3C">↓'+(-tr)+'</b>':''}</small></div>${recent?`<div style="font-size:12px;color:var(--ink-soft)">近况：${esc(lg.text)}（${esc(lg.date||'')}）</div>`:''}<div class="bar" style="height:6px"><i style="width:${pw(f.power)}%;background:${f.alignment==='邪道'?'#6B4E7A':f.alignment==='正派'?'#3F7A55':'#7D8A82'}"></i></div><div style="font-size:12.5px;color:var(--ink-soft);margin-top:2px">${esc(f.desc)}</div></div>`;}).join(''):'<div class="empty">尚无</div>';
   $('wFactions').insertAdjacentHTML('beforeend',worldThreadsHtml());
   const vd=(S.vendettas||[]).filter(v=>v.heat>0);
   $('wVendetta').innerHTML=vd.length?vd.slice().sort((a,b)=>b.heat-a.heat).map(v=>{
