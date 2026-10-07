@@ -5207,7 +5207,7 @@ ${worldThreadBlock(action)}
 【称呼与尊卑】${playerAddressRule()}【眼下要紧的人】里每个人的「对主角」一栏写明了此人见主角该有的礼数，照办。
 【主角面板】${JSON.stringify(pb)}（称号：${titleOf(p)}；修士榜位次：${rankText()}）
 ${S.sect&&!S.sect.own?`【宗门】${S.sect.name}${sectRank(S.sect.contrib)}，贡献${S.sect.contrib}${sectNext(S.sect.contrib)?`（攒到${sectNext(S.sect.contrib).need}升${sectNext(S.sect.contrib).name}）`:''}；剧情里称呼、差事都照这个位阶写\n`:''}【生计】身上${p.money}块下品灵石，每月开销约${upkeepPerMonth()}块${S.destitute?'；主角灵石已经用尽，日子捉襟见肘':''}；年岁${p.age}，寿元${lifespanOf(p)}（${ageNote()}）
-【修为】${realmText(p.realm)}；灵根${lgText(p.linggen)}；灵力${Math.floor(num(p.lingli))}/${lingliNeed(p.realm)}${atBottleneck(p)?'（已到瓶颈，灵力攒不进去了，冲关要玩家自己发起）':''}${num(p.breakCD)>0?`；冲关受挫，还要调养${p.breakCD}个月`:''}；本境界一次闭关最长${durationText(closeMaxMonths())}
+【修为】${realmText(p.realm)}（法器、功法品阶最高到${gradeText(gradeCapFor(p))}，再高的引擎会压到这一档；炼器升阶想超过它，剧情写成火候不够、只炼到这一档）；灵根${lgText(p.linggen)}；灵力${Math.floor(num(p.lingli))}/${lingliNeed(p.realm)}${atBottleneck(p)?'（已到瓶颈，灵力攒不进去了，冲关要玩家自己发起）':''}${num(p.breakCD)>0?`；冲关受挫，还要调养${p.breakCD}个月`:''}；本境界一次闭关最长${durationText(closeMaxMonths())}
 ${debtBlock()}【标签】${(p.tags||[]).map(t=>t+'：'+(XTAGS[t]?XTAGS[t].desc:'')).join('；')||'无'}——数值部分引擎已经算进去了，你不用再加${tagLeanText(p)?`；要你在剧情里体现的倾向：${tagLeanText(p)}`:''}
 【终身旧伤（治不好，此后剧情须一直体现，不可写成痊愈）】${(S.scars||[]).length?S.scars.map(x=>x.name+'（'+x.text+'）').join('；'):'无'}
 【眼下的伤病（会自己好，引擎在倒计时，不必反复提，好了引擎会销）】${(S.ailments||[]).length?S.ailments.map(a=>`${a.name}${a.desc?'（'+a.desc+'）':''}——还需将养约${Math.max(1,Math.ceil(num(a.months)))}个月`).join('；'):'无'}
@@ -6102,7 +6102,7 @@ function gradeCapFor(p){ const m=p&&p.realm&&p.realm.major>=0?p.realm.major:0; r
 function capNote(t){ S.capLog=S.capLog||[]; S.capLog.push({turn:num(S.turn),date:S.date||'',text:t}); while(S.capLog.length>200) S.capLog.shift(); }
 function capGrade(p,it,what){
   const g=gradeIndex(it&&it.grade); const cap=gradeCapFor(p);
-  if(g>cap){ capNote(`${what}【${it.name}】${gradeText(g)}超出本境，降为${gradeText(cap)}`); it.grade=gradeText(cap); if(it.bonus!=null) it.bonus=cap; }
+  if(g>cap){ capNote(`${what}【${it.name}】${gradeText(g)}超出本境，降为${gradeText(cap)}`); if(typeof lastDeltas==='object'&&lastDeltas) lastDeltas['品阶受限']=(lastDeltas['品阶受限']?lastDeltas['品阶受限']+'；':'')+`【${it.name}】${gradeText(g)}压不住，只到${gradeText(cap)}（${realmText(p.realm)}最高${gradeText(cap)}）`; it.grade=gradeText(cap); if(it.bonus!=null) it.bonus=cap; }
   else if(!g&&it&&num(it.bonus)>cap){ capNote(`${what}【${it.name}】品级超出本境，降为${gradeText(cap)}`); it.bonus=cap; it.grade=gradeText(cap); }
   return it;
 }
@@ -6317,6 +6317,7 @@ function applyTurn(d, action, judge){
   }
   for(const t of asArr(ch.statusRemove)) dropAilment(t);
   if(ch.itemsAdd&&failed){ const got=Object.values(ch.itemsAdd).flat().filter(x=>x&&x.name).map(x=>'【'+x.name+'】'); if(got.length) refused.push(...got); }
+  const upgraded=new Set();   // 本回就地升阶的同名物件：模型同时写的 itemsRemove 不再拿走它
   if(ch.itemsAdd&&!failed) for(const cat in ch.itemsAdd){
     if(!p.items[cat]) p.items[cat]=[];
     for(const item of (ch.itemsAdd[cat]||[])){
@@ -6326,14 +6327,29 @@ function applyTurn(d, action, judge){
         const known=p.arts.find(x=>x.name===bareArtName(item.name));
         if(known){ known.level=clamp(num(known.level)+2); lastDeltas['功法·'+known.name]=num(lastDeltas['功法·'+known.name])+2; ch.itemsAdd[cat]=ch.itemsAdd[cat].filter(x=>x!==item); continue; }
       }
-      if(!STACK_CATS.includes(cat)&&p.items[cat].some(x=>x.name===item.name)) continue;   // 同名法器、玉简不重复入囊
+      if(!STACK_CATS.includes(cat)){
+        const old=p.items[cat].find(x=>x.name===item.name);
+        if(old){   // 同名的法器、令牌：不另入一件，当成原物重炼、升阶，就地改品阶和说明
+          if(cat==='法器'||cat==='玉简'){ const ng=gradeIndex(item.grade)||0, og=gradeIndex(old.grade)||num(old.bonus)||0; if(ng>og){ const from=old.grade||gradeText(og); old.grade=item.grade; if(cat==='法器'){ old.bonus=ng; normWeapon(old); } ledger(`${cat}【${old.name}】由${from}升为${old.grade}`); lastDeltas['重炼']=(lastDeltas['重炼']?lastDeltas['重炼']+'；':'')+`【${old.name}】${from}→${old.grade}`; } }
+          if(plain(item.desc)) old.desc=item.desc;
+          upgraded.add(item.name);
+          continue;
+        }
+      }
       const cnt=addItems(p,cat,item), nm=itemCountOf(item,cat).name;
       ledger(`得到${cat}【${nm}】${cnt>1?'×'+cnt:''}`);
     }
   }
   // 交出、卖掉、用掉：按件数取，一次写一个名字就只拿一件
   const removedNames=new Set();
-  if(ch.itemsRemove) for(const [nm,n] of itemRemoveList(ch.itemsRemove)){ takeItems(p,nm,n); removedNames.add(splitItemCount(nm).name); removedNames.add(nm); }
+  // 「拿旧剑去重炼、得回新剑」模型常写成同名的一加一减；同名的旧物不拿走，判定失败的也不拿走（东西还在手上）
+  const keepNames=new Set(upgraded);
+  if(failed&&ch.itemsAdd) for(const cat in ch.itemsAdd) if(!STACK_CATS.includes(cat)) for(const it of ch.itemsAdd[cat]||[]) if(it&&it.name) keepNames.add(it.name);
+  if(ch.itemsRemove) for(const [nm,n] of itemRemoveList(ch.itemsRemove)){ if(keepNames.has(nm)||keepNames.has(splitItemCount(nm).name)) continue; takeItems(p,nm,n); removedNames.add(splitItemCount(nm).name); removedNames.add(nm); }
+  if(keepNames.size){   // 起居注里不再显示「得到元屠剑 / 失去元屠剑」这种对冲
+    if(Array.isArray(ch.itemsRemove)) ch.itemsRemove=ch.itemsRemove.filter(x=>{ const nm=plain(x&&typeof x==='object'?x.name:x); return !(keepNames.has(nm)||keepNames.has(splitItemCount(nm).name)); });
+    for(const cat in (ch.itemsAdd||{})) if(!STACK_CATS.includes(cat)) ch.itemsAdd[cat]=(ch.itemsAdd[cat]||[]).filter(it=>!(it&&upgraded.has(it.name)));
+  }
   for(const cat in (ch.itemsAdd||{})) for(const it of ch.itemsAdd[cat]||[]) if(it&&it.name) removedNames.add(itemCountOf(it,cat).name);   // 这回刚得到又用掉的，交给模型自己记
   for(const [nm,n] of autoConsume(p,d.narrative,removedNames)){ ledger(`剧情里用掉了【${nm}】${n>1?'×'+n:''}`); lastDeltas['用掉']=(lastDeltas['用掉']?lastDeltas['用掉']+'、':'')+nm+(n>1?'×'+n:''); }
   if(refused.length){ capNote(`判定失败，拒收：${refused.join('、')}`); lastDeltas['未到手']=refused.slice(0,4).join('、')+(refused.length>4?'等':''); }
@@ -8481,6 +8497,9 @@ function changeLines(d){
   if(ch.artsAdd) for(const a of ch.artsAdd) if(a&&a.name) out.push(`习得功法【${a.name}】`);
   if(ch.itemsAdd) for(const c in ch.itemsAdd) for(const it of (ch.itemsAdd[c]||[])) if(it&&it.name) out.push(`得到【${it.name}】`);
   if(ch.itemsRemove) for(const [nm,n] of itemRemoveList(ch.itemsRemove)) out.push(`失去【${nm}】${n>1?'×'+n:''}`);
+  if(lastDeltas['用掉']) out.push(`用掉：${lastDeltas['用掉']}`);
+  if(lastDeltas['重炼']) out.push(`重炼：${lastDeltas['重炼']}`);
+  if(lastDeltas['品阶受限']) out.push(`⚠ 品阶受限：${lastDeltas['品阶受限']}`);
   if(lastDeltas['未到手']) out.push(`✗ 判定失败，没到手：${lastDeltas['未到手']}`);
   for(const u of (d.npcUpdates||[])){
     if(u['好感度']&&num(u['好感度'])) out.push(`${u.name} 好感 ${num(u['好感度'])>0?'+':''}${num(u['好感度'])}`);
