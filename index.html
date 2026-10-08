@@ -4894,7 +4894,7 @@ const WORLD_RULES = `你是一个修仙文字游戏引擎。世界是一片架�
 判定制度（引擎已经掷过骰子、定好成败，你只负责如实叙述，绝不可篡改判定结果）：
 - 每回合有「天命骰」1-20：1-3大凶，4-8不顺，9-14平常，15-18顺遂，19-20大吉。引擎会给出本回合骰值和含义，剧情走向必须与之相符。
 ⟦严⟧- 若引擎给出了属性判定结果，成功就成功、失败就失败：失败必须写出真实代价（受伤、破财、结仇、失信、丢脸、被识破等），绝不许"失败但反而更好"；大失败后果加重；大成功有额外收获。⟦/严⟧
-⟦严⟧- 玩家自由输入的行动若涉及成败风险（说服、欺骗、偷盗、求人、炼丹、炼器、画符、布阵、探险、救治、追踪、逃跑、斗法以外的动手等），你必须自行设定难度need（40容易/55一般/70困难/85极难/100近乎不可能），用「相关属性值＋引擎给出的骰面修正」与need比较判定成败（引擎会在本回合判定里告诉你修正是多少），把判定写入check字段并如实体现在剧情中。日常无风险行动check为null。⟦/严⟧
+- 有没有风险、成不成，由引擎判定，写在本回合判定里，你照着写；不要自己设难度、判成败。
 斗法制度：凡是双方要真动手（切磋、斗法、被追杀、拦路夺宝等），不要在剧情里直接写出胜负！剧情写到两人对上、即将动手为止就收笔，并在duel字段发起斗法（opponent必须是已有NPC或本回合newNpcs中人物的准确姓名）。胜负由引擎推演，之后引擎会把过程交还给你续写。只有主角单方面收拾毫无还手之力的人、或混战这类不适合一对一的场面才可直接叙述。
 宗门规则（引擎记账）：
 - 主角拜入宗门或世家，用playerChanges.faction写宗门名（须是修真界格局里已有的势力，或剧情里立得住的新势力）；离开宗门则写「散修」。
@@ -5021,7 +5021,7 @@ function styleSystem(){
   const st=prose();
   return `你是一个修仙文字游戏的叙事引擎。本局文笔「${st.label}」：${st.rules}
 不管哪种文笔都守这几条：白描，人物不说出自己的动机；场景一笔，细节一处；段落短，手机上一段不超过四行；不堆辞藻，不写文言腔。对话用「」包裹，用前面的动作带出说话人。这是修仙不是武侠：见人先探修为，用的是储物袋、传音符、遁光、禁制，闭关以年计，人情底下是利害。
-这些词不要用（引擎会查，用了打回重写）：${styleBanned().join('、')}。
+这些词尽量不用：${styleBanned().join('、')}。
 
 下面两段是本局文笔的范例，同一件事换别的文笔会写得完全不同。只学笔法与节奏，不要抄内容：
 
@@ -5041,7 +5041,7 @@ const NPC_SCHEMA = `NPC对象格式：{"name":"姓名","gender":"男/女","age":
 
 const OPTIONS_RULE=`options给3至5个，每个：{"eventId":"相关事件ID或null","repeatable":是否可重复的修炼或生活活动,"text":"选项文字","hint":"一句直白的利弊提示","type":"normal|check|duel|talk|rest","days":短行动耗时天数（至少1）或null,"months":长期行动耗时月数或null,"check":null或{"attr":"体魄/神识/心性/谈吐/悟性","need":难度数字},"duel":null或{"opponent":"在场NPC准确姓名","lethal":false或true},"target":null或"talk选项要深谈的NPC姓名"}。
 选项文字写成主角接下来要做的事或要说的话，能直接接着正文读，不写数值。
-要求：至少1个稳妥的normal；至少1个有风险的check（need只能是40容易/55一般/70困难/85极难四档之一，可加"kind":"打听/说服/炼丹/炼器/阵法/符箓/驯兽/偷盗/潜行/欺诈/威吓/涉险"注明事由，hint写清若成若败各会怎样）；若在场有可交手之人给1个duel（lethal表示对方是否会下杀手）；若在场有值得深谈的人给1个talk；主角受伤或该修炼时给1个rest（闭关/疗伤/打坐）。选项之间要有真正的分歧，不要都是好事。
+要求：按场面需要给，不设类型配额，平静的时候可以全是稳妥的normal。有风险的写成check（need只能是40容易/55一般/70困难/85极难四档之一，可加"kind":"打听/说服/炼丹/炼器/阵法/符箓/驯兽/偷盗/潜行/欺诈/威吓/涉险"注明事由，hint写清若成若败各会怎样）；真有人要动手才给duel（lethal表示对方是否会下杀手）；在场有值得深谈的人可以给talk；主角受伤或该修炼时可以给rest（闭关/疗伤/打坐）。选项之间要有真正的分歧。
 可提供离开当前地点或探访远方人物的选择，但玩家选择留在当地时不可强迫转场。
 已完成的一次性事项不再提供；玩家正在修炼、炼丹、疗伤或推进尚未结束的事件时，可保留继续选项，写清下一阶段的新进展。未选择的有效人物钩子可以保留。
 主角灵力已满、卡在瓶颈时，不要给「继续闭关攒灵力」的选项（攒不进去了），冲关由玩家在面板上发起，你不用给冲关选项。
@@ -5178,8 +5178,10 @@ function stateBlocks(action){
   worldState();
   const p=S.player;
   const M=MEM();
-  const pres=asArr(S.scene&&S.scene.present);
-  const presN=S.npcs.filter(n=>n.alive&&pres.includes(n.name));
+  // 在场的人，加上玩家这回行动里点了名的人（「去找沈清」），都给全资料、排在最前
+  const act=String(action||'');
+  const pres=asArr(S.scene&&S.scene.present).concat(S.npcs.filter(n=>n.alive&&n.name&&n.name.length>=2&&act.includes(n.name)).map(n=>n.name)).filter((x,i,a)=>a.indexOf(x)===i);
+  const presN=S.npcs.filter(n=>n.alive&&pres.includes(n.name)).sort((x,y)=>Number(act.includes(y.name))-Number(act.includes(x.name)));
   const near=presN.concat(S.npcs.filter(n=>!pres.includes(n.name)&&isRelevantNpc(n)).sort((a,b)=>num(b.lastSeen)-num(a.lastSeen))).slice(0,Math.max(10,presN.length));
   const far=S.npcs.filter(n=>n.alive&&!near.includes(n)).slice(-40);
   const gone=S.npcs.filter(n=>!n.alive).slice(-30);
@@ -5231,7 +5233,7 @@ ${debtBlock()}【标签】${(p.tags||[]).map(t=>t+'：'+(XTAGS[t]?XTAGS[t].desc:
 【终身旧伤（治不好，此后剧情须一直体现，不可写成痊愈）】${(S.scars||[]).length?S.scars.map(x=>x.name+'（'+x.text+'）').join('；'):'无'}
 【眼下的伤病（会自己好，引擎在倒计时，不必反复提，好了引擎会销）】${(S.ailments||[]).length?S.ailments.map(a=>`${a.name}${a.desc?'（'+a.desc+'）':''}——还需将养约${Math.max(1,Math.ceil(num(a.months)))}个月`).join('；'):'无'}
 【盯着主角的仇家】${(S.vendettas||[]).filter(v=>v.heat>0).length?S.vendettas.filter(v=>v.heat>0).map(v=>`${v.name}（${v.reason}，${vStateText(v)}）`).join('；'):'无'}——仇家要打上门来由引擎裁定，你不可自作主张写他突然出现动手；上面写「尚在远处」「不敢露面」的人，这一回合就不会到。
-${realmStatusLine()}【刚做过的事（本回合不要重复这些，也不要把它们再当成选项）】
+${realmStatusLine()}【刚做过的事（已经到手的结果不要再领一遍；连续修炼、调查可以接着做，写新的阶段）】
 ${(S.history||[]).slice(-3).map(h=>`第${h.turn}回：${h.action}`).join('；')||'（无）'}
 【最近剧情原文】
 ${recents}
@@ -5288,7 +5290,7 @@ function judgeBlock(judge){
   }
   const mo=judge.months==null?1:judge.months;
   if(!judge.convo) s+=`- 本回合历时：${durationText(mo)}（引擎推进时间，你不要写具体年月，只按这段光阴的长短来铺陈剧情的节奏）\n`;
-  if(!judge.convo) s+=`- 生计：身上${S.player.money}块下品灵石，每月开销约${upkeepPerMonth()}块，这段时间的开销按满月累计${S.player.money<upkeepPerMonth()*mo?'——钱不够了，剧情须写出捉襟见肘':''}`;
+  if(!judge.convo) s+=`- 生计：身上${S.player.money}块下品灵石（花钱买东西不能超过这个数，买不起就写成没买成、少买或赊账），每月开销约${upkeepPerMonth()}块，这段时间的开销按满月累计${S.player.money<upkeepPerMonth()*mo?'——钱不够了，剧情须写出捉襟见肘':''}`;
   return s;
 }
 
@@ -5342,20 +5344,18 @@ ${judge.convo?convoAfterReq():`请推演本回合。要求：
 
 ${WORLD_STATE_RULES}
 ${JSON_RULE}
-输出格式：
-{"narrative":"本回合剧情","summary":"一句话概括本回合（30字内）","scene":{"location":"","unresolved":[]},"resolvedInfo":[],
-"check":null或{"type":"说服","attr":"谈吐","need":70,"success":true},
-"playerChanges":{"age":null或新年龄,"lifespan":0,"lifespanReason":null,"attributes":{"体魄":0,"神识":0,"心性":0,"谈吐":0},"lingli":0,"lingliReason":null,"hp":0,"fame":{"声望":0,"凶名":0},"money":0,"moneyReason":null,"faction":null,"contrib":0,"skills":{"手艺名":{"level":增量数字,"desc":"可选，改写说明"}},"artsAdd":[{"name":"","desc":"","style":"","level":0,"grade":"黄阶下品","element":""}],"artsTrain":[{"name":"已有功法名","level":熟练度增量}],"personalityAdd":[],"statusAdd":[{"name":"","desc":"","months":0}],"statusRemove":["伤名"],"itemsAdd":{"法器":[{"name":"","desc":"","grade":"黄阶下品"}],"玉简":[],"丹药":[],"符箓":[],"毒药":[],"灵材":[],"其他":[]},"itemsRemove":[]},
-"npcUpdates":[{"name":"","好感度":0,"爱恋值":null,"relation":null,"alive":true,"identity":null,"faction":null,"mood":null,"notes":null,"realm":null,"age":null,"secretRevealed":false}],
-"taughtNpc":[{"name":"NPC姓名","art":"主角教给他的功法名"}],
-"newNpcs":[${NPC_SCHEMA}],
-"npcEvents":[],"rumors":[],"newVendettas":[{"name":"","reason":"","lethal":false}],
-"questUpdates":[{"title":"","progress":0,"status":"进行中"}],"newQuests":[{"title":"","desc":""}],
-"rankingUpdates":[{"name":"","alive":true,"note":null}],"rankingAdd":[{"name":"","gender":"男/女","faction":"","realm":"","note":"一句成名评价","age":0}],"factionUpdates":[{"name":"","power":0,"reason":"","leader":null}],
-"duel":null或{"opponent":"NPC姓名","lethal":false,"reason":"为何动手"},
-"options":[],
-"gameOver":false,"ending":null}
-不需要变化的字段可省略或填0/null。
+输出格式：只写有变化的字段，没变化的整个省略，不要写空数组、0、null 或空字符串。
+必写：{"narrative":"本回合剧情","summary":"一句话概括本回合（30字内）","scene":{"location":"","unresolved":[]},"options":[...]}
+有变化才写（键名照抄）：
+- "resolvedInfo":["了结或放下的未了之事，照抄原句"]
+- "playerChanges":{只写变了的键。attributes{体魄,神识,心性,谈吐}增减；lingli与lingliReason；hp；fame{声望,凶名}；money与moneyReason；faction；contrib；lifespan与lifespanReason；skills{"手艺名":{"level":增量,"desc":""}}；artsAdd[{"name","desc","style","level","grade","element"}]；artsTrain[{"name","level"}]；personalityAdd[]；statusAdd[{"name","desc","months"}]；statusRemove["伤名"]；itemsAdd{"丹药":[{"name","desc","count"}],"法器":[{"name","desc","grade"}]，玉简/符箓/毒药/灵材/其他同理}；itemsRemove[{"name","count"}]}
+- "npcUpdates":[{"name":"已有人物","只写变了的":"好感度、爱恋值、relation、alive、identity、faction、mood、notes、realm、secretRevealed"}]
+- "newNpcs":[NPC对象]　"taughtNpc":[{"name","art"}]　"npcEvents":[]　"rumors":[]　"newVendettas":[{"name","reason","lethal"}]
+- "questUpdates":[{"title","progress","status"}]　"newQuests":[{"title","desc"}]
+- "rankingUpdates":[{"name","alive","note"}]　"rankingAdd":[{"name","gender","faction","realm","note","age"}]　"factionUpdates":[{"name","power","reason","leader"}]
+- "duel":{"opponent":"NPC姓名","lethal":false,"reason":"为何动手"}
+- "gameOver":true 与 "ending"：只有主角确实身死或玩家要求收尾时才写
+${NPC_SCHEMA}
 
 ${stateBlocks(action)}
 
@@ -5530,14 +5530,15 @@ function llmTransient(e){
 }
 async function callLLM(prompt, onPartial, opt){
   opt=opt||{};
-  const tries=opt.noRetry?1:3;
+  const tries=opt.noRetry?1:3, bud=opt.budget;
   for(let i=0;;i++){
+    if(bud){ if(bud.left<=0||Date.now()>bud.until) throw new Error('接口调用失败（这一回的请求次数用完了，点重试接着写）'); bud.left--; }
     try{
       const raw=await callLLMOnce(prompt,onPartial,opt);
       if(!String(raw||'').trim()) throw new Error('接口调用失败（模型返回了空回复）');
       return raw;
     }catch(e){
-      if(i>=tries-1||!llmTransient(e)||(opt.signal&&opt.signal.aborted)) throw e;
+      if(i>=tries-1||!llmTransient(e)||(opt.signal&&opt.signal.aborted)||(bud&&(bud.left<=0||Date.now()>bud.until))) throw e;
       if(typeof toast==='function') toast(/429/.test(e.message)?'接口繁忙，稍等片刻自动重发……':'连接不稳，正在自动重发……');
       await new Promise(r=>setTimeout(r,i?4000:1500));
       if(opt.signal&&opt.signal.aborted) throw e;
@@ -5664,34 +5665,57 @@ function repairJSON(t){
    解析（带修复）→ 校验（能修的就地修，修不了的才退回）→ 文风（能改的程序改，只有离谱的才重写）。
    退回最多两次；第三份还过不了校验，就用宽松模式收下（以引擎为准改掉矛盾处），不让玩家看到「推演失败」。 */
 async function llmJSON(prompt, onPartial, opt){
-  opt=opt||{};
-  const st=opt.style;
+  opt=Object.assign({},opt||{});
+  // 一回合共享一份请求预算：网络重发和格式重来合起来最多 4 次、4 分钟
+  opt.budget=opt.budget||{left:4,until:Date.now()+240000};
+  const st=opt.style, field=(st&&st.field)||'narrative';
   const take=(raw,final)=>{
-    const d0=parseJSONLoose(raw);
+    let d0=parseJSONLoose(raw);
+    let truncNote='';
+    if(lastFinish==='length'&&d0&&typeof d0==='object'&&!Array.isArray(d0)){
+      // 被截断：修补后能解析也不全收。正文没写完就重来；正文写完了，丢掉正在写的最后一个字段
+      const txt=typeof d0[field]==='string'?d0[field].trim():'';
+      if(!txt||!/[。！？」”…）)\]】]$/.test(txt)) throw new Error('回复被截断，正文没写完');
+      const keys=Object.keys(d0), last=keys[keys.length-1];
+      if(last&&last!==field) delete d0[last];
+      truncNote='回复被截断，最后一部分变化没有入账';
+    }
     let d;
     try{ d=opt.validate?opt.validate(d0,{lenient:false}):d0; }
     catch(e){ if(!final||!opt.validate) throw e; d=opt.validate(d0,{lenient:true}); if(typeof console!=='undefined') console.warn('宽松收下：',e.message); }
-    if(st&&d){ const r=styleFix(d,st,final); if(r.redo) throw new Error('文风不合要求：'+r.redo.join('；')); }
+    if(truncNote&&d&&typeof d==='object'){ d.fixNotes=d.fixNotes||[]; d.fixNotes.push(truncNote); }
+    if(st&&d) styleFix(d,st,final);
     return d;
   };
   let note='', lastErr=null;
-  for(let k=0;k<3;k++){
-    const final=k===2;
-    const raw=await callLLM(k?prompt+note:prompt,onPartial,opt);
+  while(true){
+    const raw=await callLLM(note?prompt+note:prompt,onPartial,opt);
+    const final=opt.budget.left<=0||Date.now()>opt.budget.until;
     try{ return take(raw,final); }
     catch(e){
       lastErr=e;
       if(final) break;
       const truncated=lastFinish==='length';
-      toast(truncated?'回复超长被截断，正在精简重写……':(/^文风/.test(e.message||'')?'正文篇幅不对，正在重写……':'回复有误，正在重写……'));
+      toast(truncated?'回复超长被截断，正在精简重写……':'回复有误，正在重写……');
       note = truncated
         ? '\n\n（注意：上次输出因过长被截断。请精简篇幅：剧情压缩到300字内，newNpcs最多1人，worldUpdates、rumors、npcEvents能省则省，务必输出完整合法的单个JSON对象）'
-        : '\n\n（上次输出未通过校验：'+String(e.message||'').slice(0,200)+'。请修正这一处后重写本回，输出完整合法JSON，保持玩家行动方向与引擎判定。）';
+        : '\n\n（上次输出无法使用：'+String(e.message||'').slice(0,200)+'。请重写本回，输出完整合法JSON，保持玩家行动方向与引擎判定。）';
     }
   }
-  throw new Error(lastFinish==='length'?'回复三次都被截断，请到设置里关掉思考模式再试':'模型三次都没给出能用的回复（'+String(lastErr&&lastErr.message||'').slice(0,60)+'），请重试');
+  throw new Error(lastFinish==='length'?'回复几次都被截断，请到设置里关掉思考模式再试':'这回没写出来（'+String(lastErr&&lastErr.message||'').slice(0,60)+'），点重试接着写，判定不会重掷');
 }
 
+/* 剧情把主角写死了、本局又不许死：只改正文结尾，数值一概不动。这种情况很少，失败了就保留原文（起居注已有修正说明） */
+async function fixDeathText(d,signal){
+  const orig=String(d.narrative||''); if(!orig) return;
+  try{
+    toast('正文把主角写死了，本局不许，正在改结尾……');
+    const p=`下面是一段修仙小说正文，结尾把主角${S.player.name}写死了。可这一局他不会死：请只改最后一两段，改成重伤未死、被人救下或侥幸逃得一命，前面的文字一字不动，文风照旧，对白用「」。${JSON_RULE}\n输出：{"narrative":"改好的完整正文"}\n\n原文：\n${orig}`;
+    const raw=await callLLM(p,r=>{ const t=extractPartialField(r,'narrative'); if(t) updateChapterNarrative(t); },{maxTokens:2500,timeout:60000,totalTimeout:90000,signal,noRetry:true});
+    const j=parseJSONLoose(raw), t=j&&typeof j.narrative==='string'?j.narrative.trim():'';
+    if(t.length>=orig.length*0.5) d.narrative=styleAutoFix(t);
+  }catch(e){ if(typeof console!=='undefined') console.warn('改结尾失败',e.message); }
+}
 /* ================= 回合校验与一次提交 ================= */
 function hasTurnProgress(d){
   const ch=d.playerChanges||{};
@@ -5826,7 +5850,7 @@ function validateTurn(d,action,judge,state,opt){
     if(d.gameOver){
       const asked=/收尾|收官|结束这一?局|终局|完结|立传|了此残生|自尽|自刎|了结此生/.test(action||'');
       const sd=fdm().storyDeath;
-      if(!asked&&!judge.engineDeath&&!(sd>=1||sd>0&&state.player.hp<30)) hard('本局不允许剧情直接写死主角',()=>{ d.gameOver=false; d.ending=null; ch.hp=Math.min(num(ch.hp),0); ch.hpFloor=1; },'本局不许剧情写死主角，只算重伤');
+      if(!asked&&!judge.engineDeath&&!(sd>=1||sd>0&&state.player.hp<30)) hard('本局不允许剧情直接写死主角',()=>{ d.gameOver=false; d.ending=null; ch.hp=Math.min(num(ch.hp),0); ch.hpFloor=1; d.deathFix=true; },'本局不许剧情写死主角，只算重伤');
     }
     if(judge.check){
       if(d.check&&typeof d.check.success==='boolean'&&d.check.success!==judge.check.success) hard('叙事判定与引擎结果矛盾',null,judge.check.success?null:'正文写成了，但引擎判定失败，收益不入账');
@@ -6517,8 +6541,10 @@ function applyTurn(d, action, judge){
   lastDeltas['光阴']=months;
   if(up.cost) lastDeltas['食宿']=-up.cost;
   if(up.starve) lastDeltas['饥寒']=up.starve;
-  S.history.push({turn:S.turn,action,summary:d.summary||'',progress:hasTurnProgress(d)});
-  S.recent.push({action, narrative:d.narrative||''});
+  // 正文和账面对不上时，历史里记结算后的事实：下回模型看得到以哪个为准
+  const engNote=[failed?'此事没成，没有收益入账':'',...(d.fixNotes||[])].filter(Boolean).join('；');
+  S.history.push({turn:S.turn,action,summary:(d.summary||'')+(engNote?`（引擎结算：${engNote}）`:''),progress:hasTurnProgress(d)});
+  S.recent.push({action, narrative:(d.narrative||'')+(engNote?`\n【引擎结算，以此为准】${engNote}`:'')});
   while(S.recent.length>MEM().recent) S.recent.shift();
   S.turn++;
   if(d.gameOver){
@@ -9476,6 +9502,7 @@ async function runTurn(action, judge, extra){
       const t=extractPartialField(raw,'narrative');if(t)updateChapterNarrative(t);
     },{validate:valid,signal:controller&&controller.signal,style:{field:'narrative',kind:turnStyleKind(judge,extra),noLen}}));
     if(S!==owner||request!==turnRequest){if(request===turnRequest)setBusy(false);return;}
+    if(d.deathFix) await fixDeathText(d,controller&&controller.signal);
     const next=settleTurnOnce(owner,d,action,judge,id,pending.forecast);
     next.engineNews=(next.engineNews||[]).filter(x=>!consumedNews.includes(x));
     next.lastTurn.extra=JSON.parse(JSON.stringify(extra));next.lastTurn.news=consumedNews;
