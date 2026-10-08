@@ -5708,8 +5708,10 @@ const GENERIC_NAME_RE=/^(?:(?:.{0,3}(?:袍|衣|裳|笠|面|疤|须)|陌生|神�
    opt.lenient：第三份还过不了时用，矛盾处一律以引擎为准改掉后收下。 */
 function toNum(v){ if(typeof v==='number') return Number.isFinite(v)?v:null; if(typeof v==='string'){ const m=v.replace(/[,，\s]/g,'').match(/^[+＋]?(-?\d+(?:\.\d+)?)/); if(m) return Number(m[1]); const n=v.match(/^[-－−]\s*(\d+(?:\.\d+)?)/); if(n) return -Number(n[1]); } return null; }
 function validateTurn(d,action,judge,state,opt){
-  const lenient=!!(opt&&opt.lenient);
-  const hard=(msg,fix)=>{ if(!lenient) throw new Error(msg); if(fix) fix(); };
+  /* 10-08：和引擎对不上的地方一律以引擎为准就地改掉，不再退回重写（重写太伤体验）。
+     只有缺正文、不是对象这种没法收的才抛错。fixNotes 会显示在起居注里，让玩家知道引擎改了什么。 */
+  const fixNotes=d&&typeof d==='object'?(d.fixNotes=[]):[];
+  const hard=(msg,fix,note)=>{ if(fix) fix(); if(note) fixNotes.push(note); if(typeof console!=='undefined'&&opt&&opt.debug) console.warn(msg); };
   if(!d||typeof d!=='object'||Array.isArray(d))throw new Error('回合必须是对象');
   if(typeof d.narrative!=='string'){ const alt=[d.story,d.text,d.content,d.正文].find(x=>typeof x==='string'&&x.trim()); if(alt) d.narrative=alt; }
   if(typeof d.narrative!=='string'||!d.narrative.trim())throw new Error('缺少有效剧情narrative');
@@ -5733,7 +5735,7 @@ function validateTurn(d,action,judge,state,opt){
   // 数字写成了字符串（"+5"「-20」）就转过来，转不了的丢掉
   const numeric=(obj,keys)=>{ if(!obj) return; for(const k of keys)if(obj[k]!=null&&typeof obj[k]!=='number'){ const n=toNum(obj[k]); if(n==null) delete obj[k]; else obj[k]=n; } };
   numeric(ch,['age','lifespan','hp','money','contrib','lingli']);numeric(ch.attributes,['体魄','神识','心性','谈吐','悟性']);numeric(ch.fame,['声望','凶名']);
-  if(d.newNpcs.length>2) d.newNpcs=d.newNpcs.slice(0,2);
+  if(d.newNpcs.length>4) d.newNpcs=d.newNpcs.slice(0,4);   // 10-08：从 2 放到 4，一回见了三个人第三个就进不了人脉
   if(d.newWorldEvents.length>1) d.newWorldEvents=d.newWorldEvents.slice(0,1);
   for(const k of ['npcUpdates','questUpdates','newQuests','rankingUpdates','rankingAdd','factionUpdates','newVendettas','taughtNpc','worldUpdates','newWorldEvents','options','newNpcs'])
     d[k]=d[k].filter(x=>x&&typeof x==='object'&&!Array.isArray(x));
@@ -5755,6 +5757,19 @@ function validateTurn(d,action,judge,state,opt){
     for(const q of d.newQuests){ const t=plain(q&&q.title); if(!t) continue; if(hasRevenge&&REVENGE_RE.test(t+plain(q.desc))) continue;   /* 一局里已经背着一桩仇了，不再加 */ if([...have,...keep.map(x=>x.title)].some(x=>sameMatter(x,t)||(shareRun(x,t,3)&&simRatio(x,t)>=0.5))) continue; keep.push(q); }
     d.newQuests=keep; }
   // 引用了人物表里没有的人：丢掉这一条，不为它重写整回
+  /* 剧情里新认识的人，模型常常只写了 npcUpdates（好感+5）或 scene.present，忘了写进 newNpcs，以前就这么丢了，人脉里看不到。
+     现在凡是像个人名的，引擎替它补一份简要面板，下回出场时模型再补细节。 */
+  { const stub=(nm,u)=>{ nm=plain(nm); if(!nm||names.has(nm)||nm===(state.player&&state.player.name)) return;
+      if(!/^[\u4e00-\u9fa5·]{2,6}$/.test(nm)||GENERIC_NAME_RE.test(nm)||/的|们|众|诸位|一行|弟子$|长老们/.test(nm)) return;
+      if(((state.world&&state.world.factions)||[]).some(f=>f.name===nm)) return;
+      u=u||{}; const realm=parseRealm(u.realm)?plain(u.realm):fixRealmText(u.realm);
+      d.newNpcs.push({name:nm,gender:plain(u.gender)||(/女|娘|姑|妹|姐|婆|妇|仙子/.test(nm+plain(u.identity))?'女':'男'),age:toNum(u.age)>0?toNum(u.age):30,identity:plain(u.identity)||'萍水相逢',faction:plain(u.faction)||'',realm,
+        relation:plain(u.relation)||'萍水相逢',好感度:50,secret:'暂无人知',personality:[],appearance:'',notes:plain(u.notes)||'',stub:true});
+      names.add(nm); };
+    for(const u of d.npcUpdates) stub(u.name,u);
+    if(d.scene&&Array.isArray(d.scene.present)) for(const nm of d.scene.present) if(typeof nm==='string') stub(nm);
+    if(d.duel&&d.duel.opponent) stub(d.duel.opponent);
+  }
   d.npcUpdates=d.npcUpdates.filter(u=>names.has(plain(u.name)));
   for(const u of d.npcUpdates){ u.name=plain(u.name); numeric(u,['好感度','爱恋值','age']); }
   for(const q of d.questUpdates) numeric(q,['progress']);
@@ -5796,7 +5811,7 @@ function validateTurn(d,action,judge,state,opt){
       const said=[raw,real,splitItemCount(raw).name].some(t=>t&&story.includes(t))||real.length>=3&&story.includes(real.slice(0,2));
       if(!said){
         const pills=stackItems(state.player.items['丹药']).map(g=>g.item.name+(g.count>1?'×'+g.count:'')).join('、')||'无';
-        hard(`itemsRemove里要拿走【${real}】，可正文里没写到它。正文交出、用掉的是什么，itemsRemove就写什么；主角手上没有的东西不能给出去（他现在的丹药：${pills}）。请改正文或改itemsRemove，两边对上`);
+        hard(`itemsRemove里要拿走【${real}】，可正文里没写到它（丹药：${pills}）`);
         continue;                                           // 宽松收下时：正文没写到的不扣
       }
       keep.push(x);
@@ -5805,16 +5820,16 @@ function validateTurn(d,action,judge,state,opt){
   }
   // 买东西要付得起：钱和货一起入账，不能钱扣到零、货照收
   { const spend=-num(ch.money), buys=ch.itemsAdd&&Object.values(ch.itemsAdd).some(a=>(a||[]).length);
-    if(spend>0&&buys&&spend>num(state.player.money)) hard(`灵石不够：身上只有${num(state.player.money)}块，付不出${spend}块。请改写成没买成、少买或赊账，itemsAdd与money要对得上`,()=>{ ch.itemsAdd={}; delete ch.money; }); }
+    if(spend>0&&buys&&spend>num(state.player.money)) hard(`灵石不够：身上只有${num(state.player.money)}块，付不出${spend}块`,()=>{ ch.itemsAdd={}; delete ch.money; },`灵石不够（要${spend}块，身上只有${num(state.player.money)}块），东西没买成`); }
   const owner=S;S=state;
   try{
     if(d.gameOver){
       const asked=/收尾|收官|结束这一?局|终局|完结|立传|了此残生|自尽|自刎|了结此生/.test(action||'');
       const sd=fdm().storyDeath;
-      if(!asked&&!judge.engineDeath&&!(sd>=1||sd>0&&state.player.hp<30)) hard('本局不允许剧情直接写死主角，请把正文改写为获救或重伤未死，gameOver填false',()=>{ d.gameOver=false; d.ending=null; });
+      if(!asked&&!judge.engineDeath&&!(sd>=1||sd>0&&state.player.hp<30)) hard('本局不允许剧情直接写死主角',()=>{ d.gameOver=false; d.ending=null; ch.hp=Math.min(num(ch.hp),0); ch.hpFloor=1; },'本局不许剧情写死主角，只算重伤');
     }
     if(judge.check){
-      if(d.check&&typeof d.check.success==='boolean'&&d.check.success!==judge.check.success) hard('叙事判定与引擎结果矛盾，请按引擎成败重写');
+      if(d.check&&typeof d.check.success==='boolean'&&d.check.success!==judge.check.success) hard('叙事判定与引擎结果矛盾',null,judge.check.success?null:'正文写成了，但引擎判定失败，收益不入账');
       d.check=Object.assign({},judge.check);
     }else if(d.check&&!judge.duel&&/斗法|切磋|比武|交手|动手|过招|厮杀/.test(String(d.check.type||'')+String(d.check.attr||'')+String(d.check.desc||d.check.reason||''))){
       hard('动手较量不能用check判定：请按斗法制度填duel，剧情收在动手之前，胜负交给引擎');
@@ -5866,8 +5881,7 @@ function styleFix(d,st,final){
   const r=st.noLen?null:styleRange(st.kind), n=proseLen(d[f]);
   const wild=r&&(n<r[0]*0.5||n>r[1]*1.8);
   const hits=styleBanned().filter(w=>d[f].includes(w)).length;
-  if(!final&&(wild||hits>=3)) return {redo:bad};
-  styleLog(st.kind,bad); return {};
+  styleLog(st.kind,bad); return {};   // 10-08：文风一律不重写，只记日志（重写太伤体验）
 }
 function turnStyleKind(judge,extra){
   extra=extra||{};
@@ -6242,6 +6256,7 @@ function applyTurn(d, action, judge){
   if(judge&&judge.craft) applyCraft(judge.craft);
   if(S.eggMentorDue&&!(judge&&judge.duel)) S.eggMentorDue=false;   // 老药师这回合已交给剧情
   if(judge&&judge.debtId){ const db=debts().find(x=>x.id===judge.debtId); if(db&&db.state==='讨要中') debtSettle(db,'亲自替他办了事'); }
+  if((d.fixNotes||[]).length) lastDeltas['修正']=d.fixNotes.filter(Boolean).join('；');
   const p=S.player, ch=d.playerChanges||{};
   // 判定失败：只认引擎掷出来的那一次（模型报的 check 在校验时已换成引擎的）
   const failed=!!(judge&&judge.check&&!judge.check.success);
@@ -6266,6 +6281,7 @@ function applyTurn(d, action, judge){
   if(judge&&judge.duel) hpd=Math.min(hpd,0); // 斗法已由引擎结算气血
   if(failed&&hpd>0){ refused.push('气血+'+hpd); hpd=0; }
   if(hpd) { p.hp=clamp(p.hp+hpd,0,hpMax); lastDeltas['气血']=hpd; }
+  if(ch.hpFloor&&p.hp<ch.hpFloor) p.hp=ch.hpFloor;   // 剧情想写死、本局又不许：留一口气
   if(hpd>=0&&!(judge&&judge.duel)&&p.hp<hpMax){
     // 自然将养：饥寒交迫时几乎养不好伤
     const regen=Math.round(Math.min(40,(p.hp<30?4:8)*months*(S.destitute?(1-0.75*fdm().starve):1)*(hasScar('暗伤')?0.4:1)));
@@ -7971,7 +7987,7 @@ function validateConvo(d,npc,roll,opt){
   if(fdm().freeAct){d.attempt=null;return d;}
   const att=roll&&typeof roll==='object'?roll:null;
   if(att){
-    if(!lenient&&d.attempt&&typeof d.attempt.success==='boolean'&&d.attempt.success!==att.success)throw new Error('对话成败与引擎矛盾：引擎判定'+(att.success?'成功':'失败')+'，请照此重写言行与effects');
+    if(false&&d.attempt&&typeof d.attempt.success==='boolean'&&d.attempt.success!==att.success)throw new Error('对话成败与引擎矛盾：引擎判定'+(att.success?'成功':'失败')+'，请照此重写言行与effects');
     d.attempt=Object.assign({},att);
   }else d.attempt=null;
   return d;
@@ -8542,6 +8558,7 @@ function changeLines(d){
   if(ch.artsAdd) for(const a of ch.artsAdd) if(a&&a.name) out.push(`习得功法【${a.name}】`);
   if(ch.itemsAdd) for(const c in ch.itemsAdd) for(const it of (ch.itemsAdd[c]||[])) if(it&&it.name) out.push(`得到【${it.name}】`);
   if(ch.itemsRemove) for(const [nm,n] of itemRemoveList(ch.itemsRemove)) out.push(`失去【${nm}】${n>1?'×'+n:''}`);
+  if(lastDeltas['修正']) out.push(`⚠ 引擎修正：${lastDeltas['修正']}`);
   if(lastDeltas['用掉']) out.push(`用掉：${lastDeltas['用掉']}`);
   if(lastDeltas['重炼']) out.push(`重炼：${lastDeltas['重炼']}`);
   if(lastDeltas['品阶受限']) out.push(`⚠ 品阶受限：${lastDeltas['品阶受限']}`);
