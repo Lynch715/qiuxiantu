@@ -1167,6 +1167,38 @@ function migrate(s){
   }
   if(s.v<12){ if(s.player) xianAttach(s.player); s.v=12; }
   worldState(s);
+  /* 10-08：之前引擎替模型补面板的人一律成了「男、30岁」，而且 stub 标记没存下来。
+     认法：秘密是「暂无人知」、没写相貌、没写性格的就是当时补出来的。拿存档里的剧情再判一次，只认得出证据的。 */
+  if(!s.stubFix1){
+    const txt=[...(s.recent||[]).map(r=>r&&r.narrative||''),...(s.volumes||[]).map(v=>v&&v.text||'')].join('\n');
+    for(const n of (s.npcs||[])){
+      if(!n||n.secret!=='暂无人知'||n.appearance||(n.personality||[]).length) continue;
+      n.stub=true;
+      const lifeTxt=(n.life||[]).map(x=>x&&x.text||'').join('。');
+      const g=guessGender(Object.assign({},n,{gender:''}),txt+'\n'+lifeTxt,s.player&&s.player.gender,true);
+      if(g&&g!==n.gender) n.gender=g;
+      if(num(n.age)>=30&&num(n.age)<=32) n.age=guessAge(n,txt);
+    }
+    s.stubFix1=true;
+  }
+  // 10-08：补出来的师兄师弟成了「凡人」「萍水相逢」，读档时按剧情和身份再认一次（有线索才改）
+  if(!s.stubFix2){
+    const txt=[...(s.recent||[]).map(r=>r&&r.narrative||''),...(s.volumes||[]).map(v=>v&&v.text||'')].join('\n');
+    const pl=s.player||{}, pf=plain(pl.faction);
+    for(const n of (s.npcs||[])){
+      if(!n) continue;
+      const lifeTxt=(n.life||[]).map(x=>x&&x.text||'').join('。'), all=txt+'\n'+lifeTxt;
+      if(n.stub&&(!n.relation||n.relation==='萍水相逢')){
+        const rel=guessRel(n,all,pl);
+        if(rel){ n.relation=rel; if(pf&&!/散修|散人|凡人|^无$/.test(pf)){ if(!n.faction) n.faction=pf; if(!n.identity||n.identity==='萍水相逢') n.identity=`${pf}${/师父|师叔|师伯/.test(rel)?'长辈':'弟子'}`; } }
+      }
+      if(n.realm&&n.realm.major<0&&(n.stub||CULT_WORD.test(`${n.identity||''} ${n.relation||''}`))){
+        const t=guessRealm(n,all,pl,true);
+        if(t&&t!=='凡人'){ const r=parseRealm(t); if(r){ n.realm=r; syncPower(n); } }
+      }
+    }
+    s.stubFix2=true;
+  }
   // 每次读档都过一遍：性别不对、年纪差两档的脸重分（手选锁定的不动）
   for(const n of (s.npcs||[])) if(n) avSlotOf(n);
   if(s.player) avSlotOf(s.player);
@@ -1313,6 +1345,88 @@ function inferGender(o,femaleRate){
   if(G_F_NAME.test(nm.slice(1))) return '女';
   const rate=femaleRate==null?0.3:femaleRate;
   return (avHash(nm)%100)/100<rate?'女':'男';
+}
+/* 10-08：模型没写性别/年龄的新人物（尤其是引擎替它补面板的），先拿剧情原文判，判不出再按名字。
+   pg 是主角性别：主角是男的，「他」可能是在说主角，只算弱证据；「她」才算硬证据，反之亦然。 */
+function genderFromText(nm,text,pg){
+  text=String(text||''); nm=String(nm||''); if(!nm||!text) return '';
+  let f=0,m=0,i=text.indexOf(nm);
+  const wF=pg==='女'?1:3, wM=pg==='男'?1:3;
+  while(i>=0){
+    const after=text.slice(i+nm.length,i+nm.length+24).split(/[。！？\n]/)[0];
+    const near=text.slice(Math.max(0,i-6),i).concat(text.slice(i+nm.length,i+nm.length+6));
+    f+=(after.match(/她/g)||[]).length*wF; m+=(after.match(/他/g)||[]).length*wM;
+    if(/姑娘|仙子|师姐|师妹|姐姐|妹妹|娘子|夫人|婆婆|小姐|少女|女修|丫头|妇人|老妪/.test(near)) f+=3;
+    if(/师兄|师弟|公子|大哥|兄台|老汉|汉子|郎君|少爷|和尚|少年|老翁|老头/.test(near)) m+=3;
+    i=text.indexOf(nm,i+nm.length);
+  }
+  return f>m?'女':(m>f?'男':'');
+}
+// strict：只认身份字眼、剧情原文、名字用字，判不出返回空（读档补救时用，免得凭哈希乱翻）
+function guessGender(o,text,pg,strict){
+  o=o||{}; const g=String(o.gender||'');
+  if(/女/.test(g)) return '女'; if(/男/.test(g)) return '男';
+  const t=`${o.identity||''} ${o.relation||''} ${o.appearance||''} ${o.notes||''}`;
+  if(G_F_WORD.test(t)&&!G_M_WORD.test(t)) return '女';
+  if(G_M_WORD.test(t)&&!G_F_WORD.test(t)) return '男';
+  const byText=genderFromText(o.name,text,pg); if(byText) return byText;
+  if(G_F_NAME.test(String(o.name||'').slice(1))) return '女';
+  return strict?'':inferGender(o);
+}
+// 名字所在那句话（前后各截到句号），判境界、关系都只看这里，免得串到旁人身上
+function nameCtx(nm,text){
+  nm=String(nm||''); text=String(text||''); let out=''; if(!nm) return out;
+  let i=text.indexOf(nm);
+  while(i>=0){ out+=' '+text.slice(Math.max(0,i-14),i).split(/[。！？\n]/).pop()+text.slice(i,i+nm.length+20).split(/[。！？\n]/)[0]; i=text.indexOf(nm,i+nm.length); }
+  return out;
+}
+/* 10-08：没写境界不再一律当凡人。先找那句话里写明的境界，再看身份关系：师父长老高一个大境界，
+   师兄师姐略高，师弟师妹略低，同门平辈上下两阶；掌柜村民这类才是凡人。strict 时没线索返回空。 */
+const MORTAL_WORD=/掌柜|村民|村妇|猎户|小二|农户|农夫|凡人|樵夫|渔夫|货郎|伙计|佃户|书生|官差|衙役|镖师|郎中|商贩|乞丐|仆役|家丁/;
+const CULT_WORD=/师兄|师弟|师姐|师妹|同门|弟子|修士|道友|散修|长老|师父|师尊|师叔|师伯|峰主|掌门|宗主|真人|上人|道长|修为|灵根/;
+function realmFromIdx(i){ i=Math.max(1,Math.min(30,Math.round(i))); return realmText(i<=9?{major:0,minor:i,perfect:false,ascended:false}:{major:Math.floor((i-10)/3)+1,minor:(i-10)%3+1,perfect:false,ascended:false}); }
+function guessRealm(o,text,p,strict){
+  o=o||{}; const ctx=nameCtx(o.name,text);
+  const m=ctx.match(/(?:炼气|练气|筑基|金丹|结丹|元婴|化神|合体|渡劫|大乘)(?:[一二三四五六七八九0-9]+[阶层重]|初期|中期|后期|大圆满|圆满)?/);
+  if(m){ const t=fixRealmText(m[0]); if(parseRealm(t)) return t; }
+  const id=`${o.identity||''} ${o.relation||''} ${o.notes||''} ${ctx}`;
+  const cult=CULT_WORD.test(id);
+  if(MORTAL_WORD.test(id)&&!cult) return '凡人';
+  const pr=p&&p.realm&&p.realm.major>=0?realmIndex(p.realm):2, pm=p&&p.realm?Math.max(0,p.realm.major):0;
+  if(/师父|师尊|长老|师叔|师伯|峰主|掌门|宗主|真人|上人/.test(id)){ const mj=Math.min(7,pm+1); return realmFromIdx(9+(mj-1)*3+rnd(1,3)); }
+  if(/师兄|师姐/.test(id)) return realmFromIdx(pr+rnd(0,3));
+  if(/师弟|师妹/.test(id)) return realmFromIdx(pr-rnd(0,3));
+  if(cult||(o.faction&&p&&o.faction===p.faction&&!/凡人|散修/.test(o.faction))) return realmFromIdx(pr+rnd(-2,2));
+  if(strict) return '';
+  if(/凡人/.test(o.faction||'')) return '凡人';
+  return realmFromIdx(rnd(1,4));
+}
+// 和主角什么关系：那句话里挨着名字的称呼（王师兄、李师妹、同门）
+function guessRel(o,text,p){
+  const nm=String(o&&o.name||''); text=String(text||''); if(!nm) return '';
+  const sn=nm.slice(0,1), re=/师兄|师弟|师姐|师妹|师父|师尊|师叔|师伯|同门/;
+  // 「王师兄」这种叫法：姓氏后面紧跟称呼
+  const call=text.match(new RegExp(sn+'(师兄|师弟|师姐|师妹|师叔|师伯)'));
+  let r=call?call[1]:'';
+  if(!r){ const near=nameCtx(nm,text).match(re); if(near) r=near[0]; }
+  if(!r) return '';
+  return r==='师尊'?'师父':r;
+}
+// 年龄：剧情或身份里写了几岁/少女/老者就照着来，否则按境界给个合理区间
+function guessAge(o,text){
+  o=o||{}; const nm=String(o.name||''); text=String(text||'');
+  let ctx=`${o.identity||''} ${o.appearance||''} ${o.notes||''}`;
+  if(nm){ let i=text.indexOf(nm); while(i>=0){ ctx+=' '+text.slice(Math.max(0,i-10),i).split(/[。！？\n]/).pop()+text.slice(i,i+nm.length+16).split(/[。！？\n]/)[0]; i=text.indexOf(nm,i+nm.length); } }
+  const m=ctx.match(/([0-9]{1,4}|[一二三四五六七八九十百千]+)\s*来?岁/);
+  if(m){ const n=cnToNum(m[1]); if(n>0&&n<5000) return n; }
+  if(/孩童|稚童|小童|童子|女童|男童|小娃|孩子/.test(ctx)) return rnd(7,12);
+  if(/少女|少年|丫头|小姑娘|半大|豆蔻|及笄/.test(ctx)) return rnd(14,18);
+  if(/老妪|老者|老汉|老翁|老道|婆婆|白发|老人|老妇|老头|老太/.test(ctx)) return rnd(60,78);
+  if(/中年|妇人|大叔|大婶/.test(ctx)) return rnd(36,48);
+  if(/青年|年轻|年少|姑娘|公子/.test(ctx)) return rnd(18,26);
+  const r=parseRealm(o.realm)||(o.realm&&typeof o.realm==='object'?o.realm:null);
+  const mj=r?r.major:-1;
+  return [[18,40],[16,35],[30,90],[80,250],[200,600],[500,1200]][Math.min(5,mj+1)].reduce((a,b)=>rnd(a,b));
 }
 function avRing(n,me){
   if(me) return '#3C7D62';
@@ -5186,8 +5300,8 @@ function stateBlocks(action){
   const far=S.npcs.filter(n=>n.alive&&!near.includes(n)).slice(-40);
   const gone=S.npcs.filter(n=>!n.alive).slice(-30);
   // 在场的人给全；不在场的只给认人用的几样，要用到时他一出场自然给全
-  const npcFull=n=>({name:n.name,gender:n.gender,age:n.age,identity:n.identity,faction:n.faction,alignment:n.alignment,personality:n.personality,portrait:npcPortrait(n),境界:realmText(n.realm),灵根:lgText(n.linggen),标签:n.tags||[],与旁人:relsOfName(n.name).slice(-6).map(r=>relOther(r,n.name)+'·'+r.type),近况:(n.life||[]).slice(-2).map(x=>x.text),relation:n.relation,对主角:realmStance(n),好感度:n['好感度'],爱恋值:n['爱恋值'],mood:n.mood,secret:n.secret,secretKnown:n.secretKnown,notes:n.notes,location:n.location||'未知',在场:asArr(S.scene&&S.scene.present).includes(n.name),学自主角的功法:(n.fromPlayer||[]),与主角的往来:(n.memory||[]).slice(-M.npcMem)});
-  const npcLite=n=>{ const o={name:n.name,gender:n.gender,identity:n.identity,境界:realmText(n.realm),relation:n.relation,对主角:realmStance(n),好感度:n['好感度'],在场:false,近况:(n.life||[]).slice(-1).map(x=>x.text)}; if(n['爱恋值']!=null) o.爱恋值=n['爱恋值']; if((n.fromPlayer||[]).length) o.学自主角的功法=n.fromPlayer; return o; };
+  const npcFull=n=>({name:n.name,gender:n.gender,age:n.age,identity:n.identity,faction:n.faction,alignment:n.alignment,personality:n.personality,portrait:npcPortrait(n),境界:realmText(n.realm),灵根:lgText(n.linggen),标签:n.tags||[],与旁人:relsOfName(n.name).slice(-6).map(r=>relOther(r,n.name)+'·'+r.type),近况:(n.life||[]).slice(-2).map(x=>x.text),relation:n.relation,对主角:realmStance(n),好感度:n['好感度'],爱恋值:n['爱恋值'],mood:n.mood,secret:n.secret,secretKnown:n.secretKnown,notes:n.notes,待补:n.stub?'性别、年龄、境界还没定，本回在npcUpdates里写上gender、age、realm（和主角的关系不对也一并改relation）':undefined,location:n.location||'未知',在场:asArr(S.scene&&S.scene.present).includes(n.name),学自主角的功法:(n.fromPlayer||[]),与主角的往来:(n.memory||[]).slice(-M.npcMem)});
+  const npcLite=n=>{ const o={name:n.name,gender:n.gender,identity:n.identity,境界:realmText(n.realm),relation:n.relation,对主角:realmStance(n),好感度:n['好感度'],在场:false,近况:(n.life||[]).slice(-1).map(x=>x.text)}; if(n.stub) o.待补='性别、年龄、境界还没定，出场时在npcUpdates里写上gender、age、realm'; if(n['爱恋值']!=null) o.爱恋值=n['爱恋值']; if((n.fromPlayer||[]).length) o.学自主角的功法=n.fromPlayer; return o; };
   const npcBrief=near.map(n=>pres.includes(n.name)?npcFull(n):npcLite(n));
   const farText=far.length?far.map(n=>`${n.name}（${n.identity||''}${n.relation?'，'+n.relation:''}）`).join('；'):'（无）';
   const goneText=gone.length?gone.map(n=>n.name).join('、'):'（无）';
@@ -5317,7 +5431,7 @@ ${judge.convo?convoAfterReq():`请推演本回合。要求：
 - 本回合结束时，把主角所在的具体地点写进scene.location。
 - scene.unresolved 只列**眼下真正还悬着、而且主角接下来打算去管**的事，至多4条；已经办完、已经落空、或者主角已经不在乎的，就别再写进去。
   本回合了结或放下了哪几桩，写进 resolvedInfo（原样照抄未了之事里的那句话），引擎会把它从账上划掉。
-- 数值变化必须符合规则并如实写入playerChanges与npcUpdates（全部用增减量）。受伤写hp负值，休养写hp正值。年龄由引擎按光阴推算，age 一律填 null。
+- 数值变化必须符合规则并如实写入playerChanges与npcUpdates（全部用增减量）。受伤写hp负值，休养写hp正值。主角年龄由引擎按光阴推算，playerChanges.age 一律填 null；newNpcs 里的新人物要照实写 gender 和 age。
 - playerChanges.money 只记下品灵石。凡人的银两铜钱不是灵石：十两银子大约折一块下品灵石，几两碎银就是 0。
   日常吃穿住用引擎每月已经扣过，不要再写负数；只有剧情里真付出去一笔钱（买东西、过路费、罚款、打赏、请人办事），才写负数，moneyReason写一句付给谁、为什么；买到的东西写进itemsAdd。
   行囊里丹药、符箓、毒药、灵材有数量（面板里的count）。得到几件就在itemsAdd里写count，如 {"name":"回春丹","count":3}；名字里不要带数量。
@@ -5349,7 +5463,7 @@ ${JSON_RULE}
 有变化才写（键名照抄）：
 - "resolvedInfo":["了结或放下的未了之事，照抄原句"]
 - "playerChanges":{只写变了的键。attributes{体魄,神识,心性,谈吐}增减；lingli与lingliReason；hp；fame{声望,凶名}；money与moneyReason；faction；contrib；lifespan与lifespanReason；skills{"手艺名":{"level":增量,"desc":""}}；artsAdd[{"name","desc","style","level","grade","element"}]；artsTrain[{"name","level"}]；personalityAdd[]；statusAdd[{"name","desc","months"}]；statusRemove["伤名"]；itemsAdd{"丹药":[{"name","desc","count"}],"法器":[{"name","desc","grade"}]，玉简/符箓/毒药/灵材/其他同理}；itemsRemove[{"name","count"}]}
-- "npcUpdates":[{"name":"已有人物","只写变了的":"好感度、爱恋值、relation、alive、identity、faction、mood、notes、realm、secretRevealed"}]
+- "npcUpdates":[{"name":"已有人物","只写变了的":"好感度、爱恋值、relation、alive、identity、faction、mood、notes、realm、secretRevealed；标了「待补」的人物还要写 gender、age、realm"}]
 - "newNpcs":[NPC对象]　"taughtNpc":[{"name","art"}]　"npcEvents":[]　"rumors":[]　"newVendettas":[{"name","reason","lethal"}]
 - "questUpdates":[{"title","progress","status"}]　"newQuests":[{"title","desc"}]
 - "rankingUpdates":[{"name","alive","note"}]　"rankingAdd":[{"name","gender","faction","realm","note","age"}]　"factionUpdates":[{"name","power","reason","leader"}]
@@ -5768,11 +5882,12 @@ function validateTurn(d,action,judge,state,opt){
     const nm=plain(n.name);
     if(!nm||GENERIC_NAME_RE.test(nm)) return false;      // 还不知道姓名的路人：这回先不入人物表
     n.name=nm;
-    if(!plain(n.gender)) n.gender=/女|娘|姑|妹|姐|婆|妇/.test(plain(n.identity)+plain(n.appearance))?'女':'男';
+    if(!/[男女]/.test(plain(n.gender))) n.gender=guessGender(Object.assign({},n,{gender:''}),d.narrative,state.player&&state.player.gender);
     if(!plain(n.identity)) n.identity=plain(n.faction)||'散修';
     if(!plain(n.secret)) n.secret='暂无人知';
-    const age=toNum(n.age); n.age=age!=null&&age>0?age:30;
-    if(!parseRealm(n.realm)) n.realm=fixRealmText(n.realm);
+    const age=toNum(n.age); n.age=age!=null&&age>0?age:guessAge(n,d.narrative);
+    if(!plain(n.realm)&&!plain(n['境界'])) n.realm=guessRealm(n,d.narrative,state.player);
+    else if(!parseRealm(n.realm||n['境界'])) n.realm=fixRealmText(n.realm||n['境界']);
     names.add(nm); return true;
   });
   // 同一桩心愿换个说法又报一次（「开春去青云宗」「拜入青云宗」），只留先来的
@@ -5786,9 +5901,15 @@ function validateTurn(d,action,judge,state,opt){
   { const stub=(nm,u)=>{ nm=plain(nm); if(!nm||names.has(nm)||nm===(state.player&&state.player.name)) return;
       if(!/^[\u4e00-\u9fa5·]{2,6}$/.test(nm)||GENERIC_NAME_RE.test(nm)||/的|们|众|诸位|一行|弟子$|长老们/.test(nm)) return;
       if(((state.world&&state.world.factions)||[]).some(f=>f.name===nm)) return;
-      u=u||{}; const realm=parseRealm(u.realm)?plain(u.realm):fixRealmText(u.realm);
-      d.newNpcs.push({name:nm,gender:plain(u.gender)||(/女|娘|姑|妹|姐|婆|妇|仙子/.test(nm+plain(u.identity))?'女':'男'),age:toNum(u.age)>0?toNum(u.age):30,identity:plain(u.identity)||'萍水相逢',faction:plain(u.faction)||'',realm,
-        relation:plain(u.relation)||'萍水相逢',好感度:50,secret:'暂无人知',personality:[],appearance:'',notes:plain(u.notes)||'',stub:true});
+      u=u||{}; const pl=state.player||{}, pf=plain(pl.faction);
+      const rel=plain(u.relation)||guessRel({name:nm},d.narrative,pl);
+      const sectRel=/师兄|师弟|师姐|师妹|师父|师叔|师伯|同门/.test(rel)&&pf&&!/散修|散人|凡人|^无$/.test(pf);
+      const o={name:nm,identity:plain(u.identity)||(sectRel?`${pf}${/师父|师叔|师伯/.test(rel)?'长辈':'弟子'}`:'萍水相逢'),faction:plain(u.faction)||(sectRel?pf:''),
+        relation:rel||'萍水相逢',好感度:50,secret:'暂无人知',personality:[],appearance:'',notes:plain(u.notes)||'',stub:true};
+      o.realm=plain(u.realm)?(parseRealm(u.realm)?plain(u.realm):fixRealmText(u.realm)):guessRealm(o,d.narrative,pl);
+      o.gender=guessGender(Object.assign({},o,{gender:plain(u.gender)}),d.narrative,state.player&&state.player.gender);
+      o.age=toNum(u.age)>0?toNum(u.age):guessAge(o,d.narrative);
+      d.newNpcs.push(o);
       names.add(nm); };
     for(const u of d.npcUpdates) stub(u.name,u);
     if(d.scene&&Array.isArray(d.scene.present)) for(const nm of d.scene.present) if(typeof nm==='string') stub(nm);
@@ -6164,7 +6285,7 @@ function normNpcBody(n){
     location:plain(n.location),relation:n.relation||'', '好感度':clamp(num(n['好感度']!==undefined?n['好感度']:30)), lastSeen:(S?S.turn:0),
     '爱恋值':(n['爱恋值']==null?null:clamp(num(n['爱恋值']))),
     alive:n.alive!==false, secret:n.secret||'', secretKnown:false, memory:[], notes:n.notes||'',
-    gave:0, taught:false, skillGiven:{}, healedTurn:-1, fromPlayer:[], avatar:null
+    gave:0, taught:false, skillGiven:{}, healedTurn:-1, fromPlayer:[], avatar:null, stub:!!n.stub
   };
 }
 
@@ -6462,8 +6583,13 @@ function applyTurn(d, action, judge){
     if(u.mood) n.mood=u.mood;
     if(u.notes) n.notes=u.notes;
     // 境界只许剧情往上推一小阶（真正的修炼由引擎按月算）；战力跟着境界走，不收模型给的武功增减
-    if(u.realm&&n.realm){ const nr=parseRealm(u.realm); if(nr&&realmIndex(nr)>realmIndex(n.realm)&&realmIndex(nr)-realmIndex(n.realm)<=1){ n.realm=nr; syncPower(n); news(`${n.name}修为进至${realmText(nr)}`); } }
-    if(u.age!=null&&num(u.age)>n.age) n.age=num(u.age);
+    if(n.stub&&u.realm&&!n.stubR&&parseRealm(u.realm)){ n.realm=parseRealm(u.realm); syncPower(n); n.stubR=true; }
+    else if(u.realm&&n.realm){ const nr=parseRealm(u.realm); if(nr&&realmIndex(nr)>realmIndex(n.realm)&&realmIndex(nr)-realmIndex(n.realm)<=1){ n.realm=nr; syncPower(n); news(`${n.name}修为进至${realmText(nr)}`); } }
+    // 引擎替它补的面板：模型头一回写出性别/年龄，照它的改（只改一次）
+    if(n.stub&&/[男女]/.test(plain(u.gender))&&!n.stubG){ const g=/女/.test(u.gender)?'女':'男'; if(g!==n.gender){ n.gender=g; n.avatar=avPickSlot(n); n.portrait=avDesc(n.avatar); } n.stubG=true; }
+    if(n.stub&&num(u.age)>0&&!n.stubA){ n.age=num(u.age); n.stubA=true; }
+    else if(u.age!=null&&num(u.age)>n.age) n.age=num(u.age);
+    if(n.stub&&n.stubG&&n.stubA&&n.stubR) n.stub=false;
     if(u.secretRevealed&&!n.secretKnown){ n.secretKnown=true; S.stats.secrets++; ledger(`探知${n.name}的秘密：${n.secret||'一桩隐情'}`); }
     if(u.location)n.location=plain(u.location);
   }
