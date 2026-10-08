@@ -1217,6 +1217,15 @@ function migrate(s){
     }
     s.stubFix3=true;
   }
+  // 10-08 夜：玩家以前在括号里写明的（陆雪琪(16岁，女，筑基初阶)），从历史行动里翻出来记进定论簿，人脉里对不上的改过来
+  if(!s.decreeFix1){
+    s.decrees=s.decrees||[];
+    const acts=(s.history||[]).map(h=>h&&h.action);
+    for(const r of (s.recent||[])){ const a=r&&r.action; if(a&&!acts.includes(a)) acts.push(a); }
+    for(const a of acts) decreeRecord(s,typeof a==='object'&&a?(a.text||a.action||''):a,num(s.months),true);
+    for(const n of (s.npcs||[])) decreeSync(s,n);
+    s.decreeFix1=true;
+  }
   // 每次读档都过一遍：性别不对、年纪差两档的脸重分（手选锁定的不动）
   for(const n of (s.npcs||[])) if(n) avSlotOf(n);
   if(s.player) avSlotOf(s.player);
@@ -1405,16 +1414,100 @@ function nameCtx(nm,text,others){
   while(i>=0){ out+=' '+text.slice(Math.max(0,i-14),i).split(/[。！？\n]/).pop()+nm+afterName(text,i,nm,others,40,2); i=text.indexOf(nm,i+nm.length); }
   return out;
 }
-/* 玩家在行动里亲手写明的：「陆雪琪(16岁，女，筑基初阶)」。这是玩家定的，比模型和引擎猜的都准 */
+/* 玩家在行动里亲手写明的：「陆雪琪(16岁，女，筑基初阶，师妹)」。这是玩家定的，比模型和引擎猜的都准 */
+const DECREE_REL=/^(?:我的|我)?(师父|师尊|师娘|师兄|师弟|师姐|师妹|师叔|师伯|师侄|徒弟|徒儿|弟子|同门|道侣|妻子|夫人|夫君|丈夫|未婚妻|未婚夫|恋人|父亲|母亲|爹|娘|哥哥|姐姐|弟弟|妹妹|兄长|义兄|义姐|义弟|义妹|朋友|好友|挚友|知己|红颜知己|发小|青梅竹马|仇人|宿敌|对头|恩人|故人|旧识|相识|主人|侍女|侍从|仆人|萍水相逢)$/;
+function decreeBody(t){
+  t=String(t||''); const o={};
+  if(/女/.test(t)&&!/男/.test(t)) o.gender='女'; else if(/男/.test(t)&&!/女/.test(t)) o.gender='男';
+  const a=t.match(/([0-9]{1,4}|[一二三四五六七八九十百]+)\s*岁/); if(a){ const n=cnToNum(a[1]); if(n>0) o.age=n; }
+  const r=t.match(/(?:炼气|练气|筑基|金丹|结丹|元婴|化神|合体|渡劫|大乘)[^，,、；;）)\s]{0,5}|凡人/); if(r){ const x=r[0]==='凡人'?'凡人':fixRealmText(r[0]); if(parseRealm(x)) o.realm=x; }
+  for(const tk of t.split(/[，,、；;\s]+/)){ const m=tk.match(DECREE_REL); if(m){ o.relation=m[1]==='师尊'?'师父':m[1]; break; } }
+  return Object.keys(o).length?o:null;
+}
 function explicitOf(nm,text){
   nm=String(nm||''); text=String(text||''); if(!nm) return null;
   const esc=nm.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-  const m=text.match(new RegExp(esc+'\\s*[（(]([^）)]{1,40})[）)]')); if(!m) return null;
-  const t=m[1], o={};
-  if(/女/.test(t)&&!/男/.test(t)) o.gender='女'; else if(/男/.test(t)&&!/女/.test(t)) o.gender='男';
-  const a=t.match(/([0-9]{1,4}|[一二三四五六七八九十百]+)\s*岁/); if(a){ const n=cnToNum(a[1]); if(n>0) o.age=n; }
-  const r=t.match(/(?:炼气|练气|筑基|金丹|结丹|元婴|化神|合体|渡劫|大乘)[^，,、；;]{0,5}|凡人/); if(r){ const x=r[0]==='凡人'?'凡人':fixRealmText(r[0]); if(parseRealm(x)) o.realm=x; }
-  return Object.keys(o).length?o:null;
+  const re=new RegExp(esc+'\\s*[（(]([^）)]{1,40})[）)]','g'); let m, o=null;
+  while((m=re.exec(text))){ const b=decreeBody(m[1]); if(b) o=Object.assign(o||{},b); }   // 同一段里写了两回，以后写的为准
+  return o;
+}
+/* 10-08 夜：玩家写明的不再只认当回。记进 st.decrees（定论簿），这人什么时候进人脉、进了多久都照它改：
+   性别一直以它为准（模型改不动，换过画像也一样）；年龄、境界、关系落一次，之后由引擎按光阴、修炼往下走。 */
+/* 10-09：修士榜、天骄榜、宗主是引擎自己养着的人，性别、年龄、境界、所属以引擎的账为准。
+   他们在剧情里一出场进了人脉，模型写的面板只收性格相貌秘密这些，硬数据一律照账本改。 */
+function worldRecordOf(st,name){
+  name=plain(name); const w=st&&st.world; if(!name||!w) return null;
+  const cp=r=>r&&typeof r==='object'?JSON.parse(JSON.stringify(r)):null;
+  const t=(w.tianjiao||[]).find(x=>x&&x.name===name);
+  if(t) return {src:'天骄榜',gender:t.gender,age:num(t.age),realm:cp(t.realm),faction:t.faction||'散修',identity:`${t.faction&&t.faction!=='散修'?t.faction+'弟子，':''}天骄榜上的年轻修士`};
+  const r=(w.ranking||[]).find(x=>x&&x.name===name);
+  const f=(w.factions||[]).find(x=>x&&!x.own&&plain(x.leader)===name);
+  if(r||f) return {src:r?'修士榜':'宗主',gender:(r&&r.gender)||(f&&f.lGender)||'',age:num(f&&f.lAge)||num(r&&r.age),
+    realm:cp(f&&f.lRealm)||cp(r&&r.realm),faction:f?f.name:(r.faction||'散修'),identity:f?`${f.name}宗主`:`${r.faction&&r.faction!=='散修'?r.faction+'修士，':''}修士榜上的高手`};
+  return null;
+}
+const SEED_REL_BAD=/父|母|爹|娘|兄|弟|姐|妹|师父|师尊|师叔|师伯|师娘|徒|道侣|妻|夫|恋人|青梅|发小|故人|旧识|老友|挚友|知己|同门|掌门/;
+function worldSeed(st,o){
+  const w=worldRecordOf(st,o&&o.name); if(!w) return false;
+  if(/[男女]/.test(w.gender||'')) o.gender=w.gender;
+  if(w.age>0) o.age=w.age;
+  if(w.realm&&w.realm.major!=null){ o.realm=w.realm; syncPower(o); }
+  o.faction=w.faction;
+  if(!plain(o.identity)||!o.identity.includes(w.faction==='散修'?'':w.faction)) o.identity=w.identity;
+  const pf=plain(st.player&&st.player.faction);
+  if(pf&&pf===w.faction&&!/散修|凡人/.test(pf)) o.relation=w.src==='宗主'?'掌门':'同门';
+  else if(!plain(o.relation)||SEED_REL_BAD.test(o.relation)) o.relation='萍水相逢';   // 头一回见，不可能是旧识亲眷
+  if(o.avatarLocked&&!avSlotFits(o.avatar,o)) o.avatarLocked=false;
+  try{ if(!o.avatarLocked) o.avatar=avPickSlot(o); o.portrait=avDesc(o.avatar); }catch(_){}
+  return true;
+}
+// 人脉里的人是榜上人物/宗主：玩家亲手写明改过的，账本当回就跟上，别等到年底，免得两边说法不一
+function worldBackSync(st){
+  const w=st&&st.world; if(!w) return;
+  const cp=r=>r&&typeof r==='object'?JSON.parse(JSON.stringify(r)):r;
+  for(const n of (st.npcs||[])){ if(!n||!n.name) continue;
+    for(const t of (w.tianjiao||[])) if(t&&t.name===n.name){ if(/[男女]/.test(n.gender||'')) t.gender=n.gender; if(num(n.age)) t.age=num(n.age); if(n.realm&&n.realm.major!=null){ t.realm=cp(n.realm); t['武功']=powerFromRealm(t.realm); } }
+    for(const r of (w.ranking||[])) if(r&&r.name===n.name){ if(/[男女]/.test(n.gender||'')) r.gender=n.gender; if(num(n.age)) r.age=num(n.age); if(n.realm&&n.realm.major!=null) r.realm=cp(n.realm); }
+    for(const f of (w.factions||[])) if(f&&!f.own&&plain(f.leader)===n.name){ if(/[男女]/.test(n.gender||'')) f.lGender=n.gender; if(num(n.age)) f.lAge=num(n.age); if(n.realm&&n.realm.major!=null) f.lRealm=cp(n.realm); }
+  }
+}
+function decreeRecord(st,text,at,old){
+  if(!st) return; text=String(text||''); st.decrees=st.decrees||[];
+  const re=/([一-龥·]{2,12})\s*[（(]([^）)]{1,40})[）)]/g; let m;
+  while((m=re.exec(text))){
+    const f=decreeBody(m[2]); if(!f) continue;
+    const raw=m[1];   // 前面可能连着「我送」「去找」，比对时看结尾是不是这个人的名字
+    const last=st.decrees[st.decrees.length-1];
+    if(last&&last.raw===raw&&JSON.stringify(last.f)===JSON.stringify(f)) continue;
+    st.decrees.push({raw,f,at:num(at),old:!!old,done:[]});
+  }
+  while(st.decrees.length>200) st.decrees.shift();
+}
+function decreeHits(st,name){
+  name=String(name||''); if(name.length<2) return [];
+  return ((st&&st.decrees)||[]).filter(e=>e.raw.endsWith(name));
+}
+function decreeSync(st,n){
+  if(!st||!n||!n.name) return false;
+  const hits=decreeHits(st,n.name); if(!hits.length) return false;
+  let changed=false, gender='';
+  for(const e of hits){
+    if(e.f.gender) gender=e.f.gender;
+    if(e.done.includes(n.name)) continue;
+    e.done.push(n.name);
+    const f=e.f;
+    if(f.age){ const a=f.age+Math.max(0,Math.floor((num(st.months)-e.at)/12)); if(a!==num(n.age)){ n.age=a; changed=true; } }
+    if(f.realm){ const r=parseRealm(f.realm);
+      // 读档时从旧行动里翻出来的：只往上补，不把这些年修上去的又压回去
+      if(r&&(!e.old||realmIndex(r)>realmIndex(n.realm))&&realmText(r)!==realmText(n.realm)){ n.realm=r; syncPower(n); changed=true; } }
+    if(f.relation&&f.relation!==n.relation){ const before=n.relation; n.relation=f.relation; changed=true;
+      if(!e.old&&st===S&&typeof syncPlayerRel==='function'){ const why=syncPlayerRel(n,before); if(why&&typeof news==='function') news(why); } }
+    if(n.stub){ if(f.gender) n.stubG=true; if(f.age) n.stubA=true; if(f.realm) n.stubR=true; if(n.stubG&&n.stubA&&n.stubR) n.stub=false; }
+  }
+  if(gender&&gender!==n.gender){ n.gender=gender; changed=true;
+    if(n.avatarLocked&&!avSlotFits(n.avatar,n)) n.avatarLocked=false; }   // 换过的画像是另一个性别的，作废重配
+  if(changed){ try{ if(!n.avatarLocked||!avSlotFits(n.avatar,n)){ n.avatarLocked=false; n.avatar=avPickSlot(n); } n.portrait=avDesc(n.avatar); }catch(_){} }
+  return changed;
 }
 /* 10-08：没写境界不再一律当凡人。先找那句话里写明的境界，再看身份关系：师父长老高一个大境界，
    师兄师姐略高，师弟师妹略低，同门平辈上下两阶；掌柜村民这类才是凡人。strict 时没线索返回空。 */
@@ -3093,7 +3186,11 @@ function facLog(f,text,dv){ f.log=f.log||[]; f.log.push({y:curYear(),date:S.date
 function ensureFactionMeta(f){
   if(f.base==null) f.base=clamp(num(f.power));
   if(f.lastPower==null) f.lastPower=num(f.power);
-  if(!plain(f.leader)) f.leader=makeRankName(Math.random()<0.25?'女':'男');
+  if(!plain(f.leader)){ const g=Math.random()<0.25?'女':'男'; f.leader=makeRankName(g); f.lGender=g; }
+  if(!/[男女]/.test(f.lGender||'')){   // 10-09：宗主的性别存下来，以后谁用都照这个，不再按名字重猜
+    const npc=findNpc(f.leader), r=((S&&S.world&&S.world.ranking)||[]).find(x=>x.name===f.leader);
+    f.lGender=npc&&/[男女]/.test(npc.gender||'')?npc.gender:(r&&/[男女]/.test(r.gender||'')?r.gender:inferGender({name:f.leader},0.25));
+  }
   if(!f.lRealm){
     const npc=findNpc(f.leader), r=(S.world.ranking||[]).find(x=>x.name===f.leader);
     f.lRealm=npc&&npc.realm?JSON.parse(JSON.stringify(npc.realm)):r&&r.realm?JSON.parse(JSON.stringify(r.realm)):facLeaderRealm(num(f.power));
@@ -3102,16 +3199,18 @@ function ensureFactionMeta(f){
   }
   f.log=f.log||[];
 }
-function facSetLeader(f,name,realm){
+function facSetLeader(f,name,realm,gender){
   f.leader=name; const npc=findNpc(name);
+  const rk=((S&&S.world&&S.world.ranking)||[]).find(x=>x.name===name);
+  f.lGender=npc&&/[男女]/.test(npc.gender||'')?npc.gender:(gender||(rk&&rk.gender)||inferGender({name},0.25));
   f.lRealm=npc&&npc.realm?JSON.parse(JSON.stringify(npc.realm)):realm||facLeaderRealm(Math.max(0,num(f.power)-15));
   f.lAge=npc?num(npc.age):Math.round(realmLifespan(f.lRealm)*(0.3+Math.random()*0.25));
   f.lSince=curYear();
 }
 function facSucceed(f,why){
-  const old=f.leader, nm=makeRankName(Math.random()<0.25?'女':'男');
+  const old=f.leader, lg=Math.random()<0.25?'女':'男', nm=makeRankName(lg);
   const r=f.lRealm?{major:Math.max(2,f.lRealm.major-(Math.random()<0.6?1:0)),minor:rnd(1,3),perfect:false,ascended:false}:null;
-  facSetLeader(f,nm,r);
+  facSetLeader(f,nm,r,lg);
   f.power=clamp(num(f.power)-rnd(1,3));
   facLog(f,`${why}，${nm}接任宗主`,-2);
   news(`${f.name}${why}，由${nm}接任宗主`);
@@ -5351,7 +5450,7 @@ function stateBlocks(action){
       : `【玩家行动】${r.action}\n【剧情·节略】${String(r.narrative||'').replace(/\s+/g,'').slice(0,M.recentBrief)}……`
     ).join('\n---\n')||'（无）';
   const quests=S.quests.length?S.quests.map(q=>`- ${q.title}（${q.status}，进度${q.progress}）：${q.desc}`).join('\n'):'（无）';
-  const world=S.world&&S.world.ranking&&S.world.ranking.length?`修士榜：${S.world.ranking.map((r,i)=>`${i+1}.${r.name}(${r.gender?r.gender+',':''}${r.faction||'散修'}${r.realm?','+realmText(r.realm):''}${r.alive===false?',已陨落':''})`).join('；')}${num(S.world.vacant)>0?`\n榜上尚有${S.world.vacant}个空缺（有人辞世或跌出），可用rankingAdd补进一位有来历的新高手（武功须与榜末相当）`:''}${(S.world.fallen||[]).length?`\n已故的榜上人物：${S.world.fallen.slice(-6).map(x=>x.name).join('、')}`:''}\n势力：${(S.world.factions||[]).map(f=>`${f.name}(${f.alignment},势力${f.power},首领${f.leader})`).join('；')}\n当世大事：${(S.world.events||[]).join('；')||'暂无新进展'}`:'（尚未铸造）';
+  const world=S.world&&S.world.ranking&&S.world.ranking.length?`修士榜：${S.world.ranking.map((r,i)=>`${i+1}.${r.name}(${r.gender?r.gender+',':''}${num(r.age)?num(r.age)+'岁,':''}${r.faction||'散修'}${r.realm?','+realmText(r.realm):''}${r.alive===false?',已陨落':''})`).join('；')}${num(S.world.vacant)>0?`\n榜上尚有${S.world.vacant}个空缺（有人辞世或跌出），可用rankingAdd补进一位有来历的新高手（武功须与榜末相当）`:''}${(S.world.fallen||[]).length?`\n已故的榜上人物：${S.world.fallen.slice(-6).map(x=>x.name).join('、')}`:''}\n势力：${(S.world.factions||[]).map(f=>`${f.name}(${f.alignment},势力${f.power},首领${f.leader}${(()=>{ const x=f.own?[]:[f.lGender,f.lAge?num(f.lAge)+'岁':'',f.lRealm?realmText(f.lRealm):''].filter(Boolean); return x.length?`[${x.join(',')}]`:''; })()})`).join('；')}${(S.world.tianjiao||[]).filter(t=>t&&t.alive!==false).length?`\n天骄榜：${S.world.tianjiao.filter(t=>t&&t.alive!==false).map(t=>`${t.name}(${t.gender},${num(t.age)}岁,${t.faction||'散修'},${realmText(t.realm)})`).join('；')}`:''}\n以上人物的性别、年龄、境界以此为准，写到他们时照着写。\n当世大事：${(S.world.events||[]).join('；')||'暂无新进展'}`:'（尚未铸造）';
   avSlotOf(p);
   const pb=Object.assign({},p); delete pb.backstory; delete pb.avatar; delete pb.avatarLocked;
   for(const k of ['realm','linggen','lingli','breakCD','lifeBonus','cultMode','cultMul','scarPower','bottleneckNoted','lifespan','tags','prep']) delete pb[k];
@@ -5957,6 +6056,13 @@ function validateTurn(d,action,judge,state,opt){
     for(const u of d.npcUpdates) stub(u.name,u);
     if(d.scene&&Array.isArray(d.scene.present)) for(const nm of d.scene.present) if(typeof nm==='string') stub(nm);
     if(d.duel&&d.duel.opponent) stub(d.duel.opponent);
+    // 玩家在行动里写明了「某某(16岁，女……)」，正文也写到了此人，模型却没登记：照样进人脉
+    { const tmp={}; decreeRecord(tmp,actTxt,0);
+      for(const e of (tmp.decrees||[])){ let nm='';
+        for(let k=Math.min(5,e.raw.length);k>=2;k--){ const c=e.raw.slice(-k);   // 得像个人名：姓打头、正文里出现过
+          const sur=COMPOUND_SURNAMES.some(x=>c.startsWith(x)&&c.length>x.length)||(SURNAME_CHARS.includes(c[0])&&k<=4);
+          if(sur&&String(d.narrative||'').includes(c)){ nm=c; break; } }
+        if(nm&&![...names].some(x=>x===nm||x.endsWith(nm)||nm.endsWith(x))) stub(nm,{relation:e.f.relation}); } }
     // 已在人脉里的人，玩家在行动里写明了「(16岁，女，筑基初阶)」：照玩家的改
     for(const n of (state.npcs||[])){ const ex=explicitOf(n.name,actTxt); if(!ex) continue;
       let u=d.npcUpdates.find(x=>plain(x.name)===n.name); if(!u){ u={name:n.name}; d.npcUpdates.push(u); }
@@ -6615,6 +6721,7 @@ function applyTurn(d, action, judge){
   if(S.healedLast&&S.healedLast.length){ lastDeltas['伤愈']=S.healedLast.slice(); S.healedLast=[]; }
   rebuildStatus();
   // NPC
+  decreeRecord(S,String(action&&typeof action==='object'?(action.text||action.action||''):(action||'')),S.months);
   for(const u of (d.npcUpdates||[])){
     const n=findNpc(u.name);
     if(!n) continue;
@@ -6632,22 +6739,18 @@ function applyTurn(d, action, judge){
     // 境界只许剧情往上推一小阶（真正的修炼由引擎按月算）；战力跟着境界走，不收模型给的武功增减
     if(n.stub&&u.realm&&!n.stubR&&parseRealm(u.realm)){ n.realm=parseRealm(u.realm); syncPower(n); n.stubR=true; }
     else if(u.realm&&n.realm){ const nr=parseRealm(u.realm); if(nr&&realmIndex(nr)>realmIndex(n.realm)&&realmIndex(nr)-realmIndex(n.realm)<=1){ n.realm=nr; syncPower(n); news(`${n.name}修为进至${realmText(nr)}`); } }
-    // 玩家亲手写明的：性别照改；年龄、境界只改引擎补出来的人（防借机给熟人改修为）
-    if(u._explicit){ const ex=u._explicit;
-      if(ex.gender&&ex.gender!==n.gender&&!n.avatarLocked){ n.gender=ex.gender; n.avatar=avPickSlot(n); n.portrait=avDesc(n.avatar); }
-      if(ex.gender) n.stubG=true;
-      if(n.stub&&ex.age){ n.age=ex.age; n.stubA=true; }
-      if(n.stub&&ex.realm&&parseRealm(ex.realm)){ n.realm=parseRealm(ex.realm); syncPower(n); n.stubR=true; }
-    }
+    // 玩家亲手写明的（括号里的年龄、性别、境界、关系）统一在下面 decreeSync 落账，这里不管
     // 引擎替它补的面板：模型头一回写出性别/年龄，照它的改（只改一次）
     if(n.stub&&/[男女]/.test(plain(u.gender))&&!n.stubG){ const g=/女/.test(u.gender)?'女':'男'; if(g!==n.gender){ n.gender=g; n.avatar=avPickSlot(n); n.portrait=avDesc(n.avatar); } n.stubG=true; }
-    if(n.stub&&num(u.age)>0&&!n.stubA){ n.age=num(u.age); n.stubA=true; }
-    else if(u.age!=null&&num(u.age)>n.age) n.age=num(u.age);
+    if(n.stub&&num(u.age)>0&&!n.stubA){ n.age=num(u.age); n.stubA=true; }   // 已定下的年龄只由引擎按光阴加，模型写的不收
     if(n.stub&&n.stubG&&n.stubA&&n.stubR) n.stub=false;
     if(u.secretRevealed&&!n.secretKnown){ n.secretKnown=true; S.stats.secrets++; ledger(`探知${n.name}的秘密：${n.secret||'一桩隐情'}`); }
     if(u.location)n.location=plain(u.location);
   }
-  for(const nn of (d.newNpcs||[])){ if(nn&&nn.name&&!S.npcs.find(x=>x.name===nn.name)){ const o=normNpc(nn); o.lastSeen=S.turn; if(!isKinOf(o)){ const fm=firstFavorMod(p,o); if(fm) o['好感度']=clamp(num(o['好感度'])+fm); const g=realmGapOf(o); if(g>=1) o['好感度']=clamp(num(o['好感度'])+(g>=2?10:5)); } S.npcs.push(o); } }
+  for(const nn of (d.newNpcs||[])){ if(nn&&nn.name&&!S.npcs.find(x=>x.name===nn.name)){ const o=normNpc(nn); o.lastSeen=S.turn; if(worldSeed(S,o)) o.stub=false; if(!isKinOf(o)){ const fm=firstFavorMod(p,o); if(fm) o['好感度']=clamp(num(o['好感度'])+fm); const g=realmGapOf(o); if(g>=1) o['好感度']=clamp(num(o['好感度'])+(g>=2?10:5)); } S.npcs.push(o); } }
+  // 玩家写明的落账：当回写的、以前写过还没对上人的，都在这里改到位；性别每回都以它为准
+  for(const n of S.npcs) decreeSync(S,n);
+  worldBackSync(S);
   // 心愿
   for(const q of (d.questUpdates||[])){
     const t=S.quests.find(x=>x.title===q.title)||S.quests.find(x=>q.title&&(x.title.includes(q.title)||q.title.includes(x.title)));
@@ -7520,11 +7623,12 @@ function foeLeaderWu(f){
 function warLeaderNpc(f){
   let n=f.leader?findNpc(f.leader):null;
   if(n&&n.alive) return n;
-  const lg=(f.leader&&!n)?inferGender({name:f.leader},0.2):(Math.random()<0.8?'男':'女');
+  const wr=f.leader&&!n?worldRecordOf(S,f.leader):null;
+  const lg=wr&&wr.gender?wr.gender:((f.leader&&!n)?inferGender({name:f.leader},0.2):(Math.random()<0.8?'男':'女'));
   const nm=(f.leader&&!n)?f.leader:makeRankName(lg);
   n=findNpc(nm);
   if(!n||!n.alive){
-    n=normNpc({name:nm, gender:lg, age:rnd(38,62),
+    n=normNpc({name:nm, gender:lg, age:wr&&wr.age?wr.age:rnd(38,62), realm:wr&&wr.realm?wr.realm:null,
       identity:`${f.name}宗主`, faction:f.name, alignment:f.alignment||'中立',
       personality:[pick(['威严','阴鸷','沉稳','刚烈','倨傲'])], appearance:'气度不凡',
       '武功':foeLeaderWu(f), '谈吐':rnd(50,85), signature:pick(RK_NOTE),
@@ -9562,10 +9666,12 @@ function challengeRanked(name){
   let n=findNpc(r.name);
   if(!n){
     if(!r.gender) r.gender=inferGender(r);
+    const wr=worldRecordOf(S,r.name);
     n=normNpc({name:r.name, gender:r.gender, age:num(r.age)||rnd(35,62), identity:r.note||'修士榜高手', faction:r.faction||'散修',
       alignment:'中立', personality:[pick(['傲','沉稳','狂','谨慎'])], appearance:'气度不凡',
       '武功':r['武功'], realm:r.realm||null, '谈吐':rnd(50,80), signature:r.note||'', relation:'素未谋面', '好感度':25,
       alive:true, secret:'', notes:'修士榜上人物'});
+    if(wr) worldSeed(S,n);
     S.npcs.push(n);
   }
   S.lastChallengeMonth=S.months;
