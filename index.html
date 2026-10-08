@@ -1199,6 +1199,24 @@ function migrate(s){
     }
     s.stubFix2=true;
   }
+  // 10-08 晚：第一版只看名字所在那一句、没看玩家行动，像「陆雪琪立在阶下……她已筑基初阶」这种认不出来。再过一遍带待补标记的人
+  if(!s.stubFix3){
+    const rc=(s.recent||[]).filter(Boolean), pl=s.player||{};
+    const acts=rc.map(r=>String(r.action||'')).concat((s.history||[]).map(h=>String(h&&h.action||''))).join('\n');
+    const txt=rc.map(r=>String(r.action||'')+'\n'+String(r.narrative||'')).join('\n')+'\n'+(s.volumes||[]).map(v=>v&&v.text||'').join('\n');
+    const others=(s.npcs||[]).map(n=>n&&n.name).concat([pl.name]).filter(Boolean);
+    for(const n of (s.npcs||[])){
+      if(!n||!n.stub) continue;
+      const ex=explicitOf(n.name,acts)||{};
+      const all=txt+'\n'+(n.life||[]).map(x=>x&&x.text||'').join('。');
+      const g=ex.gender||guessGender(Object.assign({},n,{gender:''}),all,pl.gender,true,others);
+      if(g&&g!==n.gender&&!n.avatarLocked) n.gender=g;
+      if(ex.age) n.age=ex.age;
+      const rt=ex.realm||guessRealm(n,all,pl,true,others);
+      if(rt&&(ex.realm||(n.realm&&n.realm.major<0&&rt!=='凡人')||/炼气|筑基|金丹|元婴|化神|合体|渡劫|大乘/.test(nameCtx(n.name,all,others)))){ const r=parseRealm(rt); if(r){ n.realm=r; syncPower(n); } }
+    }
+    s.stubFix3=true;
+  }
   // 每次读档都过一遍：性别不对、年纪差两档的脸重分（手选锁定的不动）
   for(const n of (s.npcs||[])) if(n) avSlotOf(n);
   if(s.player) avSlotOf(s.player);
@@ -1348,12 +1366,19 @@ function inferGender(o,femaleRate){
 }
 /* 10-08：模型没写性别/年龄的新人物（尤其是引擎替它补面板的），先拿剧情原文判，判不出再按名字。
    pg 是主角性别：主角是男的，「他」可能是在说主角，只算弱证据；「她」才算硬证据，反之亦然。 */
-function genderFromText(nm,text,pg){
+// 名字后面一段：最多两句、60 字，碰到别的人名就截住（代词多半是在说那个人了）
+function afterName(text,i,nm,others,len,sents){
+  let a=text.slice(i+nm.length,i+nm.length+(len||60));
+  { let k=0,c=0; for(;k<a.length;k++){ if(/[。！？\n]/.test(a[k])&&++c>=(sents||2)){ k++; break; } } a=a.slice(0,k); }   // 不用后行断言，老手机浏览器不认
+  let cut=a.length; for(const o of (others||[])){ if(!o||o===nm||nm.indexOf(o)>=0) continue; const j=a.indexOf(o); if(j>=0&&j<cut) cut=j; }
+  return a.slice(0,cut);
+}
+function genderFromText(nm,text,pg,others){
   text=String(text||''); nm=String(nm||''); if(!nm||!text) return '';
   let f=0,m=0,i=text.indexOf(nm);
   const wF=pg==='女'?1:3, wM=pg==='男'?1:3;
   while(i>=0){
-    const after=text.slice(i+nm.length,i+nm.length+24).split(/[。！？\n]/)[0];
+    const after=afterName(text,i,nm,others);
     const near=text.slice(Math.max(0,i-6),i).concat(text.slice(i+nm.length,i+nm.length+6));
     f+=(after.match(/她/g)||[]).length*wF; m+=(after.match(/他/g)||[]).length*wM;
     if(/姑娘|仙子|师姐|师妹|姐姐|妹妹|娘子|夫人|婆婆|小姐|少女|女修|丫头|妇人|老妪/.test(near)) f+=3;
@@ -1363,30 +1388,41 @@ function genderFromText(nm,text,pg){
   return f>m?'女':(m>f?'男':'');
 }
 // strict：只认身份字眼、剧情原文、名字用字，判不出返回空（读档补救时用，免得凭哈希乱翻）
-function guessGender(o,text,pg,strict){
+function guessGender(o,text,pg,strict,others){
   o=o||{}; const g=String(o.gender||'');
   if(/女/.test(g)) return '女'; if(/男/.test(g)) return '男';
   const t=`${o.identity||''} ${o.relation||''} ${o.appearance||''} ${o.notes||''}`;
   if(G_F_WORD.test(t)&&!G_M_WORD.test(t)) return '女';
   if(G_M_WORD.test(t)&&!G_F_WORD.test(t)) return '男';
-  const byText=genderFromText(o.name,text,pg); if(byText) return byText;
+  const byText=genderFromText(o.name,text,pg,others); if(byText) return byText;
   if(G_F_NAME.test(String(o.name||'').slice(1))) return '女';
   return strict?'':inferGender(o);
 }
 // 名字所在那句话（前后各截到句号），判境界、关系都只看这里，免得串到旁人身上
-function nameCtx(nm,text){
+function nameCtx(nm,text,others){
   nm=String(nm||''); text=String(text||''); let out=''; if(!nm) return out;
   let i=text.indexOf(nm);
-  while(i>=0){ out+=' '+text.slice(Math.max(0,i-14),i).split(/[。！？\n]/).pop()+text.slice(i,i+nm.length+20).split(/[。！？\n]/)[0]; i=text.indexOf(nm,i+nm.length); }
+  while(i>=0){ out+=' '+text.slice(Math.max(0,i-14),i).split(/[。！？\n]/).pop()+nm+afterName(text,i,nm,others,40,2); i=text.indexOf(nm,i+nm.length); }
   return out;
+}
+/* 玩家在行动里亲手写明的：「陆雪琪(16岁，女，筑基初阶)」。这是玩家定的，比模型和引擎猜的都准 */
+function explicitOf(nm,text){
+  nm=String(nm||''); text=String(text||''); if(!nm) return null;
+  const esc=nm.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const m=text.match(new RegExp(esc+'\\s*[（(]([^）)]{1,40})[）)]')); if(!m) return null;
+  const t=m[1], o={};
+  if(/女/.test(t)&&!/男/.test(t)) o.gender='女'; else if(/男/.test(t)&&!/女/.test(t)) o.gender='男';
+  const a=t.match(/([0-9]{1,4}|[一二三四五六七八九十百]+)\s*岁/); if(a){ const n=cnToNum(a[1]); if(n>0) o.age=n; }
+  const r=t.match(/(?:炼气|练气|筑基|金丹|结丹|元婴|化神|合体|渡劫|大乘)[^，,、；;]{0,5}|凡人/); if(r){ const x=r[0]==='凡人'?'凡人':fixRealmText(r[0]); if(parseRealm(x)) o.realm=x; }
+  return Object.keys(o).length?o:null;
 }
 /* 10-08：没写境界不再一律当凡人。先找那句话里写明的境界，再看身份关系：师父长老高一个大境界，
    师兄师姐略高，师弟师妹略低，同门平辈上下两阶；掌柜村民这类才是凡人。strict 时没线索返回空。 */
 const MORTAL_WORD=/掌柜|村民|村妇|猎户|小二|农户|农夫|凡人|樵夫|渔夫|货郎|伙计|佃户|书生|官差|衙役|镖师|郎中|商贩|乞丐|仆役|家丁/;
 const CULT_WORD=/师兄|师弟|师姐|师妹|同门|弟子|修士|道友|散修|长老|师父|师尊|师叔|师伯|峰主|掌门|宗主|真人|上人|道长|修为|灵根/;
 function realmFromIdx(i){ i=Math.max(1,Math.min(30,Math.round(i))); return realmText(i<=9?{major:0,minor:i,perfect:false,ascended:false}:{major:Math.floor((i-10)/3)+1,minor:(i-10)%3+1,perfect:false,ascended:false}); }
-function guessRealm(o,text,p,strict){
-  o=o||{}; const ctx=nameCtx(o.name,text);
+function guessRealm(o,text,p,strict,others){
+  o=o||{}; const ctx=nameCtx(o.name,text,others);
   const m=ctx.match(/(?:炼气|练气|筑基|金丹|结丹|元婴|化神|合体|渡劫|大乘)(?:[一二三四五六七八九0-9]+[阶层重]|初期|中期|后期|大圆满|圆满)?/);
   if(m){ const t=fixRealmText(m[0]); if(parseRealm(t)) return t; }
   const id=`${o.identity||''} ${o.relation||''} ${o.notes||''} ${ctx}`;
@@ -1413,10 +1449,10 @@ function guessRel(o,text,p){
   return r==='师尊'?'师父':r;
 }
 // 年龄：剧情或身份里写了几岁/少女/老者就照着来，否则按境界给个合理区间
-function guessAge(o,text){
+function guessAge(o,text,others){
   o=o||{}; const nm=String(o.name||''); text=String(text||'');
   let ctx=`${o.identity||''} ${o.appearance||''} ${o.notes||''}`;
-  if(nm){ let i=text.indexOf(nm); while(i>=0){ ctx+=' '+text.slice(Math.max(0,i-10),i).split(/[。！？\n]/).pop()+text.slice(i,i+nm.length+16).split(/[。！？\n]/)[0]; i=text.indexOf(nm,i+nm.length); } }
+  if(nm) ctx+=nameCtx(nm,text,others);
   const m=ctx.match(/([0-9]{1,4}|[一二三四五六七八九十百千]+)\s*来?岁/);
   if(m){ const n=cnToNum(m[1]); if(n>0&&n<5000) return n; }
   if(/孩童|稚童|小童|童子|女童|男童|小娃|孩子/.test(ctx)) return rnd(7,12);
@@ -5878,15 +5914,21 @@ function validateTurn(d,action,judge,state,opt){
   for(const k of ['npcUpdates','questUpdates','newQuests','rankingUpdates','rankingAdd','factionUpdates','newVendettas','taughtNpc','worldUpdates','newWorldEvents','options','newNpcs'])
     d[k]=d[k].filter(x=>x&&typeof x==='object'&&!Array.isArray(x));
   const names=new Set((state.npcs||[]).map(n=>n.name));
+  // 判性别年龄境界用的原文：玩家这回的行动 + 本回剧情；others 是这回提到的所有人名，代词碰到别人就截住
+  const actTxt=String(action&&typeof action==='object'?(action.text||action.action||''):(action||''));
+  const src=actTxt+'\n'+String(d.narrative||'');
+  const others=[...names,plain(state.player&&state.player.name),...d.newNpcs.map(n=>plain(n.name)),...d.npcUpdates.map(u=>plain(u.name)),...((d.scene&&Array.isArray(d.scene.present))?d.scene.present.map(plain):[])].filter(x=>x&&x.length>=2);
+  const pg=state.player&&state.player.gender;
   d.newNpcs=d.newNpcs.filter(n=>{
     const nm=plain(n.name);
     if(!nm||GENERIC_NAME_RE.test(nm)) return false;      // 还不知道姓名的路人：这回先不入人物表
     n.name=nm;
-    if(!/[男女]/.test(plain(n.gender))) n.gender=guessGender(Object.assign({},n,{gender:''}),d.narrative,state.player&&state.player.gender);
+    const ex=explicitOf(nm,actTxt); if(ex) Object.assign(n,ex);
+    if(!/[男女]/.test(plain(n.gender))) n.gender=guessGender(Object.assign({},n,{gender:''}),src,pg,false,others);
     if(!plain(n.identity)) n.identity=plain(n.faction)||'散修';
     if(!plain(n.secret)) n.secret='暂无人知';
-    const age=toNum(n.age); n.age=age!=null&&age>0?age:guessAge(n,d.narrative);
-    if(!plain(n.realm)&&!plain(n['境界'])) n.realm=guessRealm(n,d.narrative,state.player);
+    const age=toNum(n.age); n.age=age!=null&&age>0?age:guessAge(n,src,others);
+    if(!plain(n.realm)&&!plain(n['境界'])) n.realm=guessRealm(n,src,state.player,false,others);
     else if(!parseRealm(n.realm||n['境界'])) n.realm=fixRealmText(n.realm||n['境界']);
     names.add(nm); return true;
   });
@@ -5902,18 +5944,23 @@ function validateTurn(d,action,judge,state,opt){
       if(!/^[\u4e00-\u9fa5·]{2,6}$/.test(nm)||GENERIC_NAME_RE.test(nm)||/的|们|众|诸位|一行|弟子$|长老们/.test(nm)) return;
       if(((state.world&&state.world.factions)||[]).some(f=>f.name===nm)) return;
       u=u||{}; const pl=state.player||{}, pf=plain(pl.faction);
-      const rel=plain(u.relation)||guessRel({name:nm},d.narrative,pl);
+      const rel=plain(u.relation)||guessRel({name:nm},src,pl);
       const sectRel=/师兄|师弟|师姐|师妹|师父|师叔|师伯|同门/.test(rel)&&pf&&!/散修|散人|凡人|^无$/.test(pf);
       const o={name:nm,identity:plain(u.identity)||(sectRel?`${pf}${/师父|师叔|师伯/.test(rel)?'长辈':'弟子'}`:'萍水相逢'),faction:plain(u.faction)||(sectRel?pf:''),
         relation:rel||'萍水相逢',好感度:50,secret:'暂无人知',personality:[],appearance:'',notes:plain(u.notes)||'',stub:true};
-      o.realm=plain(u.realm)?(parseRealm(u.realm)?plain(u.realm):fixRealmText(u.realm)):guessRealm(o,d.narrative,pl);
-      o.gender=guessGender(Object.assign({},o,{gender:plain(u.gender)}),d.narrative,state.player&&state.player.gender);
-      o.age=toNum(u.age)>0?toNum(u.age):guessAge(o,d.narrative);
+      const ex=explicitOf(nm,actTxt)||{};
+      o.realm=ex.realm||(plain(u.realm)?(parseRealm(u.realm)?plain(u.realm):fixRealmText(u.realm)):guessRealm(o,src,pl,false,others));
+      o.gender=ex.gender||guessGender(Object.assign({},o,{gender:plain(u.gender)}),src,pg,false,others);
+      o.age=ex.age||(toNum(u.age)>0?toNum(u.age):guessAge(o,src,others));
       d.newNpcs.push(o);
       names.add(nm); };
     for(const u of d.npcUpdates) stub(u.name,u);
     if(d.scene&&Array.isArray(d.scene.present)) for(const nm of d.scene.present) if(typeof nm==='string') stub(nm);
     if(d.duel&&d.duel.opponent) stub(d.duel.opponent);
+    // 已在人脉里的人，玩家在行动里写明了「(16岁，女，筑基初阶)」：照玩家的改
+    for(const n of (state.npcs||[])){ const ex=explicitOf(n.name,actTxt); if(!ex) continue;
+      let u=d.npcUpdates.find(x=>plain(x.name)===n.name); if(!u){ u={name:n.name}; d.npcUpdates.push(u); }
+      u._explicit=ex; }
   }
   d.npcUpdates=d.npcUpdates.filter(u=>names.has(plain(u.name)));
   for(const u of d.npcUpdates){ u.name=plain(u.name); numeric(u,['好感度','爱恋值','age']); }
@@ -6585,6 +6632,13 @@ function applyTurn(d, action, judge){
     // 境界只许剧情往上推一小阶（真正的修炼由引擎按月算）；战力跟着境界走，不收模型给的武功增减
     if(n.stub&&u.realm&&!n.stubR&&parseRealm(u.realm)){ n.realm=parseRealm(u.realm); syncPower(n); n.stubR=true; }
     else if(u.realm&&n.realm){ const nr=parseRealm(u.realm); if(nr&&realmIndex(nr)>realmIndex(n.realm)&&realmIndex(nr)-realmIndex(n.realm)<=1){ n.realm=nr; syncPower(n); news(`${n.name}修为进至${realmText(nr)}`); } }
+    // 玩家亲手写明的：性别照改；年龄、境界只改引擎补出来的人（防借机给熟人改修为）
+    if(u._explicit){ const ex=u._explicit;
+      if(ex.gender&&ex.gender!==n.gender&&!n.avatarLocked){ n.gender=ex.gender; n.avatar=avPickSlot(n); n.portrait=avDesc(n.avatar); }
+      if(ex.gender) n.stubG=true;
+      if(n.stub&&ex.age){ n.age=ex.age; n.stubA=true; }
+      if(n.stub&&ex.realm&&parseRealm(ex.realm)){ n.realm=parseRealm(ex.realm); syncPower(n); n.stubR=true; }
+    }
     // 引擎替它补的面板：模型头一回写出性别/年龄，照它的改（只改一次）
     if(n.stub&&/[男女]/.test(plain(u.gender))&&!n.stubG){ const g=/女/.test(u.gender)?'女':'男'; if(g!==n.gender){ n.gender=g; n.avatar=avPickSlot(n); n.portrait=avDesc(n.avatar); } n.stubG=true; }
     if(n.stub&&num(u.age)>0&&!n.stubA){ n.age=num(u.age); n.stubA=true; }
