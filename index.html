@@ -5767,6 +5767,25 @@ function validateTurn(d,action,judge,state,opt){
     if((state.world.closedTitles||[]).some(t=>sameMatter(t,u.title))&&(!old||sameMatter(u.cause,old.cause)||plain(u.cause)===old.result)) return false;
     return true;
   });
+  // 拿走的东西必须是主角手上有的、而且正文写到了的：防止正文写「交出筑基丹」，itemsRemove 却扣了结婴丹
+  if(ch.itemsRemove&&ch.itemsRemove.length&&state.player&&state.player.items){
+    const story=String(d.narrative||'')+String(d.summary||'')+String(action||'');
+    const keep=[];
+    for(const x of ch.itemsRemove){
+      const raw=plain(x&&typeof x==='object'?x.name:x); if(!raw) continue;
+      const real=resolveBagName(state.player,raw);
+      if(!real) continue;                                   // 手上本来就没有：没什么可扣的
+      if(Object.values(ch.itemsAdd||{}).some(l=>(l||[]).some(it=>it&&plain(it.name)===real))){ keep.push(x); continue; }   // 同名一加一减是重炼，交给结算
+      const said=[raw,real,splitItemCount(raw).name].some(t=>t&&story.includes(t))||real.length>=3&&story.includes(real.slice(0,2));
+      if(!said){
+        const pills=stackItems(state.player.items['丹药']).map(g=>g.item.name+(g.count>1?'×'+g.count:'')).join('、')||'无';
+        hard(`itemsRemove里要拿走【${real}】，可正文里没写到它。正文交出、用掉的是什么，itemsRemove就写什么；主角手上没有的东西不能给出去（他现在的丹药：${pills}）。请改正文或改itemsRemove，两边对上`);
+        continue;                                           // 宽松收下时：正文没写到的不扣
+      }
+      keep.push(x);
+    }
+    ch.itemsRemove=keep;
+  }
   // 买东西要付得起：钱和货一起入账，不能钱扣到零、货照收
   { const spend=-num(ch.money), buys=ch.itemsAdd&&Object.values(ch.itemsAdd).some(a=>(a||[]).length);
     if(spend>0&&buys&&spend>num(state.player.money)) hard(`灵石不够：身上只有${num(state.player.money)}块，付不出${spend}块。请改写成没买成、少买或赊账，itemsAdd与money要对得上`,()=>{ ch.itemsAdd={}; delete ch.money; }); }
@@ -6152,13 +6171,19 @@ function stackItems(list){
   return [...m.values()];
 }
 function bagCount(p,name){ let c=0; for(const cat in (p.items||{})) for(const x of p.items[cat]||[]) if(x&&x.name===name) c++; return c; }
+// 行囊里对得上的那件东西叫什么：先认原名，再拆数量，再认差几个字的（「火球符」对「下品火球符」）；都对不上返回 null
+function resolveBagName(p,name){
+  name=plain(name); if(!name||!p||!p.items) return null;
+  if(bagCount(p,name)) return name;
+  const sp=splitItemCount(name); if(sp.name!==name&&bagCount(p,sp.name)) return sp.name;
+  const nm=sp.name; let best=null;
+  for(const cat in p.items) for(const x of p.items[cat]||[]) if(x&&x.name&&x.name.length>=2&&nm.length>=2&&(x.name.includes(nm)||nm.includes(x.name))&&(!best||Math.abs(x.name.length-nm.length)<Math.abs(best.length-nm.length))) best=x.name;
+  return best;
+}
 function takeItems(p,name,n){
   n=Math.max(1,Math.round(num(n)||1)); let got=0; name=plain(name); if(!name) return 0;
-  if(!bagCount(p,name)){ const sp=splitItemCount(name); if(sp.name!==name){ name=sp.name; if(n===1) n=sp.n; } }
-  if(!bagCount(p,name)){   // 名字差几个字（「火球符」对「下品火球符」）：认最像的那一件
-    let best=null; for(const cat in p.items) for(const x of p.items[cat]||[]) if(x&&x.name&&x.name.length>=2&&(x.name.includes(name)||name.includes(x.name))&&(!best||Math.abs(x.name.length-name.length)<Math.abs(best.length-name.length))) best=x.name;
-    if(best) name=best;
-  }
+  if(!bagCount(p,name)){ const sp=splitItemCount(name); if(sp.name!==name&&n===1) n=sp.n; }
+  name=resolveBagName(p,name); if(!name) return 0;
   for(const cat in p.items){ const list=p.items[cat]; for(let i=list.length-1;i>=0&&got<n;i--){ if(list[i]&&list[i].name===name){ list.splice(i,1); got++; } } if(got>=n) break; }
   return got;
 }
