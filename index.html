@@ -659,6 +659,24 @@ details.eggd .ln b.c{color:var(--good)} details.eggd .ln b.x{color:var(--danger)
 details.eggd .ln.st{color:var(--ink-2)}
 .trait.fate{border:1px solid #B8923A;color:#76540E;background:#FAEEDA}
 details.eggd.fate>summary{color:inherit;font-size:inherit}
+
+/* ===== 侧栏卡片折叠与长列表截断 ===== */
+.foldbar{display:flex;justify-content:flex-end;gap:10px;margin:-4px 2px 8px;font-size:12px}
+.foldbar button{background:none;border:none;padding:2px 0;color:var(--ink-2);font-family:inherit;font-size:12px;cursor:pointer;letter-spacing:1px}
+.foldbar button:hover{color:var(--jade-ink)}
+.card.fz>h3{cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent;justify-content:flex-start}
+.card.fz>h3.nosm::after{margin-left:auto}
+.card.fz>h3::after{content:"";flex:0 0 auto;width:7px;height:7px;margin-left:10px;border-right:1.5px solid var(--ink-2);border-bottom:1.5px solid var(--ink-2);transform:rotate(45deg) translateY(-2px);transition:transform .18s}
+.card.fz>h3 small{margin-left:auto}
+.card.fz>h3 .fc{display:none;font-style:normal;font-size:12px;color:var(--ink-2);letter-spacing:0;margin-left:6px;font-family:var(--font-body)}
+.card.fold>h3 .fc{display:inline}
+.card.fold>h3::after{transform:rotate(-45deg) translateY(0)}
+.card.fold{padding-bottom:6px}
+.card.fold>h3{border-bottom:none;margin-bottom:0;padding-bottom:4px}
+.card.fold>*:not(h3){display:none!important}
+.clamp-hide{display:none!important}
+.clampbtn{display:block;width:100%;margin-top:6px;padding:5px 0;background:var(--panel);border:1px dashed var(--line);border-radius:3px;color:var(--ink-2);font-family:inherit;font-size:12.5px;cursor:pointer;letter-spacing:1px}
+.clampbtn:hover{border-color:var(--jade);color:var(--jade-ink)}
 </style>
 </head>
 <body>
@@ -8836,6 +8854,71 @@ function renderRealmStrip(p){
   document.documentElement.style.setProperty('--rsh',box.offsetHeight+'px');
 }
 
+
+/* ================= 侧栏：卡片折叠与长列表截断 =================
+   点卡片标题收起或展开，收起时标题右边显示条数；状态存在本机，刷新页面也不丢。
+   一张卡里超过 8 条的，只露前 6 条，底下一个「展开其余 N 条」。
+   侧栏内容随时会被各个 render 函数重画，所以用 MutationObserver 兜着，重画完就重新整理一遍。 */
+const FOLD_ROW='.item,.npc,.rank,.quest,.disc,.lrow,.hall,.cand,.faction,.foe,.artrow,.skillrow,.nrow';
+const CLAMP_OVER=8, CLAMP_SHOW=6;
+let FOLD=new Set(), CLAMP_OPEN=new Set();
+try{ FOLD=new Set(JSON.parse(localStorage.getItem('xian_fold')||'[]')); }catch(_){}
+function foldSave(){ try{ localStorage.setItem('xian_fold',JSON.stringify([...FOLD])); }catch(_){} }
+function cardKey(c){ const b=c.querySelector(':scope>div[id]'); if(b) return b.id; const h=c.querySelector(':scope>h3'); return h?h.textContent.replace(/\s+/g,'').slice(0,12):''; }
+function rowsOf(box){ return box?[...box.children].filter(x=>x.matches&&x.matches(FOLD_ROW)):[]; }
+let foldObs=null, foldBusy=false;
+function foldSweep(){
+  const side=document.getElementById('sidebar'); if(!side||foldBusy) return;
+  foldBusy=true; if(foldObs) foldObs.disconnect();
+  try{
+    side.querySelectorAll('.tabpane').forEach(pane=>{
+      if(!pane.querySelector(':scope>.foldbar')){
+        const bar=document.createElement('div'); bar.className='foldbar';
+        bar.innerHTML='<button data-f="close">全部收起</button><button data-f="open">全部展开</button>';
+        pane.prepend(bar);
+      }
+    });
+    side.querySelectorAll('.tabpane>.card').forEach(c=>{
+      const h=c.querySelector(':scope>h3'); if(!h) return;
+      const k=cardKey(c); if(!k) return;
+      c.dataset.fk=k; c.classList.add('fz');
+      h.classList.toggle('nosm',!h.querySelector(':scope>small'));
+      if(!h.querySelector(':scope>.fc')){ const em=document.createElement('em'); em.className='fc'; const sm=h.querySelector(':scope>small'); sm?h.insertBefore(em,sm):h.appendChild(em); }
+      const boxes=[...c.querySelectorAll(':scope>div[id]')];
+      let n=0; for(const b of boxes) n+=rowsOf(b).length;
+      h.querySelector(':scope>.fc').textContent=n?`· ${n}`:'';
+      c.classList.toggle('fold',FOLD.has(k));
+      for(const b of boxes){
+        const rows=rowsOf(b); let btn=b.nextElementSibling&&b.nextElementSibling.classList.contains('clampbtn')?b.nextElementSibling:null;
+        if(rows.length<=CLAMP_OVER){ rows.forEach(r=>r.classList.remove('clamp-hide')); if(btn) btn.remove(); continue; }
+        const open=CLAMP_OPEN.has(b.id||k);
+        rows.forEach((r,i)=>r.classList.toggle('clamp-hide',!open&&i>=CLAMP_SHOW));
+        if(!btn){ btn=document.createElement('button'); btn.className='clampbtn'; b.after(btn); }
+        btn.dataset.ck=b.id||k;
+        btn.textContent=open?'收起 ▴':`展开其余 ${rows.length-CLAMP_SHOW} 条 ▾`;
+      }
+    });
+  }finally{
+    foldBusy=false;
+    if(foldObs) foldObs.observe(side,{childList:true,subtree:true});
+  }
+}
+function foldInit(){
+  if(typeof MutationObserver==='undefined'||typeof requestAnimationFrame==='undefined') return;
+  const side=document.getElementById('sidebar'); if(!side||foldObs) return;
+  let t=0;
+  foldObs=new MutationObserver(()=>{ if(t) return; t=requestAnimationFrame(()=>{ t=0; foldSweep(); }); });
+  side.addEventListener('click',e=>{
+    const fb=e.target.closest('.foldbar button');
+    if(fb){ const pane=fb.closest('.tabpane'); pane.querySelectorAll(':scope>.card.fz').forEach(c=>{ fb.dataset.f==='close'?FOLD.add(c.dataset.fk):FOLD.delete(c.dataset.fk); }); foldSave(); foldSweep(); return; }
+    const cb=e.target.closest('.clampbtn');
+    if(cb){ const k=cb.dataset.ck; CLAMP_OPEN.has(k)?CLAMP_OPEN.delete(k):CLAMP_OPEN.add(k); foldSweep(); return; }
+    const h=e.target.closest('.card.fz>h3');
+    if(h&&!e.target.closest('button,a,input,select,.flink')){ const c=h.parentElement, k=c.dataset.fk; FOLD.has(k)?FOLD.delete(k):FOLD.add(k); foldSave(); foldSweep(); }
+  });
+  foldSweep();
+}
+if(typeof document!=='undefined'&&document.readyState!=='loading') setTimeout(foldInit,0); else if(typeof document!=='undefined') document.addEventListener('DOMContentLoaded',foldInit);
 /* ================= 品阶色与彩蛋标志 =================
    品阶色：gq1…gq12，色相分黄玄地天四阶，深浅分下中上品。
    彩蛋：主角名、彩蛋物件、彩蛋功法名后挂「◈」；点开看「能」与「价」。数都照引擎里的彩蛋表写死，不交给模型。 */
