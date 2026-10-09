@@ -1541,6 +1541,7 @@ function decreeRecord(st,text,at,old){
   while((m=re.exec(text))){
     const f=decreeBody(m[2]); if(!f) continue;
     const raw=m[1];   // 前面可能连着「我送」「去找」，比对时看结尾是不是这个人的名字
+    if(/(?:乞丐|老者|老人|老头|老妪|少年|少女|女子|男子|修士|道人|和尚|掌柜|小二)$/.test(raw)) continue;   // 10-09 夜：「遇到一老乞丐」这种不是人名
     const last=st.decrees[st.decrees.length-1];
     if(last&&last.raw===raw&&JSON.stringify(last.f)===JSON.stringify(f)) continue;
     st.decrees.push({raw,f,at:num(at),old:!!old,done:[]});
@@ -3442,6 +3443,7 @@ function factionYear(){
     const atWar=S.clan&&S.clan.war&&S.clan.war.foe===f.name;
     if(f.low>=3&&!atWar&&!(S.player&&S.player.faction===f.name)){
       w.factions=w.factions.filter(x=>x!==f); w.goneFactions=w.goneFactions||[]; w.goneFactions.push(f.name);
+      for(const n of (S.npcs||[])) if(n&&n.faction===f.name){ n.faction='散修'; if(!String(n.identity||'').startsWith('原'+f.name)) n.identity=`原${f.name}${n.identity?'，'+String(n.identity).replace(f.name,''):''}`; if(typeof appendNote==='function') appendNote(n,`${f.name}已散`); }
       news(`${f.name}撑不下去了，山门一散，弟子各投别家`);
       rememberKnowledge(`${f.name}已经散了`,'风闻','已证实');
     }
@@ -3540,6 +3542,8 @@ function relicPick(major,market){
   for(let i=0;i<pool.length;i++){ x-=w[i]; if(x<=0) return pool[i]; } return pool[pool.length-1];
 }
 function relicChance(base){ const p=S.player; return base*(p&&p.egg&&EGG_BOOK[p.egg]&&RELICS.some(r=>r.src===EGG_BOOK[p.egg]&&!relicSeen().includes(r.id))?2:1); }
+// 按名字认致敬物：全名、去掉书名号和「玉简」后缀都算
+function relicByName(nm){ const t=bareArtName(plain(nm)).replace(/[《》「」【】]/g,''); if(!t) return null; return RELICS.find(r=>r.name===t||bareArtName(r.name)===t)||null; }
 function relicItem(r){
   const it={name:r.name,desc:r.desc,relic:r.id};
   if(r.cat==='法器'){ it.grade=gradeText(r.grade); it.bonus=r.grade; if(r.scale) it.eggScale=1; if(r.noOffer) it.noOffer=1; }
@@ -6296,6 +6300,7 @@ function validateTurn(d,action,judge,state,opt){
     if(miss.G){ const g=guessGender(Object.assign({},n,{gender:''}),src,pg,true,others); n.gender=g||guessGender(Object.assign({},n,{gender:''}),src,pg,false,others); if(g) miss.G=false; }
     if(!plain(n.identity)) n.identity=plain(n.faction)||'散修';
     if(!plain(n.secret)) n.secret='暂无人知';
+    { const rl=plain(n.relation); if(/[，,；;]/.test(rl)){ const parts=rl.split(/[，,；;]/); n.relation=parts[0]; n.notes=[plain(n.notes),parts.slice(1).join('，')].filter(Boolean).join('；'); } }
     if(miss.A){ const a=ageEvidence(n,src,others); n.age=a||guessAge(n,src,others); if(a) miss.A=false; } else n.age=toNum(n.age);
     if(miss.R){ const r=realmEvidence(n,src,others); n.realm=r||guessRealm(n,src,state.player,false,others); if(r) miss.R=false; }
     else if(!parseRealm(n.realm||n['境界'])) n.realm=fixRealmText(n.realm||n['境界']);
@@ -6849,7 +6854,7 @@ function npcGuard(n,u,ctx){
     else if(PAST_REL.test(nr)||bloodRel(nr)) why='后来认识的人不会变成旧识、亲眷';
     else if(/师父|师尊|师傅|恩师|徒弟|徒儿|^弟子$/.test(nr)&&!/拜师|拜.{0,6}为师|收.{0,4}(?:为徒|徒弟|门下|为弟子)|拜师礼|认.{0,3}师父|入门/.test(all)) why='没有拜师收徒的经过';
     else if(/师兄|师姐|师弟|师妹|同门|师叔|师伯/.test(nr)&&!(S.sect&&plain(n.faction)===S.sect.name)&&!/同门|入门|拜入/.test(all)) why='不是同门';
-    if(why) guardNote(`${n.name}的关系不改成「${nr}」（${why}）`); else out.relation=nr;
+    if(why) guardNote(`${n.name}的关系不改成「${nr}」（${why}）`); else { const parts=nr.split(/[，,；;、]/); out.relation=parts[0]; if(parts.length>1&&typeof appendNote==='function') appendNote(n,parts.slice(1).join('，')); }
   }
   const wr=typeof worldRecordOf==='function'?worldRecordOf(S,n.name):null;
   const moved=all.includes(n.name)&&/拜入|入门|加入|投入|投奔|改投|叛出|叛离|逐出|离开.{0,6}(?:宗|门|派|谷|山|阁|宫|家)|收入门下|收为(?:徒|弟子)/.test(all);
@@ -6881,6 +6886,12 @@ function turnSrcCap(d,action,judge){
   if(judge&&judge.realm&&typeof tierOf==='function'){ const t=tierOf(judge.realm.key); if(t) c=Math.max(c,num(t.gradeHi)); }
   const spend=-num(ch.money), txt=String(action&&typeof action==='object'?(action.text||action.action||''):(action||''))+String(d&&d.narrative||'');
   if(spend>0&&/买|购|拍下|拍得|换来|重金|交易|典当|收下这/.test(txt)){ let g=0; for(let i=1;i<RELIC_BASE.length;i++) if(RELIC_BASE[i]<=spend) g=i; c=Math.max(c,g); }
+  // 10-09 夜：正文里某人送、赠、传、赐给主角东西（同一句里），按送东西那人的修为
+  const narr=String(d&&d.narrative||'');
+  for(const n of (S&&S.npcs)||[]){
+    if(!n||!n.alive||!n.name||n.name.length<2||!narr.includes(n.name)) continue;
+    for(const sent of narr.split(/[。！？\n]/)) if(sent.includes(n.name)&&/赠|送|传给|传你|传他|亲传|赐|交给|递给|塞给|授|给了?(?:他|你|主角)/.test(sent)){ const r=typeof npcRealmOf==='function'?npcRealmOf(n):null; if(r) c=Math.max(c,capForMajor(r.major)); break; }
+  }
   return c;
 }
 function capNote(t){ S.capLog=S.capLog||[]; S.capLog.push({turn:num(S.turn),date:S.date||'',text:t}); while(S.capLog.length>200) S.capLog.shift(); }
@@ -7035,7 +7046,7 @@ function applyTurn(d, action, judge){
     if(failed&&dm>0){ refused.push('灵石+'+dm); dm=0; }
     const rcap=[20,60,200,600,1500,4000,8000,15000][Math.max(0,(p.realm&&p.realm.major)||0)]||20;
     if(dm>0&&hasTag(p,'贪财')&&TRADE_RE.test(String(action||'')+plain(d.summary))) dm=Math.round(dm*tagMul(p,'trade'));   // 贪财：买卖多赚一成
-    if(dm>0){ const cap=Math.round((fateTier(fate)==='great'?rcap*5:rcap)*Math.max(0.5,Math.min(months,6))*fdm().money*(fdm().freeAct?5:1)); if(dm>cap){ capNote(`灵石+${dm} 超出本境横财上限，按+${cap}入账`); dm=cap; } }   // 防通胀：横财要有来由，按境界封顶
+    if(dm>0){ const cap=Math.round((fateTier(fate)==='great'?rcap*5:rcap)*Math.max(0.5,Math.min(months,6))*fdm().money*(fdm().freeAct?5:1)); if(dm>cap){ capNote(`灵石+${dm} 超出本境横财上限，按+${cap}入账`); (d.fixNotes=d.fixNotes||[]).push(`灵石只入账 ${cap} 块（正文写的 ${dm} 块超出本境上限）`); dm=cap; } }   // 防通胀：横财要有来由，按境界封顶
     if(dm){ const before=p.money; p.money=Math.max(0,Math.round(p.money+dm)); const real=p.money-before; if(real){ lastDeltas['家财']=real; ledger(`${real>0?'得':'花去'}下品灵石 ${Math.abs(real)} 块（${plain(ch.moneyReason)||plain(d.summary).slice(0,30)}）`); } }
   }
   if(judge&&judge.cult==='闭关'&&!judge.duel&&!judge.convo) S.lastCloseNarr=plain(d.narrative).slice(0,360);
@@ -7047,6 +7058,15 @@ function applyTurn(d, action, judge){
     else guardNote(leave?`正文写主角离开了${cur}，可这回没有叛出、离开的经过，不算数`:`正文写主角入了${nf}，可这回没有拜师入门的经过，不算数`);
   }
   syncSect();
+  // 10-09 夜：刚入门就照正文定位阶（外门、内门、真传；亲传按内门；拜金丹以上的人为师，至少内门）
+  if(S.sect&&!S.sect.own&&S.sect.joined===S.turn&&!S.sect.rankSet){
+    const txt=String(action&&typeof action==='object'?(action.text||action.action||''):(action||''))+'\n'+String(d.narrative||'')+'\n'+String(d.summary||'');
+    let need=/真传/.test(txt)?100:/内门|亲传|入室弟子|关门弟子/.test(txt)?40:/外门/.test(txt)?12:0;
+    const master=(d.npcUpdates||[]).concat((d.newNpcs||[])).some(u=>/^(?:师父|师尊|师傅|恩师)$/.test(plain(u.relation))&&(()=>{ const n=findNpc(u.name)||u; const r=typeof npcRealmOf==='function'?npcRealmOf(n):null; return r&&r.major>=2; })());
+    if(master) need=Math.max(need,40);
+    if(need>num(S.sect.contrib)){ S.sect.contrib=need; ledger(`入${S.sect.name}即为${sectRank(need)}`); }
+    S.sect.rankSet=true;
+  }
   if(ch.contrib&&S.sect){
     let dc=num(ch.contrib);
     if(failed&&dc>0){ refused.push('贡献+'+dc); dc=0; }
@@ -7074,6 +7094,7 @@ function applyTurn(d, action, judge){
     const na=normArt(a);
     if(!na) continue;
     if(artKnown(na.name)) continue;                 // 已经会的不重复入册
+    { const rr=relicByName(na.name); if(rr&&rr.noArt) continue; }   // 10-09 夜：炼神口诀、修真入门这类是参悟的东西，不是功法
     if(failed){ refused.push('功法【'+na.name+'】'); continue; }
     capGrade(p,na,'功法',srcCap);
     if(na.level>NEW_ART_LEVEL_CAP){ capNote(`新学功法【${na.name}】熟练${na.level}，按${NEW_ART_LEVEL_CAP}入册`); na.level=NEW_ART_LEVEL_CAP; }
@@ -7122,6 +7143,7 @@ function applyTurn(d, action, judge){
     if(!p.items[cat]) p.items[cat]=[];
     for(const item of (ch.itemsAdd[cat]||[])){
       if(!item||!item.name) continue;
+      { const rr=relicByName(item.name); if(rr&&!relicSeen().includes(rr.id)&&!item.relic){ const it2=relicItem(rr); (p.items[rr.cat]=p.items[rr.cat]||[]).push(it2); relicGain(it2); ledger(`得到${rr.cat}【${it2.name}】`); continue; } }
       if(cat==='法器'||cat==='玉简') capGrade(p,item,cat,srcCap);
       if(cat==='玉简'){   // 记着自己早就会的功法的玉简：不再入囊，权当温故知新
         const known=p.arts.find(x=>x.name===bareArtName(item.name));
