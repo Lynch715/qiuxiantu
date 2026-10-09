@@ -638,6 +638,27 @@ q{quotes:"「" "」" "『" "』"}
 @media (max-width:900px){#createMask .mbtnrow{bottom:-20px;margin:14px -18px -20px;padding:10px 18px calc(14px + env(safe-area-inset-bottom))}}
 .mbtn.sm{padding:4px 10px;font-size:13px;letter-spacing:1px;white-space:nowrap;min-height:0;flex:0 0 auto}
 .shoprow span{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+
+/* ===== 品阶色（色相分阶，深浅分品）与彩蛋标志 ===== */
+.gq1,.item b.gq1,.artrow b.gq1,.trait.gqt.gq1{color:#A08A5A}.gq2,.item b.gq2,.artrow b.gq2,.trait.gqt.gq2{color:#8C6D2C}.gq3,.item b.gq3,.artrow b.gq3,.trait.gqt.gq3{color:#76540E;font-weight:600}
+.gq4,.item b.gq4,.artrow b.gq4,.trait.gqt.gq4{color:#5B7FA6}.gq5,.item b.gq5,.artrow b.gq5,.trait.gqt.gq5{color:#3D5F92}.gq6,.item b.gq6,.artrow b.gq6,.trait.gqt.gq6{color:#26457E;font-weight:600}
+.gq7,.item b.gq7,.artrow b.gq7,.trait.gqt.gq7{color:#8A6AA8}.gq8,.item b.gq8,.artrow b.gq8,.trait.gqt.gq8{color:#6E4A94}.gq9,.item b.gq9,.artrow b.gq9,.trait.gqt.gq9{color:#55307E;font-weight:600}
+.gq10,.item b.gq10,.artrow b.gq10,.trait.gqt.gq10{color:#C0603A}.gq11,.item b.gq11,.artrow b.gq11,.trait.gqt.gq11{color:#B0431F}.gq12,.item b.gq12,.artrow b.gq12,.trait.gqt.gq12{color:#9A2A0E;font-weight:600;background:#FAEEDA;padding:0 3px;border-radius:2px}
+.trait.gqt{background:transparent;border-color:currentColor}
+.gqkey{font-size:12px;color:var(--ink-2);margin:0 2px 10px;letter-spacing:.5px}
+.eggm{color:#B8923A;margin-left:3px;font-size:.85em;font-weight:400}
+.eggm.dim{color:#A3B0A8}
+details.eggd{margin-top:4px}
+details.eggd>summary{list-style:none;cursor:pointer;display:inline-block;font-size:12px;color:#8C6D2C;user-select:none}
+details.eggd>summary::-webkit-details-marker{display:none}
+details.eggd>summary::after{content:" ▸";font-size:10px}
+details.eggd[open]>summary::after{content:" ▾"}
+details.eggd .ln{font-size:12.5px;line-height:1.7;color:var(--ink)}
+details.eggd .ln b{font-weight:400;margin-right:6px}
+details.eggd .ln b.c{color:var(--good)} details.eggd .ln b.x{color:var(--danger)}
+details.eggd .ln.st{color:var(--ink-2)}
+.trait.fate{border:1px solid #B8923A;color:#76540E;background:#FAEEDA}
+details.eggd.fate>summary{color:inherit;font-size:inherit}
 </style>
 </head>
 <body>
@@ -697,6 +718,7 @@ q{quotes:"「" "」" "『" "』"}
       <div class="card"><h3>❈ 身世</h3><div id="pStory">—</div></div>
     </div>
     <div class="tabpane" id="tab-bag">
+      <div class="gqkey">品阶　<span class="gq2">黄阶</span> · <span class="gq5">玄阶</span> · <span class="gq8">地阶</span> · <span class="gq11">天阶</span>，同一阶颜色越深越好；名后带 <span class="eggm">◈</span> 的来历非凡，点开看能与价</div>
       <div class="card"><h3>❈ 法器</h3><div id="bagWeapons"></div></div>
       <div class="card"><h3>❈ 功法玉简</h3><div id="bagManuals"></div></div>
       <div class="card"><h3>❈ 丹药 <small>冲关丹冲关时自动服下</small></h3><div id="bagMeds"></div></div>
@@ -8813,6 +8835,114 @@ function renderRealmStrip(p){
   const btn=$('rsBreak'); btn.style.display=((bn||canForce(p))&&!cd)?'':'none'; btn.textContent=bn?'冲关':'强冲'; btn.onclick=openBreakthrough;
   document.documentElement.style.setProperty('--rsh',box.offsetHeight+'px');
 }
+
+/* ================= 品阶色与彩蛋标志 =================
+   品阶色：gq1…gq12，色相分黄玄地天四阶，深浅分下中上品。
+   彩蛋：主角名、彩蛋物件、彩蛋功法名后挂「◈」；点开看「能」与「价」。数都照引擎里的彩蛋表写死，不交给模型。 */
+function gq(grade){ const i=gradeIndex(grade); return i?'gq'+i:''; }
+const EGG_CARD={
+  '叶凡':{tag:'铜鼎',can:'护体功法熟练增长 ×2；气血上限 +40；青铜小鼎随境界升到本境最高品阶',cost:'筑基之前灵力 ×0.8'},
+  '石昊':{tag:'骨失',can:'结成金丹那天，被夺走的东西长回来，灵根变为变异灵根',cost:'五灵根，炼气、筑基两境修得最慢'},
+  '王林':{tag:'灰珠',can:'闭关时灵力 ×1.25',cost:'心愿里必有一桩没有结果的牵挂'},
+  '韩立':{tag:'小绿瓶',can:'每满一年凝一颗聚气丹；斗法脱身 +20%；冲关失败率 ×0.9',cost:'声望增长减半'},
+  '萧炎':{tag:'旧戒',can:'开局满三年，戒指里醒来一位金丹以上的老药师收你为徒，并得「丹道奇才」',cost:'前三年灵力为零；心愿里必有一桩「三年之约」'},
+  '白小纯':{tag:'怕死',can:'炼丹判定 +10；每个大境界有一次斗法气血归零不死，留一口气脱身',cost:'冲关失败后丧命 ×1.2'},
+  '陈平安':{tag:'草鞋',can:'体魄每满一年 +1（到 100 为止）；还人情时好感 +20（常人 +10）',cost:'五灵根'},
+  '张小凡':{tag:'烧火棍',can:'斗法中气血低于 30 时，攻伐伤害 ×1.5；烧火棍随境界升到本境最高品阶',cost:'凶名增长 ×1.5'},
+  '苏铭':{tag:'因果',can:'天命骰大凶时不吃亏，反倒撞上一桩来由古怪的机缘',cost:'因果缠身：仇家与麻烦更多'},
+  '孟浩':{tag:'铜镜',can:'每满一年，行囊里第一颗丹药复制一份',cost:'仇家的怨气不会自己消'},
+  '方源':{tag:'残蝉',can:'第一次跨大境界冲关陨落时，蝉替你死：人活着，灵力不清，只是冷却照算',cost:'正道修士初见好感 −15'},
+  '李火旺':{tag:'旧印',can:'天命骰大凶时反成机缘，只是诡异、真假难辨',cost:'「心魔深重」摘不掉：冲关丧命 ×1.5'},
+  '林动':{tag:'黑石',can:'每满一年，黑石头里析出一份灵材',cost:'开局身无分文，家族没落'},
+  '牧尘':{tag:'小塔',can:'斗法开场自带一层护体灵光',cost:'无'},
+  '李强':{tag:'福缘',can:'秘境里撞上机缘的概率 +50%，凶险不变',cost:'没有攻伐、神通类的起手功法'},
+  '孟川':{tag:'裂云',can:'金系单灵根；起手攻伐剑诀「裂云剑诀」，熟练 40',cost:'心愿里必有一桩守护凡人的事'},
+  '东伯雪鹰':{tag:'踏风',can:'风系变异灵根；起手遁术「踏风诀」，熟练 40',cost:'亲人死时心性 −10，并且一定要查清缘由'},
+  '秦羽':{tag:'落星',can:'气血上限 +20；筑基那天，体内的落星石化开，灵根变为天灵根',cost:'灵根残缺（修炼 ×0.4），筑基之前修得极慢'},
+  '叶伏天':{tag:'琴心',can:'天灵根；起手神通「松风琴音」',cost:'同辈（年纪差十岁内、境界不低于你）初见好感 −10'},
+  '秦云':{tag:'本命剑',can:'本命飞剑随境界升到本境最高品阶',cost:'非剑类功法熟练增长 ×0.5'}
+};
+function fateState(p){
+  const fx=p.eggFx||{}, k=p.egg;
+  if((k==='石昊'||k==='秦羽')&&fx.lgDone) return {txt:'已应验：灵根已经变了'};
+  if(k==='萧炎'&&fx.mentorDone) return {txt:'已应验：戒中老药师已醒'};
+  if(k==='方源'&&fx.cicadaUsed) return {txt:'蝉已替死，不再叫了',dim:1};
+  if(k==='白小纯'&&p.realm&&fx.savedMajor===p.realm.major) return {txt:'本境界这一次已经用掉，下个大境界再有'};
+  return null;
+}
+const EGG_ITEM_CARD={
+  '青铜小鼎':'每次冲关成功，品阶升到本境最高',
+  '灰珠子':'闭关时灵力 ×1.25',
+  '小绿瓶':'每满一年凝一颗聚气丹',
+  '旧戒指':'开局满三年，戒中老药师醒来',
+  '铁锅':'炼丹判定 +10',
+  '草鞋':'没有用处，是个念想',
+  '碎瓷片':'没有用处，是个念想',
+  '烧火棍':'气血低于 30 时攻伐伤害 ×1.5；随境界升品',
+  '铜镜':'每满一年，复制行囊里第一颗丹药',
+  '竹笼里的蝉':'第一次跨大境界冲关陨落时替你死一次',
+  '旧印':'天命大凶反成机缘',
+  '黑石头':'每满一年析出一份灵材',
+  '小塔':'斗法开场自带护体灵光',
+  '本命飞剑':'随境界升到本境最高品阶'
+};
+const RELIC_CARD={
+  bamboo:{can:'攻伐功法出手时，一成概率连击一次',cost:p=>{const v=num(p.attributes['神识']);return `神识 50 才驭得动，眼下 ${v}${v>=50?'，驭得动':'，只能当普通法器用'}`;}},
+  mindsong:{can:'参悟后神识每满一年 +1，炼丹、炼器判定 +5',cost:'参悟要闭关一年'},
+  banner:{can:'斗法开场，对手受制一回合',cost:'每场斗法后要温养一个月才能再用'},
+  dou:{can:'参悟后得神通功法「斗字诀」，神通伤害 ×1.2',cost:'参悟难度 85'},
+  xing:{can:'参悟后得遁术功法「行字诀」，熟练 40 起，脱身 +15%',cost:'参悟难度 80'},
+  roc:{can:'参悟后得遁术功法「鹏翼诀」，熟练增长 ×1.5',cost:'参悟难度 88，参悟失败骨片碎掉'},
+  flame:{can:'炼丹判定 +15；斗法攻伐 +10%',cost:p=>{const n=(p.items['灵材']||[]).filter(x=>/火|炎|赤|阳|焰/.test(String(x.name||'')+String(x.desc||''))).length;return `每年要喂一份火属性灵材，断了就灭；行囊里还有 ${n} 份`;}},
+  undying:{can:'参悟后得护体功法「不死皮」，护体熟练增长 ×1.5，气血上限 +10',cost:'修炼极疼：参悟那一年心性 −5'},
+  shard:{can:'剑类功法熟练增长 ×1.3；随境界温养升品',cost:'不能献祭替劫'},
+  skybook:{can:'参悟后心性 +10，冲关丧命 ×0.8',cost:'参悟难度 95，可能一辈子悟不透'},
+  bells:{can:'诡术功法乱心概率 +20%',cost:'正道修士初见好感 −5'},
+  mantile:{can:'体魄 +5；护体功法熟练增长 ×1.2',cost:'蛮性重：心性 −3'},
+  purse:{can:'灵石快见底时，往袋里一摸能借出一笔',cost:p=>{const L=p.relicLoan;return L?`一年后还双倍，还不上收走身上一件东西；眼下欠着，到期须还 ${L.amount*2} 块`:'一年后还双倍，还不上收走身上一件东西';}},
+  stonebug:{can:'闭关时灵力 ×1.15',cost:(p,x)=>{const left=x&&x.bornAge!=null?Math.max(0,Math.round(x.bornAge+100-num(p.age))):null;return `每月吃 5 块灵石，断粮就饿死；只活一百年${left!=null?`，还能活约 ${left} 年`:''}`;}},
+  moonbug:{can:'斗法开场先甩出一道月刃',cost:'每月吃 2 块灵石，断粮就饿死'},
+  coinsword:{can:'斗法时对魔道、邪修伤害 ×1.3',cost:'天命大凶时会发烫'},
+  devour:{can:'斗法胜后，吸来对手一点灵力（本级灵力 +3%）',cost:'名声不好听：每次凶名 +1'},
+  feather:{can:'斗法先手；脱身 +10%',cost:'无'},
+  primer:{can:'参悟后，此后所有参悟难度 −5',cost:'只有炼气期才用得上'},
+  thunder:{can:'参悟后得攻伐功法「惊雷刀」（雷），重手概率 +5%',cost:'参悟难度 78'},
+  starchart:{can:'参悟后气血上限 +10，护体熟练增长 ×1.3',cost:'参悟那一年灵力 ×0.5'},
+  peach:{can:'服下延寿 20 年（受本档寿元奇遇上限约束）',cost:'只此一枚'}
+};
+const RELIC_ART={'斗字诀':['dou','神通伤害 ×1.2'],'行字诀':['xing','脱身 +15%'],'鹏翼诀':['roc','熟练增长 ×1.5'],'不死皮':['undying','护体熟练增长 ×1.5；气血上限 +10'],'惊雷刀':['thunder','重手概率 +5%']};
+const EGG_ART_CARD={'裂云剑诀':'起手熟练 40，金系','踏风诀':'起手熟练 40，风系遁术','松风琴音':'起手熟练 30，神通'};
+const EGG_OPEN=new Set();
+document.addEventListener('toggle',e=>{ const d=e.target; if(d&&d.classList&&d.classList.contains('eggd')&&d.dataset.k){ d.open?EGG_OPEN.add(d.dataset.k):EGG_OPEN.delete(d.dataset.k); } },true);
+function eggMark(dim){ return `<span class="eggm${dim?' dim':''}" title="来历非凡">◈</span>`; }
+function eggBlock(key,can,cost,state,label){
+  return `<details class="eggd" data-k="${esc(key)}"${EGG_OPEN.has(key)?' open':''}><summary>${label||'◈ 能与价'}</summary>`+
+    `<div class="ln"><b class="c">能</b>${esc(can)}</div><div class="ln"><b class="x">价</b>${esc(cost)}</div>${state?`<div class="ln st">${esc(state)}</div>`:''}</details>`;
+}
+function fateTagHtml(p){
+  const c=p&&p.egg&&EGG_CARD[p.egg]; if(!c) return '';
+  const st=fateState(p);
+  return `<div class="tagrow" style="display:block"><details class="eggd fate" data-k="fate"${EGG_OPEN.has('fate')?' open':''}><summary><span class="trait fate"${st&&st.dim?' style="opacity:.6"':''}>◈ 命格·${esc(c.tag)}</span></summary>`+
+    `<div class="ln"><b class="c">能</b>${esc(c.can)}</div><div class="ln"><b class="x">价</b>${esc(c.cost)}</div>${st?`<div class="ln st">${esc(st.txt)}</div>`:''}</details></div>`;
+}
+// 物件是不是彩蛋：致敬物看 relic 字段；人名彩蛋的起手物按名字对上彩蛋表
+function eggItemInfo(x){
+  const p=typeof S!=='undefined'&&S&&S.player; if(!x||!p) return null;
+  if(x.relic&&RELIC_CARD[x.relic]){ const c=RELIC_CARD[x.relic]; const f=v=>typeof v==='function'?v(p,x):v; return {key:'r:'+x.relic,can:f(c.can),cost:f(c.cost)}; }
+  const e=p.egg&&EGGS[p.egg];
+  if(e&&(e.items||[]).some(i=>i.name===x.name)&&EGG_ITEM_CARD[x.name]){
+    const used=x.name==='竹笼里的蝉'&&(p.eggFx||{}).cicadaUsed;
+    return {key:'e:'+x.name,can:EGG_ITEM_CARD[x.name],cost:`出自命格·${EGG_CARD[p.egg]?EGG_CARD[p.egg].tag:''}，代价见面板上的命格`,state:used?'蝉已替死，不再叫了':'',dim:used};
+  }
+  return null;
+}
+function eggArtInfo(a){
+  const p=typeof S!=='undefined'&&S&&S.player; if(!a||!p) return null;
+  if(RELIC_ART[a.name]){ const [id,can]=RELIC_ART[a.name]; return {key:'ra:'+a.name,can,cost:`参悟「${RELIC[id]?RELIC[id].name:''}」所得`}; }
+  const e=p.egg&&EGGS[p.egg];
+  if(e&&(e.arts||[]).some(x=>x.name===a.name)) return {key:'ea:'+a.name,can:EGG_ART_CARD[a.name]||'起手功法',cost:`出自命格·${EGG_CARD[p.egg]?EGG_CARD[p.egg].tag:''}，代价见面板上的命格`};
+  return null;
+}
 function renderPanel(){
   if(!S||!S.player) return;
   const p=S.player;
@@ -8820,12 +8950,12 @@ function renderPanel(){
   renderRealmStrip(p);
   $('pFace').innerHTML=`<div class="avswap" title="换一幅画像">${avatarFace(p,'',null,true)}<span class="avtag">换画像</span></div>`;
   $('pFace').firstChild.onclick=()=>openAvatarPicker(p,true);
-  $('pName').textContent=p.name;
+  $('pName').innerHTML=esc(p.name)+(p.egg&&EGG_CARD[p.egg]?eggMark((fateState(p)||{}).dim):'');
   $('pBiaozi').textContent=p.biaozi?('字 '+p.biaozi):'';
   $('pMeta').textContent=`${p.gender} · ${p.age}岁／寿元${lifespanOf(p)}（${ageNote()}） · ${p.backgroundType||''} · ${p.faction||'散修'}`;
   $('pCult').innerHTML=cultHtml(p);
   $('btnClose').onclick=openClose; $('btnBreak').onclick=openBreakthrough;
-  $('pTags').innerHTML=(p.tags||[]).length?p.tags.map(t=>`<div class="tagrow"><span class="trait ${XTAGS[t]&&XTAGS[t].good<0?'bad':''}">${esc(t)}</span><small>${esc(XTAGS[t]?XTAGS[t].desc:'')}</small></div>`).join(''):'<div class="empty">无</div>';
+  $('pTags').innerHTML=fateTagHtml(p)+((p.tags||[]).length?p.tags.map(t=>`<div class="tagrow"><span class="trait ${XTAGS[t]&&XTAGS[t].good<0?'bad':''}">${esc(t)}</span><small>${esc(XTAGS[t]?XTAGS[t].desc:'')}</small></div>`).join(''):'<div class="empty">无</div>');
   const evil=(p['凶名']||0)>(p['声望']||0)&&p['凶名']>=35;
   const rk=playerRank();
   $('pTitle').innerHTML=`<span class="titlebadge ${evil?'evil':''}">${esc(titleOf(p))}</span>`
@@ -8855,10 +8985,10 @@ function renderPanel(){
   $('pArts').innerHTML=(p.arts&&p.arts.length)?p.arts.map(a=>{
     const lv=num(a.level), d=lastDeltas['功法·'+a.name];
     const mn=mainArt(p);
-    return `<div class="artrow"><b>${esc(a.name)}</b> <span class="trait">${esc(a.style||'攻伐')}</span> <span class="trait">${esc(a.grade||'黄阶下品')}${a.element?'·'+esc(a.element):''}</span>${mn&&mn.name===a.name?' <span class="trait main">主修</span>':''}
+    return `<div class="artrow"><b class="${gq(a.grade||'黄阶下品')}">${esc(a.name)}</b>${eggArtInfo(a)?eggMark():''} <span class="trait">${esc(a.style||'攻伐')}</span> <span class="trait gqt ${gq(a.grade||'黄阶下品')}">${esc(a.grade||'黄阶下品')}${a.element?'·'+esc(a.element):''}</span>${mn&&mn.name===a.name?' <span class="trait main">主修</span>':''}
       <div class="lab" style="display:flex;justify-content:space-between;font-size:12px;color:var(--ink-soft)"><span>熟练</span><span>${lv}${deltaTag(d)}</span></div>
       <div class="bar" style="height:5px"><i style="width:${lv}%;background:#A8862F"></i></div>
-      <div class="idesc">${esc(a.desc||'')}${a.style?`　<span style="color:#7A8A80">（${esc(STYLE_DESC[a.style]||'')}）</span>`:''}</div></div>`;
+      <div class="idesc">${esc(a.desc||'')}${a.style?`　<span style="color:#7A8A80">（${esc(STYLE_DESC[a.style]||'')}）</span>`:''}</div>${(()=>{const e=eggArtInfo(a);return e?eggBlock(e.key,e.can,e.cost):'';})()}</div>`;
   }).join(''):'<div class="empty">尚未习得功法</div>';
   if(hasClan()){
     const c=S.clan;
@@ -8896,7 +9026,7 @@ function itemHtml(list,color,tag){
   if(!list||!list.length) return '<div class="empty">空空如也</div>';
   const groups=tag==='器'?list.map((x,i)=>({item:x,count:1,first:i})):stackItems(list);
   return groups.map(({item:x,count:cn,first:i})=>{ const pl=tag==='药'?pillOf(x.name):null;
-    return `<div class="item"><span class="itag" style="background:${color}">${tag}</span><b>${esc(x.name)}</b>${cn>1?`<b style="color:var(--accent);margin-left:4px">×${cn}</b>`:''}${x.relic?'<span style="color:var(--ink-2);opacity:.55;font-size:12px"> ◇</span>':''}${tag==='器'?`<span style="color:var(--accent);font-size:13px">（${esc(x.grade||gradeText(x.bonus||1))}，战力+${weaponPower(x)}）</span>`:''}<div class="idesc">${esc(x.desc||'')}${pl?`<span style="color:#7A8A80">　${esc(pl.desc)}</span>`:''}</div>${tag==='药'&&!(pl&&pl.brk!=null)?`<button class="mbtn" data-pill="${i}" style="margin-top:5px;padding:3px 12px;font-size:13px">服下</button>`:''}</div>`; }).join('');
+    return `<div class="item"><span class="itag" style="background:${color}">${tag}</span>${(()=>{const g=tag==='器'?gq(x.grade||gradeText(x.bonus||1)):'';const e=eggItemInfo(x);return `<b class="${g}">${esc(x.name)}</b>${e?eggMark(e.dim):''}${cn>1?`<b style="color:var(--accent);margin-left:4px">×${cn}</b>`:''}${tag==='器'?`<span class="${g}" style="font-size:13px">（${esc(x.grade||gradeText(x.bonus||1))}</span><span style="color:var(--ink-2);font-size:13px">，战力+${weaponPower(x)}）</span>`:''}<div class="idesc">${esc(x.desc||'')}${pl?`<span style="color:#7A8A80">　${esc(pl.desc)}</span>`:''}</div>${e?eggBlock(e.key,e.can,e.cost,e.state):''}`;})()}${tag==='药'&&!(pl&&pl.brk!=null)?`<button class="mbtn" data-pill="${i}" style="margin-top:5px;padding:3px 12px;font-size:13px">服下</button>`:''}</div>`; }).join('');
 }
 function manualHtml(list){
   if(!list||!list.length) return '<div class="empty">空空如也</div>';
@@ -8907,11 +9037,11 @@ function manualHtml(list){
     const dc=Math.max(20,m.need+diff().dc+fdm().studyDC+tagAdd(p,'studyDC')-(relicLearned(p,'primer')?5:0));
     let hit=0; for(let r=1;r<=20;r++){ if(r===20||(r!==1&&val+rollMod(r)>=dc)) hit++; }
     const chance=hit*5;
-    return `<div class="item"><span class="itag" style="background:#A8862F">籍</span><b>${esc(x.name)}</b>${x.relic?'<span style="color:var(--ink-2);opacity:.55;font-size:12px"> ◇</span>':''}
-      <span style="color:var(--accent);font-size:13px">（${esc(m.grade)}${m.element?'·'+esc(m.element):''}·${esc(m.style)}）</span>
+    return `<div class="item"><span class="itag" style="background:#A8862F">籍</span><b class="${gq(m.grade)}">${esc(x.name)}</b>${eggItemInfo(x)?eggMark():''}
+      <span class="${gq(m.grade)}" style="font-size:13px">（${esc(m.grade)}${m.element?'·'+esc(m.element):''}·${esc(m.style)}）</span>
       <div class="idesc">${esc(x.desc||'')}</div>
       <div class="idesc" style="color:#7A8A80">闭关 ${m.months} 个月 · 成算约 <b style="color:var(--accent)">${chance}%</b><br>悟性+神识/4 = ${val}　难度 ${dc}${m.mastered?'　✦ 已参透':''}</div>
-      ${m.mastered?'':`<button class="mbtn" data-mi="${i}" style="margin-top:6px;padding:4px 12px;font-size:13px">闭关参悟</button>`}</div>`;
+      ${(()=>{const e=eggItemInfo(x);return e?eggBlock(e.key,e.can,e.cost):'';})()}${m.mastered?'':`<button class="mbtn" data-mi="${i}" style="margin-top:6px;padding:4px 12px;font-size:13px">闭关参悟</button>`}</div>`;
   }).join('');
 }
 function renderBag(){
@@ -10518,7 +10648,7 @@ function renderSlots(){
     const m=slotMeta(i);
     h+=`<div class="item" style="display:block">
       <b>存档位 ${i}</b>
-      <div class="idesc">${m?`${esc(m.player.name)} · ${esc(titleOf(m.player))} · ${esc(m.date||'')} · 第${m.turn}回 · ${m.player.age}岁${m.over?' · 已终局':''}`:'（空）'}</div>
+      <div class="idesc">${m?`${esc(m.player.name)}${m.player.egg?eggMark():''} · ${esc(titleOf(m.player))} · ${esc(m.date||'')} · 第${m.turn}回 · ${m.player.age}岁${m.over?' · 已终局':''}`:'（空）'}</div>
       <div class="mbtnrow" style="margin-top:6px">
         <button class="mbtn" data-sv="${i}" style="padding:4px 12px;font-size:13px">存入</button>
         <button class="mbtn" data-ld="${i}" style="padding:4px 12px;font-size:13px" ${m?'':'disabled'}>读取</button>
