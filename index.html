@@ -4150,7 +4150,7 @@ function renderFamily(){
 
 /* ================= 功法路数 ================= */
 const ART_STYLES=['攻伐','护体','诡术','神通','遁术'];
-const STYLE_DESC={'攻伐':'斗法时常出重手，熟练越高越常出、越狠','护体':'斗法时运起护体，挡伤反震，练到五十还能回血','诡术':'斗法时出奇招，下禁制、下毒或乱人心神','神通':'斗法时的杀招，隔几回合一发，破护体，耗灵力四十','遁术':'斗法时首回合先手，更难被打中，脱身更易'};
+const STYLE_DESC={'攻伐':'斗法时常出重手，熟练越高越常出、越狠','护体':'斗法时运起护体，挡伤，灵光反激，练到五十还能回血','诡术':'斗法时出奇招，下禁制、下毒或乱人心神','神通':'斗法时的杀招，隔几回合一发，破护体，耗灵力四十','遁术':'斗法时首回合先手，更难被打中，脱身更易'};
 function guessStyle(txt){
   txt=String(txt||'');
   if(/守|护体|护身|金刚|铁布|金钟|绵|柔|盾|甲|龟|不坏|罡气|炼体|横练/.test(txt)) return '护体';
@@ -5537,6 +5537,42 @@ const PROSE={
 「下山了，前年来信，说他娘没了。」
 厉青收了灵压，站了一会儿，把养气丹揣回储物袋。走到门口又折回来，往桌上放了三块灵石：「牌子，还是重办一个。」`]}
 };
+const PROSE_DUEL={cold:`那人在三十丈外停下，没报名号，先放出一缕神识往厉青身上压。筑基初期，和他一样。
+厉青没等他压完，袖里的飞剑已经出去了，剑光贴着地皮走，只在草尖上划出一道白线。
+对方祭起一面铜盾挡下。剑撞上去，铜盾上的灵光暗了一块。
+第二剑、第三剑落在同一处。第四剑过去，盾裂了，那人的护体灵光也跟着碎了半边。
+他不再撑，捏碎一张符，化作一道黄光往东遁走。
+厉青收回飞剑，看了看剑身上的缺口，又看了看地上那面裂盾。还能卖两块灵石。他捡了起来。`,wit:`那人在三十丈外站定，先报名号，又报师门，报到第三代祖师的时候，厉青的飞剑已经出去了。
+剑光擦着铜盾过去，削掉了盾上一颗铜钉。那人低头看了看，脸色变了：「这盾是借的。」
+他掐诀，一串火弹劈头盖脸砸过来。厉青的护体灵光被砸得一明一暗，像漏风的灯笼。他心里算这一下耗了多少灵力，越算越心疼，干脆把剩下的剑光并作一道，全压在铜钉那个窟窿上。
+盾碎了。那人捏碎一张遁符，化成一道黄光走了，走前还回头喊了一句：「盾钱算谁的？」
+厉青把碎盾捡起来掂了掂，决定算他的。`,hot:`对方灵压一放，厉青脚下的碎石全被压进了土里。他不退，飞剑出袖，一道青光直奔那人眉心。
+铜盾横过来挡住，火星炸了一片。那人反手一串火弹，烧得半边林子噼啪作响。厉青护体灵光一涨，顶着火往前压，剑诀一变，一道剑光分作三道，三道又并回一道，全砸在铜盾正中。
+盾裂了，裂纹一路爬上那人的手腕。
+他捏碎遁符要走。厉青遁光一催追上去，剑光后发先至，钉穿了他的衣角，把那道黄光生生拽下来半丈。
+「东西留下。」`,bleak:`那人站在坡上，背后是落日。他先探了探厉青的修为，又看了看手里那面旧铜盾，像是在算这一趟值不值。
+后来还是动了手。火弹落进草里，烧出一个个黑圈；飞剑撞在铜盾上，声音很闷，像庙里敲坏了的钟。
+第四剑过去，铜盾裂了。那人没有再掐诀，站着看盾上的裂纹。
+他走的时候化了一道很淡的黄光，飞得不高，灵力大概也不剩多少了。
+厉青没追，把那半面盾捡起来。盾背面刻着两个字，一个是那人的名字，另一个已经磨得认不出了。`,warm:`那人拦在山道上要买路钱。厉青的储物袋里只有给徒弟买的一包麦芽糖和三块灵石，哪样都不想给。
+飞剑出去，那人祭起铜盾挡，叮的一声，火星溅进路边的菜地，惊起两只鸡。
+他回手几颗火弹，厉青护体灵光撑开，火弹碎成一片红光，燎焦了半截袖子。袖子是师妹去年给他缝的。
+厉青不吭声了，剑光一道接一道全压在盾上同一处。盾碎的时候那人愣了愣，捏碎遁符跑了。
+厉青把麦芽糖拿出来看了看，没压碎，揣回去，又去菜地里把两只鸡赶回了篱笆。`,web:`「筑基初期？」那人灵压一放，「借你三块灵石使使。」
+话音没落，厉青的飞剑已经到了他眉心前三寸。他手忙脚乱祭起铜盾，叮的一声，盾上多了个白点。
+他脸色一沉，十几颗火弹连成一串砸下来。厉青不躲，护体灵光一亮全接了，晃都没晃。
+那人这才看出不对，厉青的灵力比筑基初期厚了一截。他藏了一个小阶。
+第二剑落下，铜盾从白点处裂开。那人捏碎遁符就跑，遁光刚起，就被一道剑光从半空截了下来。
+厉青蹲下去解他的储物袋：「三块灵石，我收了。」`};
+/* 10-10：修士斗法的写法。斗法余波、宗门战两处提示词都带，放在实录之前的固定段 */
+const DUEL_WRITE=`【修士斗法怎么写】这是修士斗法，不是武夫过招：
+- 隔着距离打：出手是掐诀、祭法器、御剑、甩符，不贴身肉搏。体修可以近身，写的也是灵光和肉身硬撼，不写拳脚招式。
+- 开打前互探修为，或者被对方灵压压住；境界高的一方不必多话。
+- 灵力是本钱：写护体灵光一明一暗、法器灵光黯淡、灵力见底；不写喘气、出汗、内力真气。
+- 有声有色：剑光什么颜色、法诀打出去什么动静；余波（山石崩、林木倒、水面翻）一场写一处就够。
+- 挑转折写，不记流水账：实录是骨架，挑两三个要紧处写透（头一回破防、护体碎了、谁亮了底牌），其余一笔带过。胜负、伤势、用到的功法法器名照实录。
+- 收场是修士的收场：输的捏碎遁符、化遁光走；赢的收法器，杀了人就翻储物袋、处理尸身。不拱手、不抱拳、不说「承让」。`;
+function duelExample(){ return PROSE_DUEL[curProse()]||PROSE_DUEL.wit; }
 const PROSE_DEFAULT='wit';
 let pendingProse=null;                       // 开局时还没有 S，先记在这里
 function curProse(){ const k=(typeof S!=='undefined'&&S&&S.prose)||pendingProse||PROSE_DEFAULT; return PROSE[k]?k:PROSE_DEFAULT; }
@@ -5978,7 +6014,12 @@ function duelAftermathPrompt(action, judge, duel){
 
 【推演要求（斗法实录、眼下的状态与判定都写在后面）】
 ${WORLD_STATE_RULES}
-请把这场斗法写出来（300-550字），笔法照前面的文风：按实录的回合顺序铺陈，实录里出现的功法、法器名（「」里的）照原样用上，谁先出手、谁中了毒被禁制住、护体灵光挡下多少，都照实录写；不必逐字复述数字，但每一回合的攻守、受伤轻重要对上，不许改写胜负和伤势。写完斗法，再写结果引发的后续：在场人物反应、对手心态、名声变化（胜过强者涨声望或凶名，杀人涨凶名，留手涨声望），并给出接下来的选项。
+${DUEL_WRITE}
+
+本局文笔写斗法是这个样子（只学笔法，不抄内容）：
+${duelExample()}
+
+请把这场斗法写出来（300-550字），笔法照前面的文风：以实录为骨架，挑两三个转折写透，其余一笔带过；实录里出现的功法、法器名（「」【】里的）照原样用上；谁占上风、谁中毒被禁制住、护体何时碎了要对上，不必复述数字，不许改写胜负和伤势。写完斗法，再写结果引发的后续：在场人物反应、对手心态、名声变化（胜过强者涨声望或凶名，杀人涨凶名，留手涨声望），并给出接下来的选项。
 - 数值变化如实写入playerChanges（气血hp已由引擎结算，不要再写hp）与npcUpdates（对手好感、alive等；对手已被引擎标记的生死不要反写）。
 - 若对手是修士榜人物且落败，写rankingUpdates调整。
 - duel字段必须为null；若主角已死则gameOver为true并写ending。
@@ -6653,7 +6694,7 @@ function styleIssues(text,kind,opts){
 /* 能用程序改的就程序改，不为几个字整回重写：引号换成「」，武侠词换成修仙的说法，几处套话直接删。
    只有篇幅离谱（不到下限一半、超过上限八成以上）或改完还剩三处以上套话，才退回重写；第三份照收记日志。 */
 const STYLE_SWAP=[[/嘴角(?:微微)?(?:勾起|上扬)(?:一丝|一抹)?(?:笑意|弧度)?/g,'笑了笑'],[/不禁|不由得/g,''],[/缓缓说道/g,'说'],[/意味深长地/g,''],[/一股莫名的/g,'一股'],
-  [/江湖/g,'修真界'],[/武林/g,'修真界'],[/少侠/g,'小友'],[/女侠/g,'仙子'],[/大侠/g,'道友'],[/内力/g,'灵力'],[/内功/g,'功法'],[/轻功/g,'遁术'],[/点穴|封穴/g,'禁制'],[/命运的齿轮/g,'这桩因果'],[/空气仿佛凝固(?:了)?/g,'没人说话']];
+  [/江湖/g,'修真界'],[/武林/g,'修真界'],[/少侠/g,'小友'],[/女侠/g,'仙子'],[/大侠/g,'道友'],[/内力/g,'灵力'],[/真气/g,'灵力'],[/掌风/g,'灵光'],[/拱手认输/g,'收手认输'],[/过招/g,'斗法'],[/战圈/g,'战团'],[/内功/g,'功法'],[/轻功/g,'遁术'],[/点穴|封穴/g,'禁制'],[/命运的齿轮/g,'这桩因果'],[/空气仿佛凝固(?:了)?/g,'没人说话']];
 // 10-09：禁用词改成程序删，不为几个词整回重写
 const BANNED_TO={'！！':'！','！':'。','心想':'想','暗想':'想','心中暗道':'心道','首先':'先','其次':'再','叮！':'','倒吸一口凉气':'吸了口气','众人震惊':'众人一愣','心中一暖':'心里一松','心头一暖':'心里一松'};
 function styleAutoFix(t){
@@ -7582,12 +7623,12 @@ const AD={
   speedTxt:{slow:'缓',normal:'常',fast:'疾'},
 };
 const AD_POOL={
-  '攻伐':['青锋剑诀','烈焰术','金芒指','碎石拳','惊雷掌','裂空斩'],
-  '护体':['金刚诀','玄龟甲','土盾术','青木护身','不动明王身'],
-  '诡术':['迷魂术','缚灵丝','定身符','幻影刺','摄魂铃'],
-  '毒':  ['蚀骨毒雾','碧磷针','五毒掌','腐心散'],
-  '遁术':['御风术','土遁术','血遁','轻身符'],
-  '神通':['五雷正法','焚天火海','万剑归宗','大日金身'],
+  '攻伐':['庚金剑气','烈火诀','玄冰锥','风刃术','惊雷诀','裂地符'],
+  '护体':['玄龟盾','青木护身诀','金光罩','土甲术','不动法身'],
+  '诡术':['迷魂术','缚灵丝','定身符','幻影术','摄魂铃'],
+  '毒':  ['蚀骨毒雾','碧磷针','腐心瘴','五毒幡'],
+  '遁术':['御风术','土遁术','血遁','神行符'],
+  '神通':['五雷正法','焚天火海','万剑归宗','大日法相'],
 };
 // 大境界每差一层，强的一方额外加这么多战力（战力差 12 点，胜率从八成多掉到零）
 const AD_MAJOR=12;
@@ -7644,16 +7685,16 @@ function npcKitLive(n){
 // 一门功法 → 一个技能。10-09：同路数先比发挥出来的品阶，品阶一样再比熟练；黄阶照旧，玄阶起每高一档威力 +6%
 function adSkillsFrom(arts,p){
   const best={}, eg=a=>effGrade(gradeIndex(a&&a.grade)||1,p);
-  for(const a of arts||[]){ if(!a||!ART_STYLES.includes(a.style)) continue; const b=best[a.style];
+  for(const a of arts||[]){ if(!a||!ART_STYLES.includes(a.style)) continue; const b=best[a.style];   // 10-10：招式带上五行，实录里配颜色
     if(!b||eg(a)>eg(b)+1e-9||(Math.abs(eg(a)-eg(b))<1e-9&&num(a.level)>num(b.level))) best[a.style]=a; }
   const out=[], L=a=>clamp(num(a.level)), G=a=>1+0.06*Math.max(0,eg(a)-3);   // 黄阶照旧，从玄阶起每档 +6%（天阶上品 ×1.54）
-  if(best['神通']){ const a=best['神通'], l=L(a); out.push({name:a.name,style:'神通',cat:'sure',cd:4,cur:1,qi:40,mult:(1.8+l/125)*G(a),pierce:1}); }
-  if(best['护体']){ const a=best['护体'], l=L(a); out.push({name:a.name,style:'护体',cat:'sure',cd:3,cur:0,qi:10,shield:(12+l/4)*G(a),heal:l>=50?Math.round((5+Math.round(l/10))*G(a)):0}); }
-  if(best['攻伐']){ const a=best['攻伐'], l=L(a); out.push({name:a.name,style:'攻伐',cat:'active',rate:Math.min(0.6,0.35+l/400),qi:5,mult:(1.3+l/200)*G(a)}); }
+  if(best['神通']){ const a=best['神通'], l=L(a); out.push({name:a.name,element:a.element||'',style:'神通',cat:'sure',cd:4,cur:1,qi:40,mult:(1.8+l/125)*G(a),pierce:1}); }
+  if(best['护体']){ const a=best['护体'], l=L(a); out.push({name:a.name,element:a.element||'',style:'护体',cat:'sure',cd:3,cur:0,qi:10,shield:(12+l/4)*G(a),heal:l>=50?Math.round((5+Math.round(l/10))*G(a)):0}); }
+  if(best['攻伐']){ const a=best['攻伐'], l=L(a); out.push({name:a.name,element:a.element||'',style:'攻伐',cat:'active',rate:Math.min(0.6,0.35+l/400),qi:5,mult:(1.3+l/200)*G(a)}); }
   if(best['诡术']){
     const a=best['诡术'], l=L(a), t=a.name+(a.desc||'');
     const st=/穴|点|封|定|缚|禁|困/.test(t)?'stun':/毒|蛊|蚀|腐|蝎|蛇|磷/.test(t)?'poison':'chaos';
-    out.push({name:a.name,style:'诡术',cat:'active',rate:Math.min(0.55,0.3+l/400),qi:8,mult:0.9*G(a),st,stChance:Math.min(0.95,0.45+l/400+(G(a)-1)*0.25)});
+    out.push({name:a.name,element:a.element||'',style:'诡术',cat:'active',rate:Math.min(0.55,0.3+l/400),qi:8,mult:0.9*G(a),st,stChance:Math.min(0.95,0.45+l/400+(G(a)-1)*0.25)});
   }
   return {skills:out, best};
 }
@@ -7712,7 +7753,7 @@ function adPick(u){
 }
 function adDmg(E,a,t,mult,beat,opt){
   opt=opt||{};
-  if(!opt.sure&&Math.random()<t.dodge){ beat.txt.push(`${adWho(t)}身形一晃避开了`); beat.miss=true; return 0; }
+  if(!opt.sure&&Math.random()<t.dodge){ beat.txt.push(adSay(t,'dg',[`${adWho(t)}遁光一闪，让开了`,`${adWho(t)}身前灵光一折，打偏了`,`${adWho(t)}身形化作一道虚影，避了过去`])); beat.miss=true; return 0; }
   const gap=(a.wn+a.atkB-(a.st.poison?5:0))-(t.wn+t.defB);
   let d=AD.base*mult*Math.min(AD.hi,Math.max(AD.lo,Math.exp(gap/AD.gapK)))*(1+(Math.random()*2-1)*AD.var);
   let crit=false;
@@ -7723,10 +7764,10 @@ function adDmg(E,a,t,mult,beat,opt){
   if(t.shield>0&&!opt.pierce){
     const ab=Math.min(t.shield,d); t.shield-=ab; d-=ab;
     const rf=Math.round(ab*0.2);
-    if(ab) beat.txt.push(`护体灵光挡下${ab}`);
-    if(rf>0&&a.hp>0){ a.hp=Math.max(0,a.hp-rf); beat.hits.push({who:a.side,dmg:rf,rf:1}); beat.txt.push(`反震${adWho(a)}${rf}`); }
+    if(ab) beat.txt.push(`${adWho(t)}的护体灵光挡下${ab}`);
+    if(rf>0&&a.hp>0){ a.hp=Math.max(0,a.hp-rf); beat.hits.push({who:a.side,dmg:rf,rf:1}); beat.txt.push('灵光反激回去'); }
     if(t.shield<=0){ t.shield=0; t.shieldDur=0; }
-  }else if(t.shield>0&&opt.pierce){ beat.txt.push('护体灵光被一击打散'); t.shield=0; t.shieldDur=0; }
+  }else if(t.shield>0&&opt.pierce){ beat.txt.push(`${adWho(t)}的护体灵光被一击打散`); t.shield=0; t.shieldDur=0; }
   if(d>0){ t.hp=Math.max(0,t.hp-d); beat.hits.push({who:t.side,dmg:d,crit}); }
   if(crit) beat.crit=true;
   return d;
@@ -7734,11 +7775,31 @@ function adDmg(E,a,t,mult,beat,opt){
 function adStatus(t,st,chance,beat){
   if(Math.random()>=chance*(1-t.stRes)) return;
   if(st==='poison'){ t.st.poison=3; beat.txt.push(`${adWho(t)}中了毒`); }
-  else { t.st[st]=1; t.stRes=Math.min(0.75,t.stRes+AD.chaosResist); beat.txt.push(st==='stun'?`${adWho(t)}被禁制定住`:`${adWho(t)}乱了方寸`); }
+  else { t.st[st]=1; t.stRes=Math.min(0.75,t.stRes+AD.chaosResist); beat.txt.push(st==='stun'?`${adWho(t)}被禁制定住`:`${adWho(t)}神识被扰`); }
+}
+/* 10-10：斗法实录换成修士的动作。隔着距离打：掐诀、祭法器、御剑、甩符；不写拳脚。
+   每种场合备几条随机抽，同一场尽量不重复（E.said 记着用过的） */
+const EL_COLOR={金:'金',木:'青',水:'蓝',火:'赤',土:'黄',雷:'紫',冰:'白',风:'青白'};
+const EL_BOLT={金:['一道金芒','一缕庚金剑气'],木:['一蓬青藤','一道青光'],水:['一道水箭','一股寒流'],火:['一枚火弹','一道火舌'],土:['一块飞石','一道土刺'],雷:['一道电光','一记掌心雷'],冰:['一枚冰锥','一片寒霜'],风:['一道风刃','一股旋风'],'':['一道白光','一道乌光']};
+const EL_STIR={金:'金光刺得人睁不开眼',木:'四下草木疯长',水:'地上积水翻涌',火:'半边天都映红了',土:'地面一震',雷:'天色一暗，雷光一闪',冰:'方圆数丈结了一层白霜',风:'飞沙走石',' ':'灵光四溢'};
+function adSay(u,key,list){ const E=duel&&duel.eng; const used=(E&&(E.said=E.said||{}))||{}; const k=u.side+key; const fresh=list.filter(x=>!(used[k]||[]).includes(x)); const pickd=pick(fresh.length?fresh:list); if(E){ used[k]=(used[k]||[]).concat(pickd).slice(-Math.max(1,list.length-1)); } return pickd; }
+function weaponKind(nm){ nm=String(nm||''); if(/印|钟|鼎|塔|锤|山|砖|瓶|葫芦|尺|锏|斧/.test(nm)) return 'smash'; if(/铃|镜|幡|旗|扇|琴|箫|珠|灯|笛|鼓|令/.test(nm)) return 'shine'; if(/索|绫|网|绳|鞭|丝|链|带/.test(nm)) return 'bind'; return 'blade'; }
+function unitEl(u){ if(u.el!=null) return u.el; const a=u.side==='p'&&S&&S.player?mainArt(S.player):null; let e=a&&a.element||''; if(!e) for(const s of u.skills||[]){ e=s.element||artElement(s.name); if(e) break; } u.el=EL_COLOR[e]?e:''; return u.el; }
+function adNormalLine(u,t){
+  const me=adWho(u), him=adWho(t), w=u.weapon&&u.side==='p'?u.weapon:'';
+  if(w){ const k=weaponKind(w), W=`【${w}】`;
+    if(k==='smash') return adSay(u,'w',[`${me}祭起${W}，迎头朝${him}砸下`,`${W}迎风一涨，朝${him}压了过去`]);
+    if(k==='shine') return adSay(u,'w',[`${me}把${W}一晃，一道灵光打向${him}`,`${W}一亮，${me}借着那道光朝${him}打过去`]);
+    if(k==='bind') return adSay(u,'w',[`${me}抖开${W}，朝${him}缠去`,`${W}化作一道灵光，绕向${him}`]);
+    return adSay(u,'w',[`${me}御起${W}，一道剑光朝${him}斩去`,`${W}绕身一转，斜斜朝${him}削了过去`,`${me}并指一点，${W}化作一道光直取${him}`]); }
+  const bolt=pick(EL_BOLT[unitEl(u)]||EL_BOLT['']);
+  if(u.side==='p') return adSay(u,'n',[`${me}掐诀打出${bolt}`,`${me}抬手就是${bolt}`,`${me}甩出一张符，化作${bolt}`]);
+  const sig=u.weapon?`「${u.weapon}」`:'';
+  return adSay(u,'n',[`${me}打出${bolt}`,`${me}祭出一口飞针，朝${him}打来`,`${me}放出一道乌光`,`${me}甩出一张符，化作${bolt}`].concat(sig?[`${me}使出拿手的${sig}`]:[]));
 }
 function adNormalName(u){
-  if(u.side==='p') return u.weapon?`${u.weapon}·${pick(['横扫','直刺','斜劈','御使'])}`:pick(['一记掌心雷','胡乱拍出的一掌','抡圆了的一拳']);
-  return pick(['一道法诀','连发三记火球','劈面一掌','祭出飞针','欺身直进']);
+  if(u.side==='p') return u.weapon?`${u.weapon}·${pick(['御使','祭起','催动'])}`:pick(['一记掌心雷','一道火弹','一张符']);
+  return pick(['一道法诀','连发三记火弹','一道乌光','祭出飞针','一张符']);
 }
 function adStTxt(u){ const t=[]; if(u.st.poison) t.push('中毒'); if(u.st.stun) t.push('受制'); if(u.st.chaos) t.push('心乱'); return t; }
 function adSnap(E,beat){ beat.after={pHp:E.P.hp,oHp:E.O.hp,pQi:E.P.qi,oQi:E.O.qi,pSh:E.P.shield,oSh:E.O.shield,pSt:adStTxt(E.P),oSt:adStTxt(E.O),
@@ -7755,21 +7816,21 @@ function adAct(E,u,d){
   if(u.side==='p'&&E.flee){
     E.flee=false;
     const pv=u.wn+d20()+6+Math.min(12,Math.round(u.flee/8))+Math.min(6,E.round*1.5)+(u.hp<=30?5:0)-(u.lame?8:0), ov=t.wn+Math.min(12,Math.round(t.flee/8))+d20();
-    if(pv>ov||(u.escape&&Math.random()<u.escape/100)){ beat.txt.push('你虚晃一招跃出圈外，头也不回地去了'); beat.end='escape'; adSnap(E,beat); return beat; }
-    beat.txt.push(`你转身欲走，却被${t.name}追上`); adDmg(E,t,u,1.2,beat,{sure:true}); adSnap(E,beat); return beat;
+    if(pv>ov||(u.escape&&Math.random()<u.escape/100)){ beat.txt.push('你捏碎一张遁符，化作遁光脱出战团'); beat.end='escape'; adSnap(E,beat); return beat; }
+    beat.txt.push(`你遁光刚起，被${t.name}一道法诀截了下来`); adDmg(E,t,u,1.2,beat,{sure:true}); adSnap(E,beat); return beat;
   }
   // 对手想溜
   if(u.side==='o'&&u.hp<=30&&(d.profile.coward||d.profile.trick||d.opp.alignment==='邪道')&&!d.friendly&&Math.random()<0.25){
-    if(u.wn+Math.min(12,Math.round(u.flee/8))+d20()+6>t.wn+Math.min(12,Math.round(t.flee/8))+d20()){ beat.txt.push(`${u.name}虚晃一招，脚下生风转眼没了踪影`); beat.end='oppEscape'; adSnap(E,beat); return beat; }
-    beat.txt.push(`${u.name}想溜，被你一步赶上`); adDmg(E,t,u,1.2,beat,{sure:true}); adSnap(E,beat); return beat;
+    if(u.wn+Math.min(12,Math.round(u.flee/8))+d20()+6>t.wn+Math.min(12,Math.round(t.flee/8))+d20()){ beat.txt.push(`${u.name}化作一道遁光往天边去了`); beat.end='oppEscape'; adSnap(E,beat); return beat; }
+    beat.txt.push(`${u.name}遁光刚起，你遁光一催追了上去`); adDmg(E,t,u,1.2,beat,{sure:true}); adSnap(E,beat); return beat;
   }
   if(u.st.stun){ delete u.st.stun; beat.txt.push(`${me}被禁制困住，动弹不得`); adSnap(E,beat); return beat; }
-  if(u.st.chaos){ delete u.st.chaos; beat.txt.push(`${me}心神大乱，一招打在空处`); adSnap(E,beat); return beat; }
+  if(u.st.chaos){ delete u.st.chaos; beat.txt.push(`${me}神识被扰，一道法诀打偏了`); adSnap(E,beat); return beat; }
   // 自动吞药：气血头一回跌破 35
   if(u.side==='p'&&u.med&&!u.medUsed&&u.hp<35){
     const mi=duelPillIndex(S.player), med=mi>=0?S.player.items['丹药'][mi]:null;
     u.medUsed=true;
-    if(med){ S.player.items['丹药'].splice(mi,1); const h=Math.min((u.hpMax||100)-u.hp,rnd(24,40)); u.hp+=h; beat.hits.push({who:'p',heal:h}); beat.txt.push(`你退开半步吞下【${med.name}】，伤处一阵温热`); beat.skill='服药'; adSnap(E,beat); return beat; }
+    if(med){ S.player.items['丹药'].splice(mi,1); const h=Math.min((u.hpMax||100)-u.hp,rnd(24,40)); u.hp+=h; beat.hits.push({who:'p',heal:h}); beat.txt.push(`你抽空吞下【${med.name}】，伤处一阵温热`); beat.skill='服药'; adSnap(E,beat); return beat; }
   }
   const sk=adPick(u);
   u.qi=clamp(u.qi-(sk?sk.qi:0));
@@ -7779,16 +7840,17 @@ function adAct(E,u,d){
     if(u.side==='p'){ d.artUse=d.artUse||{}; d.artUse[sk.name]=(d.artUse[sk.name]||0)+1; }
     if(sk.shield){
       u.shield=Math.round(sk.shield); u.shieldDur=3;
-      beat.txt.push(`${me}运起「${sk.name}」，一层灵光罩住周身`);
+      { const c=EL_COLOR[sk.element||artElement(sk.name)]||EL_COLOR[unitEl(u)]||''; beat.txt.push(adSay(u,'sh',[`${me}运起「${sk.name}」，一层${c||'灵'}光罩住周身`,`${me}掐诀运起「${sk.name}」，护体灵光${c?'泛起'+c+'色，':''}又厚了一层`])); }
       if(sk.heal){ const h=Math.min((u.hpMax||100)-u.hp,sk.heal); if(h>0){ u.hp+=h; beat.hits.push({who:u.side,heal:h}); } }
     }else{
-      beat.txt.push(sk.style==='神通'?`${me}倾力施出绝招「${sk.name}」`:`${me}使一招「${sk.name}」`);
+      if(sk.style==='神通'){ const e=sk.element||artElement(sk.name)||unitEl(u); beat.txt.push(`${me}法诀一变，施出「${sk.name}」，${EL_STIR[e]||EL_STIR[' ']}`); }
+      else beat.txt.push(adSay(u,'atk',[`${me}掐诀催动「${sk.name}」`,`${me}一声低喝，「${sk.name}」应声而出`,`「${sk.name}」从${me}指间打了出去`]));
       const dm=adDmg(E,u,t,sk.mult*(sk.style==='攻伐'?(u.atkMul||1):1)*(sk.style==='神通'?(u.godMul||1):1),beat,{pierce:sk.pierce});
       if(dm>0&&sk.st&&t.hp>0) adStatus(t,sk.st,sk.stChance,beat);
       if(dm>0&&u.swarm&&sk.style==='攻伐'&&t.hp>0&&Math.random()<0.1){ beat.txt.push('匣中竹叶小剑一涌而出，又补了一下'); adDmg(E,u,t,0.6,beat,{}); }
     }
   }else{
-    beat.txt.push(`${me}以「${adNormalName(u)}」${u.side==='p'?'抢攻':'直取要害'}`);
+    beat.txt.push(adNormalLine(u,t));
     adDmg(E,u,t,1,beat);
   }
   adSnap(E,beat);
@@ -7830,7 +7892,7 @@ function adRound(d){
     for(const u of order){
       if(u.hp<=0||adFoe(E,u).hp<=0) continue;
       const again=beats.some(x=>x.who===u.side&&x.round===E.round);
-      const b=adAct(E,u,d); b.round=E.round; if(again) b.txt.unshift(`${adWho(u)}出手更快，又抢一手`); beats.push(b);
+      const b=adAct(E,u,d); b.round=E.round; if(again) b.txt.unshift(`${adWho(u)}遁速更快，又抢一手`); beats.push(b);
       if(b.end){ end=b.end; break; }
       if(E.O.hp<=0){ end='win'; break; }
       if(E.P.hp<=0){ end='lose'; break; }
@@ -7848,7 +7910,7 @@ function adRound(d){
   // 给模型的实录：一回合一行
   const him=d.opp.name;
   const say=beats.map(b=>{
-    const hs=b.hits.map(h=>h.heal?`${h.who==='p'?'你':him}气血+${h.heal}`:`${h.who==='p'?'你':him}气血-${h.dmg}${h.crit?'（重击）':h.dot?'（毒）':h.rf?'（反震）':''}`);
+    const hs=b.hits.map(h=>h.heal?`${h.who==='p'?'你':him}气血+${h.heal}`:`${h.who==='p'?'你':him}气血-${h.dmg}${h.crit?'（重击）':h.dot?'（毒）':h.rf?'（灵光反激）':''}`);
     return b.txt.join('，')+(hs.length?'，'+hs.join('，'):'');
   });
   const pD=beats.reduce((a,b)=>a+b.hits.filter(h=>h.who==='p'&&h.dmg).reduce((x,h)=>x+h.dmg,0),0);
@@ -7938,7 +8000,7 @@ function duelChips(u,cds,right){
     return `<span class="dchip${wait?' wait':''}" style="--c:${AD_STYLE_COLOR[s.style]||'var(--ink)'}" title="${esc(s.style)}${s.cat==='sure'?'·必中·冷却'+s.cd:'·几率出手'}"><b>${esc(s.name)}</b><i>${tag}</i></span>`;
   });
   if(u.flee) sk.push(`<span class="dchip" style="--c:var(--ink-soft)" title="遁术·首回合先手，更难被打中"><b>${esc((u.side==='p'?(adSkillsFrom(S.player.arts).best['遁术']||{}).name:(npcKit(duel.opp).find(k=>k.style==='遁术')||{}).name)||'遁术')}</b><i>被动</i></span>`);
-  if(!sk.length) sk.push(`<span class="dchip none">${u.side==='p'?'无功法，只凭拳脚':'只凭拳脚'}</span>`);
+  if(!sk.length) sk.push(`<span class="dchip none">${u.side==='p'?'无功法，只凭法器和粗浅法诀':'只凭法器和粗浅法诀'}</span>`);
   return `<div class="dchips${right?' r':''}">${sk.join('')}</div>`;
 }
 function renderDuel(onlyFighters){
@@ -7999,7 +8061,7 @@ function beatMs(b,round){
 }
 function roundHtml(n){ return `<div class="r" data-rn="${n}"><span class="rn">第${cnNum(n)}回合</span></div>`; }
 function beatHtml(b,him){
-  const tag=h=>h.dot?'毒':h.rf?'反震':h.crit?'重击':'';
+  const tag=h=>h.dot?'毒':h.rf?'反激':h.crit?'重击':'';
   const hs=b.hits.map(h=>h.heal?`<span class="heal">${h.who==='p'?'你':esc(him)} +${h.heal}</span>`:`<span class="dmg${h.crit?' crit':''}">${h.who==='p'?'你':esc(him)}${tag(h)?'·'+tag(h):''} -${h.dmg}</span>`).join('　');
   return `<span class="bt">${esc(b.txt.join('，'))}。${hs?' '+hs:''}</span>`;
 }
@@ -8163,19 +8225,19 @@ function endDuel(kind){
   const finish=txt=>{ duel.resultText=txt; snapshotDuel(); saveGame(); showDuelGo(); };
   if(kind==='win'){
     S.stats.duelWins++;
-    duelSys(`${him}再也站不起来了。`);
+    duelSys(`${him}护体灵光溃散，倒在地上。`);
     if(duel.friendly){ S.stats.spares++; return finish(`主角获胜，切磋点到为止，${him}认栽。`); }
     snapshotDuel(); saveGame();
     return showWinChoice();
   }
-  if(kind==='oppYield'){ S.stats.duelWins++; duelSys(`${him}退开一步，拱手认输。`); return finish(`${him}不敌，主动认输，主角获胜。`); }
+  if(kind==='oppYield'){ S.stats.duelWins++; duelSys(`${him}收了法器，认输。`); return finish(`${him}不敌，主动认输，主角获胜。`); }
   if(kind==='draw'){
     const ahead=duel.pHp>=duel.oHp;
-    duelSys(`斗了${cnNum(AD.maxRounds)}回合不分胜负，两人各自收手。`);
+    duelSys(`斗了${cnNum(AD.maxRounds)}回合不分高下，各自收了法器。`);
     return finish(`主角与${him}斗了${AD.maxRounds}回合不分胜负，双方罢手（主角${ahead?'略占上风':'略处下风'}）。`);
   }
-  if(kind==='oppEscape'){ duelSys(`${him}逃了。`); return finish(`${him}不敌，趁隙逃走，主角未能留下他。`); }
-  if(kind==='escape'){ S.stats.escapes++; duelSys('你逃出了战圈。'); return finish(`主角不敌，成功脱身逃走，${him}未能追上。`); }
+  if(kind==='oppEscape'){ duelSys(`${him}化作遁光逃了。`); return finish(`${him}不敌，趁隙逃走，主角未能留下他。`); }
+  if(kind==='escape'){ S.stats.escapes++; duelSys('你化作遁光脱出了战团。'); return finish(`主角不敌，成功脱身逃走，${him}未能追上。`); }
   if(kind==='yield'){
     S.stats.duelLosses++; duelSys('你收起法器，认输。');
     const k=duel.lethal&&(duel.opp.alignment==='邪道'||duel.opp['好感度']<=15)&&Math.random()<0.35*fdm().kill;
@@ -8186,14 +8248,14 @@ function endDuel(kind){
     if(!duel.friendly&&wp.length&&duel.opp.alignment!=='正派'&&Math.random()<0.45){
       const w=wp.reduce((a,b)=>num(b.bonus)>num(a.bonus)?b:a);
       S.player.items['法器']=wp.filter(x=>x!==w);
-      txt+=`，兵刃【${w.name}】被${him}夺了去`;
+      txt+=`，法器【${w.name}】被${him}夺了去`;
       duelSys(`⚑ ${him}顺手夺走了你的【${w.name}】。`);
     }
     return finish(txt+'。');
   }
   if(kind==='lose'){
     S.stats.duelLosses++;
-    duelSys('你倒下了，眼前一片昏黑……');
+    duelSys('你护体灵光一碎，眼前一黑……');
     let kill=0.05;
     if(duel.opp.alignment==='邪道') kill+=0.35;
     if(duel.opp['好感度']<=15) kill+=0.3;
@@ -8392,7 +8454,7 @@ function warRound(label, minePicked, foePicked){
     if(!b){ mw++; warSys(`${esc(a.name)}无人可敌，这一场算本派的。`,'good'); continue; }
     const r=clash(a,b);
     const win=r.aWin;
-    const loser=r.loser, txt=r.dead?'当场毙命':r.end==='oppYield'?'拱手认输':r.end==='draw'?'力竭罢手':(num(loser.hurt)>=60?'重伤倒地':'负伤退下');
+    const loser=r.loser, txt=r.dead?'当场毙命':r.end==='oppYield'?'收手认输':r.end==='draw'?'灵力耗尽罢手':(num(loser.hurt)>=60?'重伤倒地':'负伤退下');
     const how=`斗了${r.rounds<=10?'零一二三四五六七八九十'[r.rounds]:r.rounds<20?'十'+('零一二三四五六七八九'[r.rounds-10]||'').replace('零',''):r.rounds}回合${r.top?`，${esc(r.winner.name)}凭一路「${esc(r.top)}」`:''}`;
     if(win){ mw++; warSys(`${esc(a.name)}(${a['武功']}) 胜 ${esc(b.name)}(${b['武功']})，${how}，${esc(b.name)}${txt}。`,'good'); }
     else   { tw++; warSys(`${esc(a.name)}(${a['武功']}) 败于 ${esc(b.name)}(${b['武功']})，${how}，${esc(a.name)}${txt}。`,'bad'); }
@@ -8527,9 +8589,11 @@ function warAftermathPrompt(action, judge, wd){
 
 【推演要求（宗门战实录、眼下的状态与判定都写在后面）】
 ${WORLD_STATE_RULES}
+${DUEL_WRITE}
+
 请把这一仗写成一段宗门大战（400-650字）：
 - 按实录的顺序写，先锋、中军、主将三阵都要写到，阵亡和负伤的人要点名字，不许改写胜负、不许让死人活过来、不许让活人死。
-- 主将那一场按斗法实录的回合铺陈（实录里「你」指主角），实录里「」中的招式名照原样用上；先锋、中军各场实录里写了凭哪一路招式取胜的，也要写到。
+- 主将那一场以斗法实录为骨架（实录里「你」指主角），挑转折写，实录里「」中的招式名照原样用上；先锋、中军各场实录里写了凭哪一路招式取胜的，也要写到。
 - 再写这一仗之后的修真界：两派门人的反应、旁观者怎么说、${w.foe}那边接下来会怎么样。
 - 宗门的数字（势力、威望、公帐、弟子）全部由引擎记账，你只管叙述，不要在任何字段里改动它们；factionUpdates 只在本派与${w.foe}之外的第三方宗门要表态时才用。
 - 数值变化如实写入playerChanges（气血hp已由引擎结算，不要再写hp）与npcUpdates。
@@ -10600,7 +10664,7 @@ async function runTurn(action, judge, extra){
   activeTurnAbort=controller;
   let pending;
   $('choices').innerHTML='';
-  setBusy(true,extra.warData?'两派交兵，正在记下这一仗……':(extra.duelData?'刀光剑影，正在记下这一战……':'笔走龙蛇，正在推演修真界……'));
+  setBusy(true,extra.warData?'两派交兵，正在记下这一仗……':(extra.duelData?'遁光交错，正在记下这一战……':'笔走龙蛇，正在推演修真界……'));
   beginChapter('第 '+cnNum(owner.turn)+' 回',owner.date,action,judge);
   try{
     pending=previous||{id,action,judge,extra:JSON.parse(JSON.stringify(extra))};
