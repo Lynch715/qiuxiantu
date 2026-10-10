@@ -1109,7 +1109,11 @@ function newStateShell(){
   };
 }
 // 旧存档升级
+// 10-10：性格要是数组。模型偶尔写成一句「木讷、认死理」，以前原样存下，后面 .join 就崩
+function persArr(v){ if(Array.isArray(v)) return v.map(x=>plain(x)).filter(Boolean); if(typeof v==='string') return v.split(/[、，,；;\s/]+/).map(x=>x.trim()).filter(Boolean); return []; }
 function migrate(s){
+  for(const n of (s.npcs||[])) if(n&&!Array.isArray(n.personality)) n.personality=persArr(n.personality);
+  if(s.player&&!Array.isArray(s.player.personality)) s.player.personality=persArr(s.player.personality);
   if(!s.v||s.v<2){
     const shell=newStateShell();
     for(const k in shell) if(s[k]===undefined) s[k]=shell[k];
@@ -2234,7 +2238,7 @@ function rollTags(attrs,personality){
   if(num0(attrs['心性'])>=80&&Math.random()<0.5) add('白水鉴心');
   if(num0(attrs['心性'])<=25&&Math.random()<0.5) add('心魔深重');
   if(num0(attrs['体魄'])<=25&&Math.random()<0.5) add('体弱多病');
-  const ps=(personality||[]).join(' ');
+  const ps=persArr(personality).join(' ');
   for(const [re,t] of XTAG_HINT) if(re.test(ps)&&Math.random()<0.55) add(t);
   const names=Object.keys(XTAGS);
   let guard=0;
@@ -5586,7 +5590,7 @@ function unkOf(n,k){ return !!(n&&n.stub&&!n['stub'+k]); }
 // 名册里的一行：硬资料，没定的写「未定」
 function npcCard(n){
   const u=k=>unkOf(n,k);
-  return `${n.name}｜${u('G')?'性别未定':(n.gender||'性别未定')}｜${u('A')?'年龄未定':num(n.age)+'岁'}｜${u('R')?'境界未定':realmText(n.realm)}｜${plain(n.faction)||'无门派'}｜${plain(n.identity)||'—'}｜${plain(n.relation)||'相识'}${(n.personality||[]).length?'｜'+n.personality.slice(0,3).join('、'):''}`;
+  return `${n.name}｜${u('G')?'性别未定':(n.gender||'性别未定')}｜${u('A')?'年龄未定':num(n.age)+'岁'}｜${u('R')?'境界未定':realmText(n.realm)}｜${plain(n.faction)||'无门派'}｜${plain(n.identity)||'—'}｜${plain(n.relation)||'相识'}${persArr(n.personality).length?'｜'+persArr(n.personality).slice(0,3).join('、'):''}`;
 }
 // 引擎替模型补出来的人，还缺哪几样（出场时让模型一次补齐，补了就定死）
 function needFill(n){
@@ -6680,7 +6684,7 @@ function applyInit(d, opts){
   p.avatar = (opts&&opts.avatar&&AV_SLOTS.indexOf(opts.avatar)>=0)?opts.avatar:null;
   p.hp=100;
   p['声望']=clamp(num(p['声望']),0,30); p['凶名']=clamp(num(p['凶名']),0,30);
-  p.personality=p.personality||[];
+  p.personality=persArr(p.personality);
   const it = p.items||{};
   p.items = {'法器':(it['法器']||[]).map(normWeapon),'玉简':it['玉简']||[],'丹药':it['丹药']||[],'符箓':it['符箓']||[],'毒药':it['毒药']||[],'灵材':it['灵材']||[],'其他':it['其他']||[]};
   for(const c in p.items) p.items[c]=p.items[c].map(x=>typeof x==='string'?{name:x,desc:''}:x).filter(x=>x&&x.name);
@@ -6795,7 +6799,7 @@ function normNpcBody(n){
   return {
     name:n.name||'无名氏', gender:n.gender||'', age:num(n.age), identity:n.identity||'',
     faction:n.faction||'', alignment:n.alignment||'中立',
-    personality:n.personality||[], appearance:n.appearance||'',
+    personality:persArr(n.personality), appearance:n.appearance||'',
     realm:npcRealmOf(n), linggen:npcLinggenOf(n), tags:npcTagsOf(n),
     '武功':0, '谈吐':clamp(num(n['谈吐'])),
     signature:n.signature||'', mood:n.mood||'平静',
@@ -7419,7 +7423,7 @@ function findAmmo(){
   return null;
 }
 function oppProfile(n){
-  const s=(n.personality||[]).join('');
+  const s=persArr(n.personality).join('');
   const agg=/暴躁|好胜|刚烈|狠|凶|鲁莽|冲动|傲|嗜杀|狂/.test(s);
   const def=/谨慎|沉稳|稳重|老练|冷静|持重|内敛/.test(s);
   const trick=/狡诈|阴险|狡猾|诡|奸|多疑|诡计/.test(s);
@@ -7530,7 +7534,7 @@ function adBuild(d){
     med:duelPillIndex(p)>=0, hpMax:hpMaxOf(p), first:hasTag(p,'杀伐果断')||undefined, atkMul:tagMul(p,'atk'), escape:tagAdd(p,'escape')+num((p.eggFx||{}).escape), rage:(p.eggFx||{}).rageAtk||0, shield0:(p.eggFx||{}).duelShield||0, relic:1, lame:hasScar('跛足'), spdMod:hasScar('跛足')?-((d.pW/adScale())*0.15):0});
   const sig=String(o.signature||'').replace(/[「」《》【】]/g,'');
   const O=adUnit('o',{name:o.name,hp:d.oHp,qi:d.oQi,W:d.oppW+Math.max(0,-md)*mk,best:ok.best,skills:ok.skills,weapon:sig,
-    spdMod:(/轻|灵|活|跳脱|机敏/.test((o.personality||[]).join(''))?4:0)-(pr.def?3:0),
+    spdMod:(/轻|灵|活|跳脱|机敏/.test(persArr(o.personality).join(''))?4:0)-(pr.def?3:0),
     critMod:pr.trick?0.03:pr.agg?0.02:0});
   // 致敬物在斗法里的效果
   if(relicHas(p,'bamboo')&&num(p.attributes['神识'])>=50) P.swarm=1;
@@ -9141,7 +9145,7 @@ function renderPanel(){
   $('pTitle').innerHTML=`<span class="titlebadge ${evil?'evil':''}">${esc(titleOf(p))}</span>`
     +`${rk!=null&&rk<=10?`<span class="titlebadge">修士榜 第${rk}</span>`:''}`+`${tjRank()!=null&&tjRank()<=9?`<span class="titlebadge">天骄榜 第${tjRank()}</span>`:''}`
     +`<span class="titlebadge mode" title="道途凶险 / 自由度">${esc(diff().label)} · ${esc(fdm().label)}</span>`;
-  $('pTraits').innerHTML=(p.personality||[]).map(t=>`<span class="trait">${esc(t)}</span>`).join('');
+  $('pTraits').innerHTML=persArr(p.personality).map(t=>`<span class="trait">${esc(t)}</span>`).join('');
   // 三类分开摆：引擎态 / 会好的伤病（写明还要多久）/ 治不好的终身旧伤
   const engS=(p.status||[]).filter(t=>ENGINE_STATUS.includes(t));
   $('pStatus').innerHTML=
@@ -9395,7 +9399,7 @@ function showNpc(n){
     ['灵根',n.lgHidden?'六岁测灵根':lgText(n.linggen)],
     ['标签',(n.tags||[]).map(t=>t+(XTAGS[t]?'（'+XTAGS[t].desc+'）':'')).join('；')||'—'],
     ['招式',(n.kit&&n.kit.length)?n.kit.map(k=>`${k.name}（${k.style}）`).join('、'):'未曾领教'],['谈吐',n['谈吐']+' / 100'],
-    ['性格',(n.personality||[]).join('、')||'—'],
+    ['性格',persArr(n.personality).join('、')||'—'],
     ['相貌',[npcPortrait(n),n.appearance].filter(Boolean).join('；')||'—'],['备注',n.notes||'—']
   ];
   let html=`<div class="npchead"><div class="avswap" id="npcAvSwap" title="换一幅画像">${avatarFace(n,'',null)}<span class="avtag">换画像</span></div><div class="nh">${esc(n.alignment||'中立')} · ${esc(n.relation||'')}<br>${esc(n.identity||'')}${n.faction?'　'+esc(n.faction):''}</div></div>`
