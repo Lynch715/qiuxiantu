@@ -1982,7 +1982,16 @@ function agingTick(){
   const p=S.player, ag=fdm().aging;
   if(!ag) return;                                   // 随心所欲：青春常驻
   const r=lifeRatio();
-  if(r>=0.55){
+  /* 10-11：修仙的衰老不掉境界、不扣战力（战力只看境界和法器）；寿元耗过六成，神识、体魄慢慢往下走，冲关更难（冲关那边已算衰老）。
+     凡人没有境界，照旧是气力日衰 */
+  if(p.realm&&p.realm.major>=0){
+    syncPower(p);
+    if(r>=0.6){
+      const prob=(r>=0.82?0.8:(r>=0.70?0.5:0.25))*ag;
+      const lost=[]; for(const k of ['神识','体魄']) if(Math.random()<prob&&num(p.attributes[k])>20){ p.attributes[k]=num(p.attributes[k])-1; lost.push(k); }
+      if(lost.length) ledger(`寿元已耗去${Math.floor(r*10)}成，${lost.join('、')}衰了一点`);
+    }
+  }else if(r>=0.55){
     const dec=r>=0.82?3:(r>=0.70?2:1);
     const prob=(r>=0.70?0.85:0.45)*ag;
     if(Math.random()<prob&&p.attributes['武功']>0) p.attributes['武功']=clampW(p.attributes['武功']-dec);
