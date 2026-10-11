@@ -3452,10 +3452,24 @@ const FAC_MAX=10;
 function curYear(){ return Math.floor(num(S&&S.months)/12); }
 function facLeaderRealm(power){ const major=power>=70?4:power>=45?3:2; return {major,minor:rnd(1,3),perfect:false,ascended:false}; }
 function facLog(f,text,dv){ f.log=f.log||[]; f.log.push({y:curYear(),date:S.date||'',text:String(text).slice(0,40),dv:num(dv)}); while(f.log.length>8) f.log.shift(); }
+// 宗主恰为主角时只使用主角本人的实时资料；不进入普通宗主的随机人生线。
+function factionLedByPlayer(f,state){
+  const p=(state||S)&& (state||S).player;
+  return !!(f&&p&&plain(p.name)&&plain(f.leader)===plain(p.name));
+}
+function syncPlayerFactionLeader(f,state){
+  const st=state||S;
+  if(!factionLedByPlayer(f,st)) return false;
+  const p=st.player;
+  f.lRealm=p.realm?JSON.parse(JSON.stringify(p.realm)):null;
+  f.lAge=num(p.age); f.lGender=p.gender;
+  return true;
+}
 function ensureFactionMeta(f){
   if(f.base==null) f.base=clamp(num(f.power));
   if(f.lastPower==null) f.lastPower=num(f.power);
   if(!plain(f.leader)){ const g=Math.random()<0.25?'女':'男'; f.leader=makeRankName(g); f.lGender=g; }
+  syncPlayerFactionLeader(f);
   if(!/[男女]/.test(f.lGender||'')){   // 10-09：宗主的性别存下来，以后谁用都照这个，不再按名字重猜
     const npc=findNpc(f.leader), r=((S&&S.world&&S.world.ranking)||[]).find(x=>x.name===f.leader);
     f.lGender=npc&&/[男女]/.test(npc.gender||'')?npc.gender:(r&&/[男女]/.test(r.gender||'')?r.gender:inferGender({name:f.leader},0.25));
@@ -3469,7 +3483,9 @@ function ensureFactionMeta(f){
   f.log=f.log||[];
 }
 function facSetLeader(f,name,realm,gender){
-  f.leader=name; const npc=findNpc(name);
+  f.leader=name;
+  if(syncPlayerFactionLeader(f)){ f.lSince=curYear(); return; }
+  const npc=findNpc(name);
   const rk=((S&&S.world&&S.world.ranking)||[]).find(x=>x.name===name);
   f.lGender=npc&&/[男女]/.test(npc.gender||'')?npc.gender:(gender||(rk&&rk.gender)||inferGender({name},0.25));
   f.lRealm=npc&&npc.realm?JSON.parse(JSON.stringify(npc.realm)):realm||facLeaderRealm(Math.max(0,num(f.power)-15));
@@ -3477,6 +3493,7 @@ function facSetLeader(f,name,realm,gender){
   f.lSince=curYear();
 }
 function facSucceed(f,why){
+  if(syncPlayerFactionLeader(f)) return;
   const old=f.leader, lg=Math.random()<0.25?'女':'男', nm=makeRankName(lg);
   const r=f.lRealm?{major:Math.max(2,f.lRealm.major-(Math.random()<0.6?1:0)),minor:rnd(1,3),perfect:false,ascended:false}:null;
   facSetLeader(f,nm,r,lg);
@@ -3501,7 +3518,7 @@ function fillWorldSeed(i){
   if(kind==='vein'){ const a=pickF(facPool()); const b=a&&pickF(facPool(f=>f!==a)); if(!a||!b) return seed[0]; fx.A=a.name; fx.B=b.name; }
   else if(kind==='demon'){ const m=pickF(facPool(f=>f.alignment==='邪道')), z=pickF(facPool(f=>f.alignment!=='邪道')); if(!z) return seed[0]; fx.M=m?m.name:''; fx.Z=z.name; }
   else if(kind==='dry'){ const lo=facPool(f=>num(f.power)<45); const a=pickF(lo.length?lo:facPool()); if(!a) return seed[0]; fx.A=a.name; }
-  else { const a=pickF(facPool(f=>kind!=='recruit'||f.alignment!=='邪道')); if(!a) return seed[0]; fx.A=a.name; if(kind==='seclude'){ ensureFactionMeta(a); fx.L=a.leader; } }
+  else { const a=pickF(facPool(f=>(kind!=='recruit'||f.alignment!=='邪道')&&(kind!=='seclude'||!factionLedByPlayer(f)))); if(!a) return kind==='seclude'?null:seed[0]; fx.A=a.name; if(kind==='seclude'){ ensureFactionMeta(a); fx.L=a.leader; } }
   let text=tpl.replace('{A}',fx.A||'').replace('{B}',fx.B||'').replace('{Z}',fx.Z||'').replace('{L}',fx.L||'').replace('{M}',fx.M||'');
   if(kind==='demon'&&!fx.M) text=text.replace('一伙的魔修','一伙魔修');
   const w=worldState(); w.seedMap=w.seedMap||{}; w.seedMap[text]={i,fx};
@@ -3525,6 +3542,7 @@ function facResolve(e,text){
     facLog(wf,`与${lf.name}争灵脉得手`,d1); facLog(lf,`与${wf.name}争灵脉落败`,-d2); fx.win=wf.name;
   }else if(fx.kind==='seclude'){
     const A=facByName(fx.A); if(!A) return; ensureFactionMeta(A);
+    if(factionLedByPlayer(A)) return;
     if(fx.L&&A.leader!==fx.L) return;     // 宗主已经换过了
     const died=/坐化|陨落|身死|没能出关|死在关中|再没出来|魂灯灭/.test(t)?true:/出关|突破|功成|破关/.test(t)?false:Math.random()<0.5;
     if(died){ facSucceed(A,`宗主${A.leader}死关未成，坐化关中`); A.power=clamp(num(A.power)-5); facLog(A,'宗主坐化，长老争位',-5); }
@@ -3543,6 +3561,7 @@ function facResolve(e,text){
 function facAutoResult(e){
   const fx=e.fx;
   if(fx.kind==='vein'){ const w=Math.random()<0.5?fx.A:fx.B, l=w===fx.A?fx.B:fx.A; return `${w}占下了那条灵脉，${l}退走`; }
+  if(fx.kind==='seclude'&&factionLedByPlayer(facByName(fx.A))) return `${fx.A}主事已由主角掌握，原先的宗主闭关传闻不再适用`;
   if(fx.kind==='seclude'){ return Math.random()<0.5?`${fx.A}宗主${fx.L}没能出关，坐化在死关里`:`${fx.A}宗主${fx.L}破关而出，长老们各自收了心思`; }
   if(fx.kind==='demon') return fx.M?`${fx.Z}追剿得手，${fx.M}的人退回了老巢`:`${fx.Z}把那伙魔修赶出了凡人地界`;
   if(fx.kind==='dry') return `${fx.A}搬了山门，元气大伤`;
@@ -3558,7 +3577,8 @@ function factionYear(){
     ensureFactionMeta(f);
     // 宗主：认识的人按人物表；榜上的人按榜；其余引擎记年纪
     const npc=findNpc(f.leader), rk=(w.ranking||[]).find(x=>x.name===f.leader);
-    if(npc){ f.lRealm=npc.realm?JSON.parse(JSON.stringify(npc.realm)):f.lRealm; f.lAge=num(npc.age); if(npc.alive===false) facSucceed(f,`宗主${f.leader}亡故`); }
+    if(syncPlayerFactionLeader(f)){ /* 主角的年龄、修为和生死由主角引擎结算。 */ }
+    else if(npc){ f.lRealm=npc.realm?JSON.parse(JSON.stringify(npc.realm)):f.lRealm; f.lAge=num(npc.age); if(npc.alive===false) facSucceed(f,`宗主${f.leader}亡故`); }
     else if(rk&&rk.alive===false) facSucceed(f,`宗主${f.leader}辞世`);
     else{
       f.lAge=num(f.lAge)+1;
@@ -4580,6 +4600,7 @@ function clanSyncFaction(){
   let f=S.world.factions.find(x=>x.name===c.name);
   if(!f){ f={name:c.name,alignment:c.alignment,power:0,leader:'',desc:''}; S.world.factions.push(f); }
   f.own=true; f.power=clamp(num(c.power)); f.leader=S.player.name; f.alignment=c.alignment;
+  syncPlayerFactionLeader(f);
   if(c.creed) f.desc=c.creed;
 }
 
@@ -5174,6 +5195,7 @@ function worldState(state){
   const s=state||S; if(!s) return null;
   const w=s.world||(s.world={factions:[],ranking:[],events:[]});
   w.factions=w.factions||[]; w.ranking=w.ranking||[];
+  for(const f of w.factions) syncPlayerFactionLeader(f,s);
   if(!Array.isArray(w.threads)){
     w.seq=0;
     w.threads=(w.events||[]).map(plain).filter(Boolean).slice(0,8).map(t=>({
@@ -9706,7 +9728,7 @@ function renderWorld(){
   }
   if(S.player&&S.world&&S.player.faction&&!/散人|散修|凡人|^无$/.test(S.player.faction)&&!(S.clan&&S.clan.name===S.player.faction)) { S.player.faction=ensureSectListed(plain(S.player.faction)); if(S.sect&&!S.sect.own&&S.sect.name!==S.player.faction&&ensureSectListed(plain(S.sect.name))===S.player.faction) S.sect.name=S.player.faction; }
   const fs=(S.world&&S.world.factions||[]).slice().sort((a,b)=>(b.name===S.player.faction)-(a.name===S.player.faction));
-  $('wFactions').innerHTML=fs.length?fs.map(f=>{ const tr=num(f.trend), lg=(f.log||[]).slice(-1)[0], recent=lg&&curYear()-num(lg.y)<=5;
+  $('wFactions').innerHTML=fs.length?fs.map(f=>{ syncPlayerFactionLeader(f); const tr=num(f.trend), lg=(f.log||[]).slice(-1)[0], recent=lg&&curYear()-num(lg.y)<=5;
     return `<div class="faction"><div class="fl"><span><b>${esc(f.name)}</b>${f.name===S.player.faction?' <small style="color:var(--accent)">【你在此门】</small>':''} <small>${esc(f.alignment)} · ${f.own?esc(f.leader):'宗主 '+esc(f.leader)+(f.lRealm?'（'+esc(realmText(f.lRealm))+'）':'')}</small></span><small>势力 ${f.power}${tr>0?' <b style="color:#3F7A55">↑'+tr+'</b>':tr<0?' <b style="color:#9B4A3C">↓'+(-tr)+'</b>':''}</small></div>${recent?`<div style="font-size:12px;color:var(--ink-soft)">近况：${esc(lg.text)}（${esc(lg.date||'')}）</div>`:''}<div class="bar" style="height:6px"><i style="width:${pw(f.power)}%;background:${f.alignment==='邪道'?'#6B4E7A':f.alignment==='正派'?'#3F7A55':'#7D8A82'}"></i></div><div style="font-size:12.5px;color:var(--ink-soft);margin-top:2px">${esc(f.desc)}</div></div>`;}).join(''):'<div class="empty">尚无</div>';
   $('wFactions').insertAdjacentHTML('beforeend',worldThreadsHtml());
   const vd=(S.vendettas||[]).filter(v=>v.heat>0);
