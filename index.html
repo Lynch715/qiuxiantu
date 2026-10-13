@@ -152,6 +152,12 @@ body{
 #avMask details summary{font-size:12.5px;color:var(--ink-soft);margin:12px 0 2px;cursor:pointer}
 #avMask .avbody{max-height:56vh;overflow-y:auto}
 #avMask .avnow{font-size:12.5px;color:var(--ink-soft);margin-top:8px;min-height:1.6em}
+#avMask .avupload{display:flex;align-items:center;gap:12px;margin:4px 0 14px;padding:12px;border:1px solid var(--paper-edge);border-radius:8px;background:var(--paper-dark)}
+#avMask .avpreview .avatar{width:64px;height:64px;display:flex;align-items:center;justify-content:center;color:#F5F9F6;font-size:24px}
+#avMask .avupload-info{min-width:0;flex:1}
+#avMask .avupload-info small{display:block;margin-top:6px;font-size:12px;line-height:1.65;color:var(--ink-soft);overflow-wrap:anywhere}
+#avMask .avupload-info .mbtn{min-height:40px;max-width:100%;white-space:normal}
+#avMask .avupload-status{min-height:1.6em;font-size:12px;color:var(--ink-soft);margin-top:4px}
 .stickyrow{position:sticky;bottom:-28px;margin:12px -32px -28px;padding:12px 32px 16px;
   background:linear-gradient(to top,var(--paper-dark) 62%,rgba(235,241,236,0));border-radius:0 0 10px 10px}
 @media (max-width:900px){ .stickyrow{margin:12px -18px -20px;padding:10px 18px 14px} }
@@ -1344,7 +1350,7 @@ const AV_DESC={"m1_01": "十五六岁山村少年，粗布短打，头发随手�
 const AV_AGE={'1':'14至17','2':'18至35','3':'36至55','4':'56至70'};
 function avDesc(slot){ return AV_DESC[slot]||''; }
 function avAgeHint(slot){ return (slot&&slot[0]!=='x')?AV_AGE[slot[1]]:''; }
-function npcPortrait(n){ const s=avSlotOf(n); return avDesc(s)||(n&&n.portrait)||''; }
+function npcPortrait(n){ if(customAvatarOf(n)) return ''; const s=avSlotOf(n); return avDesc(s)||(n&&n.portrait)||''; }
 /* ================= 姓名校正 =================
    模型偶尔会把主角的姓写串（叫「田伯光」却自称「我徐某人」）。
    提示词里已经单拎出来强调，这里再兜一道：把明显写错的自称改回来。 */
@@ -1444,6 +1450,7 @@ function avPickSlot(n){
    但每次都查一遍配不配：性别不对、年纪差出两档就重分一张。玩家亲手选的（avatarLocked）不动。 */
 function avSlotOf(n){
   if(!n||typeof n!=='object') return null;
+  if(customAvatarOf(n)) return null;
   let slot=n.avatar;
   if(!(slot&&AV_SLOTS.indexOf(slot)>=0&&(n.avatarLocked||avSlotFits(slot,n)))) slot=avPickSlot(n);
   try{
@@ -1688,9 +1695,15 @@ function avCellStyle(slot){
   return `background-image:url(${AV_SHEET});background-size:${(AV_COLS*k*100).toFixed(2)}% ${(AV_ROWS*k*100).toFixed(2)}%;background-position:${pos(col,AV_COLS)}% ${pos(row,AV_ROWS)}%`;
 }
 // 没图就退回原来的首字圆牌，绝不开天窗
+// 自定义头像仅接受内嵌位图；随人物存档，不使用外链，也不交给模型。
+function customAvatarOf(n){
+  const src=n&&n.customAvatar;
+  return typeof src==='string'&&src.length<=350000&&/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(src)?src:'';
+}
 function avatarFace(n,cls,size,me){
   const ring=avRing(n,me), dead=n&&n.alive===false;
-  const cell=avCellStyle(avSlotOf(n));
+  const custom=customAvatarOf(n);
+  const cell=custom?`background-image:url(${custom});background-size:cover;background-position:center`:avCellStyle(avSlotOf(n));
   const sz=size?`width:${size}px;height:${size}px;`:'';
   const st=cell?`${cell};box-shadow:inset 0 0 0 2px ${ring}`:`background-color:${ring}`;
   return `<div class="avatar ${cell?'av':''} ${dead?'dead':''} ${cls||''}" style="${sz}${st}">${esc(String((n&&n.name)||'？')[0]||'？')}</div>`;
@@ -6115,7 +6128,8 @@ function stateBlocks(action){
   const quests=S.quests.length?S.quests.map(q=>`- ${q.title}（${q.status}，进度${q.progress}）：${q.desc}`).join('\n'):'（无）';
   const world=S.world&&S.world.ranking&&S.world.ranking.length?`${rankName()}：${S.world.ranking.map((r,i)=>`${i+1}.${r.name}(${r.gender?r.gender+',':''}${num(r.age)?num(r.age)+'岁,':''}${r.faction||'散修'}${r.realm?','+realmText(r.realm):''}${r.alive===false?',已陨落':''})`).join('；')}${num(S.world.vacant)>0?`\n榜上尚有${S.world.vacant}个空缺（有人辞世或跌出），可用rankingAdd补进一位有来历的新高手（武功须与榜末相当）`:''}${(S.world.fallen||[]).length?`\n已故的榜上人物：${S.world.fallen.slice(-6).map(x=>x.name).join('、')}`:''}\n势力：${(S.world.factions||[]).map(f=>`${f.name}(${f.alignment},势力${f.power},首领${f.leader}${(()=>{ const x=f.own?[]:[f.lGender,f.lAge?num(f.lAge)+'岁':'',f.lRealm?realmText(f.lRealm):''].filter(Boolean); return x.length?`[${x.join(',')}]`:''; })()})`).join('；')}${hiddenList().filter(h=>h&&h.alive!==false).length?`\n隐世高人（不上修士榜，平时不露面，没有引擎安排不要写他们出场）：${hiddenList().filter(h=>h&&h.alive!==false).map(h=>`${h.name}(${h.gender},${h.faction||'散修'},${realmText(h.realm)},${h.home||''})`).join('；')}`:''}${(S.world.tianjiao||[]).filter(t=>t&&t.alive!==false).length?`\n天骄榜：${S.world.tianjiao.filter(t=>t&&t.alive!==false).map(t=>`${t.name}(${t.gender},${num(t.age)}岁,${t.faction||'散修'},${realmText(t.realm)})`).join('；')}`:''}\n以上人物的性别、年龄、境界以此为准，写到他们时照着写。`:'（尚未铸造）';
   avSlotOf(p);
-  const pb=Object.assign({},p); delete pb.backstory; delete pb.avatar; delete pb.avatarLocked;
+  const pb=Object.assign({},p); delete pb.backstory; delete pb.avatar; delete pb.avatarLocked; delete pb.customAvatar;
+  if(customAvatarOf(p)) delete pb.portrait;
   for(const k of ['realm','linggen','lingli','breakCD','lifeBonus','cultMode','cultMul','scarPower','bottleneckNoted','lifespan','tags','prep']) delete pb[k];
   pb.attributes=Object.assign({},p.attributes); delete pb.attributes['武功'];
   if(p.items){ pb.items={}; for(const c in p.items) pb.items[c]=(c==='法器'||c==='玉简'?(p.items[c]||[]).map(it=>({item:it,count:1})):stackItems(p.items[c])).map(({item:it,count})=>{ if(!it||typeof it!=='object') return it; const o=Object.assign({},it); delete o.bonus; if(count>1) o.count=count; return o; }); }
@@ -9845,8 +9859,10 @@ function renderGraph(){
     const w=1+val/40;
     const r=n.alive?(13+Math.round(val/12)):13;   // 交情越深，人越显眼
     edges+=`<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="${ec}" stroke-width="${n.alive?w:1}" stroke-dasharray="${n.alive?'none':'4 4'}" opacity=".65" stroke-linecap="round"/>`;
-    const slot=avSlotOf(n), si=AV_SLOTS.indexOf(slot), ring=avRing(n);
-    const face=(si>=0&&AV_SHEET)?(()=>{
+    const slot=avSlotOf(n), si=AV_SLOTS.indexOf(slot), ring=avRing(n), custom=customAvatarOf(n);
+    const face=custom?`<clipPath id="gav${i}"><circle cx="${x}" cy="${y}" r="${r}"/></clipPath>
+      <image href="${custom}" x="${x-r}" y="${y-r}" width="${r*2}" height="${r*2}" preserveAspectRatio="xMidYMid slice" clip-path="url(#gav${i})" opacity="${n.alive?1:.5}" style="${n.alive?'':'filter:grayscale(1)'}"/>
+      <circle cx="${x}" cy="${y}" r="${r-1}" fill="none" stroke="${n.alive?ring:'#999'}" stroke-width="2.5"/>`:(si>=0&&AV_SHEET)?(()=>{
       const D=r*2*AV_ZOOM, col=si%AV_COLS, row=Math.floor(si/AV_COLS);
       return `<clipPath id="gav${i}"><circle cx="${x}" cy="${y}" r="${r}"/></clipPath>
       <image href="${AV_SHEET}" x="${x-(col+0.5)*D}" y="${y-(row+0.5)*D}" width="${AV_COLS*D}" height="${AV_ROWS*D}"
@@ -9861,8 +9877,10 @@ function renderGraph(){
       <text x="${x}" y="${y-24}" text-anchor="middle" font-size="10" fill="#A8862F">${esc(n.relation)}</text>
     </g>`;
   });
-  const mSlot=avSlotOf(S.player), mi=AV_SLOTS.indexOf(mSlot), mr=21;
-  const meFace=(mi>=0&&AV_SHEET)?(()=>{
+  const mSlot=avSlotOf(S.player), mi=AV_SLOTS.indexOf(mSlot), mr=21, mCustom=customAvatarOf(S.player);
+  const meFace=mCustom?`<clipPath id="gavme"><circle cx="${cx}" cy="${cy}" r="${mr}"/></clipPath>
+    <image href="${mCustom}" x="${cx-mr}" y="${cy-mr}" width="${mr*2}" height="${mr*2}" preserveAspectRatio="xMidYMid slice" clip-path="url(#gavme)"/>
+    <circle cx="${cx}" cy="${cy}" r="${mr-1}" fill="none" stroke="#3C7D62" stroke-width="3"/>`:(mi>=0&&AV_SHEET)?(()=>{
     const D=mr*2*AV_ZOOM, col=mi%AV_COLS, row=Math.floor(mi/AV_COLS);
     return `<clipPath id="gavme"><circle cx="${cx}" cy="${cy}" r="${mr}"/></clipPath>
     <image href="${AV_SHEET}" x="${cx-(col+0.5)*D}" y="${cy-(row+0.5)*D}" width="${AV_COLS*D}" height="${AV_ROWS*D}" clip-path="url(#gavme)"/>
@@ -9883,8 +9901,41 @@ function renderGraph(){
 /* ================= 换画像 =================
    同性别的脸排前面，特型其次，另一性别折起来。选中即锁定（avatarLocked），
    读档校验和自动分配都不再动它；「随天意」解锁、交回自动分配。 */
+let avatarPickerSession=null;
+async function readAvatarImage(file){
+  if(!file||!file.size) throw new Error('图片为空，请重新选择');
+  if(file.size>10*1024*1024) throw new Error('图片超过 10 MB，请先缩小后再上传');
+  const supported=/^image\/(?:jpeg|png|webp|gif|avif|bmp|x-ms-bmp)$/i;
+  if(!supported.test(file.type||'')&&!(!file.type&&/\.(?:jpe?g|png|webp|gif|avif|bmp)$/i.test(file.name||'')))
+    throw new Error('请选择 JPG、PNG、WebP 等常见图片');
+  const url=URL.createObjectURL(file), img=new Image();
+  let timer;
+  try{
+    await new Promise((resolve,reject)=>{
+      timer=setTimeout(()=>reject(new Error('图片读取超时，请重新选择')),15000);
+      img.onload=resolve;
+      img.onerror=()=>reject(new Error('图片无法读取，请换一张 JPG 或 PNG 图片'));
+      img.src=url;
+    });
+    const w=img.naturalWidth,h=img.naturalHeight;
+    if(!w||!h||w*h>40000000) throw new Error('图片尺寸过大或无法读取，请先缩小后再上传');
+    const canvas=document.createElement('canvas'); canvas.width=384; canvas.height=384;
+    const ctx=canvas.getContext('2d');
+    if(!ctx) throw new Error('当前浏览器无法处理图片，请换一个浏览器试试');
+    ctx.fillStyle='#EFE5CF'; ctx.fillRect(0,0,384,384);
+    ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high';
+    const side=Math.min(w,h);
+    ctx.drawImage(img,(w-side)/2,(h-side)/2,side,side,0,0,384,384);
+    const src=canvas.toDataURL('image/jpeg',0.88);
+    if(!customAvatarOf({customAvatar:src})) throw new Error('图片处理失败，请换一张图片');
+    return src;
+  }finally{ clearTimeout(timer); img.onload=null; img.onerror=null; URL.revokeObjectURL(url); }
+}
 function openAvatarPicker(n,isMe){
   if(!n) return;
+  if(busy){ toast('请等这一回推演结束后再换画像'); return; }
+  const session={owner:S,n,isMe,revision:0}; avatarPickerSession=session;
+  const canApply=()=>avatarPickerSession===session&&S===session.owner&&!busy&&$('avMask').classList.contains('on');
   const g=avG(n.gender), other=g==='f'?'m':'f';
   const cur=avSlotOf(n);
   const same=AV_SLOTS.filter(k=>k[0]===g);
@@ -9893,7 +9944,12 @@ function openAvatarPicker(n,isMe){
   const band=['','少年','青年','中年','老年'];
   const cell=k=>`<div class="cell ${cur===k?'sel':''}" data-a="${k}" title="${esc(avDesc(k))}" style="${avCellStyle(k)||''}"></div>`;
   const grid=list=>`<div class="avpick">${list.map(cell).join('')}</div>`;
-  let body=`<div class="avpick"><div class="cell auto ${n.avatarLocked?'':'sel'}" data-a="">随天意</div></div>`;
+  let body=`<div class="avupload"><div class="avpreview" id="avUploadPreview">${avatarFace(n,'',64,isMe)}</div>
+    <div class="avupload-info"><button class="mbtn primary" id="avUploadBtn">上传自己的图片</button>
+    <input id="avUploadFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif,image/bmp" hidden>
+    <small>最大 10 MB，支持 JPG、PNG、WebP 等图片。自动居中裁成方形；动图取静态画面。图片仅保存在本机，随存档导出。</small>
+    <div class="avupload-status" id="avUploadStatus" role="status" aria-live="polite"></div></div></div>
+    <div class="avpick"><div class="cell auto ${n.avatarLocked||customAvatarOf(n)?'':'sel'}" data-a="">随天意</div></div>`;
   for(let b=1;b<=4;b++){
     const l=same.filter(k=>k[1]===String(b));
     if(l.length) body+=`<div class="avsec">${g==='f'?'女':'男'} · ${band[b]}</div>`+grid(l);
@@ -9903,23 +9959,50 @@ function openAvatarPicker(n,isMe){
   $('avMTitle').textContent=(n.name||'主角')+' · 换画像';
   $('avMSub').textContent=`${isMe?'主角 · ':''}${unkOf(n,'G')?'性别未知':(n.gender||'')} · ${unkOf(n,'A')?'?':(num(n.age)||'?')}岁${n.identity?' · '+n.identity:''}`;
   $('avMBody').innerHTML=body;
-  const showNow=()=>{ const s=avSlotOf(n); $('avMNow').textContent=(n.avatarLocked?'已锁定：':'自动分配：')+(avDesc(s)||'—'); };
+  $('avMBody').scrollTop=0;
+  const showNow=()=>{
+    const custom=customAvatarOf(n), s=avSlotOf(n);
+    $('avMNow').textContent=custom?'已使用自定义头像；选下方画像或「随天意」可替换。':(n.avatarLocked?'已锁定：':'自动分配：')+(avDesc(s)||'—');
+    $('avUploadPreview').innerHTML=avatarFace(n,'',64,isMe);
+    $('avUploadBtn').textContent=custom?'重新上传图片':'上传自己的图片';
+  };
+  const refresh=()=>{
+    showNow(); renderPanel();
+    if(!isMe&&$('npcMask').classList.contains('on')) showNpc(n);
+    saveGame();
+  };
   showNow();
   $('avMBody').querySelectorAll('.cell').forEach(el=>el.onclick=()=>{
+    if(!canApply()){ toast('请等这一回推演结束后再换画像'); return; }
+    session.revision++;
     const k=el.dataset.a||null;
     setAvatar(n,k);
     $('avMBody').querySelectorAll('.cell').forEach(x=>x.classList.remove('sel'));
     el.classList.add('sel');
-    showNow();
-    renderPanel();
-    if(!isMe&&$('npcMask').classList.contains('on')) showNpc(n);
-    if(typeof renderGraph==='function'&&$('graphWrap')) try{ renderGraph(); }catch(_){}
-    saveGame();
+    $('avUploadStatus').textContent='';
+    refresh();
   });
+  $('avUploadBtn').onclick=()=>{ if(canApply()) $('avUploadFile').click(); };
+  $('avUploadFile').onchange=async e=>{
+    const file=e.target.files[0]; e.target.value=''; if(!file) return;
+    const revision=++session.revision;
+    const button=$('avUploadBtn'), status=$('avUploadStatus');
+    button.disabled=true; status.textContent='正在处理图片……';
+    try{
+      const src=await readAvatarImage(file);
+      if(!canApply()||session.revision!==revision) return;
+      n.customAvatar=src; n.avatarLocked=true;
+      $('avMBody').querySelectorAll('.cell').forEach(x=>x.classList.remove('sel'));
+      refresh(); status.textContent='头像已更换，已加入当前存档。';
+    }catch(err){
+      if(canApply()&&session.revision===revision) status.textContent=err.message||'图片读取失败，请重新选择';
+    }finally{ button.disabled=false; }
+  };
   $('avMask').classList.add('on');
 }
 // k 为空＝交回自动分配
 function setAvatar(n,k){
+  delete n.customAvatar;
   if(k&&AV_SLOTS.indexOf(k)>=0){ n.avatar=k; n.avatarLocked=true; n.portrait=avDesc(k); }
   else { n.avatarLocked=false; n.avatar=null; n.portrait=''; avSlotOf(n); }
 }
