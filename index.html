@@ -1115,7 +1115,7 @@ function plain(x){
 }
 const esc=s=>String(s==null?'':(typeof s==='object'?plain(s):s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-const SAVE_VERSION=13;
+const SAVE_VERSION=14;
 let turnTransaction=false;
 let turnRequest=0;
 let convoRequest=0;
@@ -1335,6 +1335,7 @@ function migrate(s){
   if(s.war===undefined) s.war=null;
   if(!s.chapters) s.chapters=[];
   if(s.scene) s.scene=normScene(s.scene);
+  if(s.v<14) migratePowerState(s);
   return s;
 }
 
@@ -1737,8 +1738,7 @@ function growthCap(){
   if(r>=0.58) cap-=1;
   if(r>=0.70) cap-=1;
   cap=Math.max(1,Math.round(Math.max(1,cap)*fdm().growth));
-  const w=num(p.attributes['武功']);
-  if(WCAP()>100&&w>100) cap=Math.round(cap*Math.min(6,1+(w-100)/200));   // 水涨船高，但最多快六倍
+  // 基础战力放大不额外加速五维成长；成长仍按悟性、寿元和自由度计算。
   return Math.max(1,cap);
 }
 function ageNote(){
@@ -1868,6 +1868,7 @@ function xianRulesText(){
   return `【仙界（主角已经飞升，以下规矩压过前文与之冲突的部分）】
 - 主角如今人在仙界「${land}」。前文说的修真大陆是他飞升前的下界；修士榜、天骄榜、下界的宗门与人物这一回合都不出现。
 - 仙界境界只有这七个，各分初期、中期、后期：地仙、天仙、真仙、玄仙、金仙、太乙金仙、大罗金仙。仙人修的是仙元，不是灵力。写仙界的人一律用这几个境界名，不写炼气、筑基、金丹那些。
+- 基础战力由引擎按境界计算：地仙101–200、天仙201–300、真仙301–400、玄仙401–500、金仙501–650、太乙金仙651–800、大罗金仙801–999，证道1000；下界修士0–100。法宝、功法和伤势是斗法修正，不改变基础境界战力；五维、气血、声望、凶名、好感和熟练仍为0–100，不要跟着战力一起放大。下凡不降低仙人的基础战力。
 - 境界为王，比下界更狠：低一个大境界见面要执晚辈礼，低两个大境界连话都插不上。称呼：地仙、天仙称「上仙」「前辈」，真仙、玄仙称「仙君」，金仙称「仙尊」，太乙金仙称「道君」，大罗金仙称「帝君」；同境界称「道友」「仙友」。
 - 飞升者：仙界土生土长的仙人看不起从下界飞升上来的人，背后叫「下界来的」「飞升仙」。主角是飞升者，境界又低，刚来时处处吃亏、仰人鼻息，好差事轮不到他，坏事先找上他。
 - 仙界的钱是仙晶，playerChanges.money 记的就是仙晶。仙晶金贵：寻常一回合进项在零到两块之间，十块以上必须有大来由。一块仙晶抵下界一万块下品灵石；下界带上来的灵石、丹药、法宝在仙界不值什么钱。
@@ -1997,8 +1998,8 @@ const RK_NOTE=['一口飞剑斩过三头妖王','丹道一绝，千金难求一�
 // 上榜门槛：不能让个武功四十的路人挤进当世前十
 function rankFloor(){
   const live=(S.world&&S.world.ranking||[]).filter(r=>r.alive!==false);
-  if(!live.length) return 62;
-  return Math.max(58, Math.min.apply(null,live.map(r=>num(r['武功'])))-5);
+  if(!live.length) return inXianjie()?powerFromRealm(parseRealm('真仙初期')):62;
+  return Math.max(inXianjie()?101:58, Math.min.apply(null,live.map(r=>num(r['武功'])))-(inXianjie()?50:5));
 }
 function makeRankName(gender){
   const used=new Set(((S.world&&S.world.ranking)||[]).map(r=>r.name).concat((S.npcs||[]).map(n=>n.name)));
@@ -2064,9 +2065,9 @@ function materializeHidden(h){
   n=normNpc({name:h.name,gender:h.gender,age:num(h.age)||300,identity:`${h.home||''}隐修`,faction:h.faction||'散修',alignment:h.alignment||'中立',personality:[pick(['孤傲','沉稳','冷漠','狂','谨慎'])],appearance:'看不出年纪',realm:realmText(h.realm),signature:h.note||'',relation:'素未谋面','好感度':20,alive:true,secret:'暂无人知',notes:h.note||''});
   n.elite=1; S.npcs.push(n); return n;
 }
-/* 随心所欲一档武功能到 1000，若只有主角在涨，榜上很快全成手下败将。
-   让榜上人物也按水位往上追——追的是差距的一小截，所以永远追得上、又永远追不平。 */
+/* 旧水位制的兼容入口：有境界的修士按境界成长，不因主角或榜首变强就凭空追涨。 */
 function rankCatchUp(){
+  if(S&&S.player&&S.player.realm) return;   // 修士基础战力只跟境界走。
   if(WCAP()<=100||!S||!S.world) return;
   const lv=powerLevel();
   for(const r of (S.world.ranking||[])){
@@ -2089,7 +2090,8 @@ function rankRefresh(){
   // 榜上人物若也在人物名录里，以名录为准（剧情改的是名录）
   for(const r of rk){
     const nn=findNpc(r.name);
-    if(nn){ r.age=num(nn.age); r['武功']=num(nn['武功']); if(!nn.alive) r.alive=false; if(nn.faction) r.faction=nn.faction; if(/[男女]/.test(nn.gender||'')) r.gender=nn.gender; }
+    if(nn){ syncPower(nn); r.age=num(nn.age); r['武功']=num(nn['武功']); r.realm=nn.realm; if(!nn.alive) r.alive=false; if(nn.faction) r.faction=nn.faction; if(/[男女]/.test(nn.gender||'')) r.gender=nn.gender; }
+    else if(r.realm) syncPower(r);
   }
   // 死者退榜，另记往生录
   for(const d of rk.filter(r=>r.alive===false)){
@@ -2101,7 +2103,7 @@ function rankRefresh(){
   const floor=rankFloor();
   // 认识的人里够格的顶上来
   const cands=(S.npcs||[]).filter(x=>x.alive&&!onBoard.has(x.name)&&num(x['武功'])>=floor)
-    .map(x=>({name:x.name,gender:x.gender||inferGender(x),faction:x.faction||'散修','武功':num(x['武功']),note:x.signature||x.identity||'',alive:true,age:num(x.age)||40,_new:true}));
+    .map(x=>({name:x.name,gender:x.gender||inferGender(x),faction:x.faction||'散修','武功':num(x['武功']),realm:x.realm,note:x.signature||x.identity||'',alive:true,age:num(x.age)||40,_new:true}));
   const pool=live.concat(cands).sort((a,b)=>num(b['武功'])-num(a['武功']));
   const next=pool.slice(0,10);
   const nextNames=new Set(next.map(r=>r.name));
@@ -2118,7 +2120,7 @@ function rankRefresh(){
       const fs=(S.world.factions||[]).filter(f=>f&&f.name);
       const lv=powerLevel();
       for(let i=0;i<vacant;i++){
-        const w=WCAP()>100 ? clampW(Math.max(floor+2, Math.round(lv*(0.55+Math.random()*0.5))))
+        const w=inXianjie() ? clampW(Math.max(floor+20, Math.round(Math.max(301,lv)*(0.55+Math.random()*0.5))),{realm:parseRealm('地仙初期')})
                            : clamp(floor+rnd(2,10),40,98);
         const f=fs.length&&Math.random()<0.7?pick(fs).name:'散修';
         const gd=Math.random()<0.25?'女':'男';
@@ -2799,11 +2801,60 @@ function parseRealm(t){
   else if(/后期/.test(t)) r.minor=3; else if(/中期/.test(t)) r.minor=2;
   return r;
 }
-// 战力（引擎里沿用「武功」这个字段，0-100）由境界折算；斗法、修士榜都读它。P3 重做斗法时再细分
-// 10-12：两界各一把 0–100 的尺子。下界照旧；仙界按仙界内序号（地仙初期=1 … 大罗后期=21）重铺。跨界斗法另加「仙凡之隔」
-function powerFromRealm(r){ if(!r||r.major<0) return 3; if(r.ascended) return 100; if(r.dao) return 100;
-  if(isXianRealm(r)) return Math.min(99,Math.round(5+(realmIndex(r)-30)*4.5)+(r.perfect?1:0));
+// 基础战力是人物的绝对修为：下界 0–100，仙界 101–1000；换界不换数值。
+// 每行依次是初期、中期、后期、大圆满。证道独占 1000，装备不占用基础战力上限。
+const XIAN_POWER=[[101,150,199,200],[201,250,299,300],[301,350,399,400],[401,450,499,500],[501,575,649,650],[651,725,799,800],[801,900,998,999]];
+function powerFromRealm(r){ if(!r||r.major<0) return 3; if(r.dao) return 1000;
+  if(r.ascended) return 101;
+  if(isXianRealm(r)){ const row=XIAN_POWER[Math.min(6,r.major-XIAN_PLANE_MAJOR)]; return row[r.perfect?3:Math.max(0,Math.min(2,num(r.minor)-1))]; }
   return Math.min(99,Math.round(4+realmIndex(r)*3.1)+(r.perfect?1:0)); }
+function legacyRealmPower(r){
+  if(!r||r.major<0) return 3;
+  if(r.ascended||r.dao) return 100;
+  return isXianRealm(r)?Math.min(99,Math.round(5+(realmIndex(r)-30)*4.5)+(r.perfect?1:0)):Math.min(99,Math.round(4+realmIndex(r)*3.1)+(r.perfect?1:0));
+}
+function powerScale(o){ o=o||(S&&S.player); return o&&(o.realm?(isXianRealm(o.realm)||o.realm.ascended):num(o.attributes?o.attributes['武功']:o['武功'])>100)?10:1; }
+function basePowerOf(o){ return o&&o.realm?powerFromRealm(o.realm):Math.max(0,Math.min(powerScale(o)*100,num(o&&o.attributes?o.attributes['武功']:o&&o['武功']))); }
+function legacyPowerRealm(v,plane){
+  for(let i=plane==='仙界'?51:30;i>=(plane==='仙界'?31:1);i--){ const r=parseRealm(realmFromIdx(i)); if(legacyRealmPower(r)<=num(v)) return r; }
+  return plane==='仙界'?parseRealm('地仙初期'):parseRealm('凡人');
+}
+// 只迁移实际人物和榜单，不改写历史正文；pending 的预演也一起迁移，避免续上时退回旧尺度。
+function migratePowerState(s){
+  if(!s||s.v>=14) return s;
+  const rebase=(o,plane)=>{
+    if(!o) return;
+    if(typeof o.realm==='string') o.realm=parseRealm(o.realm);
+    if(!o.realm) o.realm=legacyPowerRealm(o.attributes?o.attributes['武功']:o['武功'],plane);
+    if(o.realm&&o.realm.ascended) o.realm=parseRealm('地仙初期');
+    syncPower(o);
+  };
+  const worlds=[{bag:s,plane:s.plane||'下界'},...Object.entries(s.planes||{}).map(([plane,bag])=>({bag,plane}))];
+  const duel=s.duelState, oldPlayer=s.player&&s.player.realm?legacyRealmPower(typeof s.player.realm==='string'?parseRealm(s.player.realm):s.player.realm):num(s.player&&s.player.attributes&&s.player.attributes['武功']);
+  const oldOpp=duel&&(s.npcs||[]).find(n=>n&&n.name===duel.oppName);
+  const oldOpponent=oldOpp&&(oldOpp.realm?legacyRealmPower(typeof oldOpp.realm==='string'?parseRealm(oldOpp.realm):oldOpp.realm):num(oldOpp['武功']));
+  rebase(s.player,s.plane||'下界');
+  for(const {bag,plane} of worlds){
+    if(!bag) continue;
+    for(const n of bag.npcs||[]) rebase(n,plane);
+    const w=bag.world||{};
+    for(const list of [w.ranking,w.tianjiao,w.hidden]) for(const r of list||[]){
+      const n=(bag.npcs||[]).find(n=>n&&n.name===r.name);
+      if(n&&n.realm) r.realm=JSON.parse(JSON.stringify(n.realm));
+      rebase(r,plane);
+    }
+    for(const f of w.factions||[]) if(f.lRealm){ const r=typeof f.lRealm==='string'?parseRealm(f.lRealm):f.lRealm; if(r) f.lRealm=r; }
+  }
+  for(const n of s.xianLimbo||[]) rebase(n,'仙界');
+  // 已开打的战斗保留 eng 的回合、骰序、气血和状态，只把显示用的绝对战力迁到新尺度。
+  if(duel){
+    duel.pW=Math.max(0,basePowerOf(s.player)+(num(duel.pW)-oldPlayer)*powerScale(s.player));
+    if(oldOpp) duel.oppW=Math.max(0,basePowerOf(oldOpp)+(num(duel.oppW)-oldOpponent)*powerScale(oldOpp));
+  }
+  s.v=14;
+  if(s.pending&&s.pending.forecast&&s.pending.forecast.state) migratePowerState(s.pending.forecast.state);
+  return s;
+}
 function syncPower(o){
   if(!o||!o.realm) return;
   const v=powerFromRealm(o.realm);
@@ -4410,7 +4461,8 @@ function cultHtml(p){
   let h=`<div class="realmline"><b class="realmtxt">${esc(realmText(p.realm))}</b><span class="lgtxt">${esc(lgText(p.linggen))}</span></div>
     <div class="attr"><div class="lab"><b>${lingliWord()}</b><span>${ll} / ${need}${deltaTag(lastDeltas['灵力'])}</span></div><div class="bar"><i style="width:${need?pw(ll/need*100):100}%;background:${bn?'#B8923A':'#6C5B8E'}"></i></div></div>
     <div class="idesc">${bn?`<b style="color:#B8923A">已到瓶颈</b>，${lingliWord()}攒不进去了`:`闭关一年约进境 ${yearPct}%，冲满还需约 ${left<=12?left+' 个月':Math.ceil(left/12)+' 年'}`}${cd>0?`　冲关受挫，还要调养 ${cd} 个月`:''}</div>
-    <div class="idesc">主修${main?`【${esc(main.name)}】（${esc(main.grade||'')}${main.element?'·'+esc(main.element):''}）`:'：无'}　灵气${auraOf()>1?'充沛':(auraOf()<1?'稀薄':'寻常')}${partnerMul(p)>1?'　道侣同修':''}　战力 ${attrVal(p,'武功')}</div>
+    <div class="idesc">主修${main?`【${esc(main.name)}】（${esc(main.grade||'')}${main.element?'·'+esc(main.element):''}）`:'：无'}　灵气${auraOf()>1?'充沛':(auraOf()<1?'稀薄':'寻常')}${partnerMul(p)>1?'　道侣同修':''}</div>
+    <div class="idesc powerline">${esc(powerSummary(p))}<br>功法威力、熟练与境界压制在斗法中另算。</div>
     <div style="display:flex;gap:8px;margin-top:8px"><button class="mbtn" id="btnClose" style="flex:1">闭关</button><button class="mbtn ${bn&&!cd?'primary':''}" id="btnBreak" style="flex:1" ${(bn||canForce(p))&&!cd?'':'disabled'}>${!bn&&canForce(p)?'强冲':'冲关'}</button></div>`;
   return h;
 }
@@ -4495,11 +4547,12 @@ function markTaught(n,artName){
   n.fromPlayer=n.fromPlayer||[];
   const t=String(artName).replace(/[《》「」【】]/g,'').trim();
   if(t&&!n.fromPlayer.includes(t)){ n.fromPlayer.push(t); while(n.fromPlayer.length>6) n.fromPlayer.shift(); }
+  const art=artKnown(t);
+  if(art){ n.learnedArts=n.learnedArts||[]; if(!n.learnedArts.some(a=>a.name===art.name)) n.learnedArts.push(Object.assign({},art,{level:Math.min(40,num(art.level))})); }
 }
 
-// 兵器：模型给的 bonus 是 0-20 的「成色」，实际加成按当世水位放大——
-// 否则功力上了两三百之后，屠龙刀和烧火棍没什么分别
-function weaponScale(){ const lv=Math.max(100,(typeof powerLevel==='function'&&S)?powerLevel():100); return Math.min(10,lv/100); }
+// 法宝发挥的品阶换算为固定加成：下界每单位一点，仙境每单位十点，不读榜首。
+function weaponScale(p){ return powerScale(p); }
 function weaponPower(it){ return Math.round(gradePow(Math.min(GRADE_TOP,Math.max(0,num(it&&it.bonus))),S&&S.player)*weaponScale()); }
 // 模型常忘了填 bonus，按名号成色估一个，免得新得的神兵一点加成都没有
 function guessWeaponBonus(it){
@@ -4525,15 +4578,19 @@ function normWeapon(it){ if(!it) return it;
   const g=gradeIndex(it.grade);
   if(g){ it.grade=gradeText(g); it.bonus=g; return it; }
   const b=Math.min(GRADE_TOP,Math.max(0,num(it.bonus))); it.bonus=b||Math.min(12,guessWeaponBonus(it)); it.grade=gradeText(Math.max(1,it.bonus)); return it; }
-function weaponBonus(p){ let b=0; for(const w of (p.items&&p.items['法器']||[])) b=Math.max(b,gradePow(Math.min(GRADE_TOP,Math.max(0,num(w.bonus))),p)); return Math.round(b*weaponScale()); }
+function weaponBonus(p){ let b=0; for(const w of (p.items&&p.items['法器']||[])) b=Math.max(b,gradePow(Math.min(GRADE_TOP,Math.max(0,num(w.bonus))),p)); return Math.round(b*weaponScale(p)); }
+function powerBreakdown(p){
+  const scale=powerScale(p), base=basePowerOf(p), gear=weaponBonus(p);
+  const scar=Math.round(num(p.scarPower)*scale), hurt=(p.hp<30?15:0)*scale, deviation=((p.status||[]).includes('走火入魔')?10:0)*scale;
+  return {base,gear,scar,hurt,deviation,total:Math.max(0,base+gear-scar-hurt-deviation)};
+}
+function powerSummary(p){
+  const b=powerBreakdown(p), mods=[b.gear?'法宝 +'+b.gear:'',b.scar?'旧伤 −'+b.scar:'',b.hurt?'重伤 −'+b.hurt:'',b.deviation?'走火入魔 −'+b.deviation:''].filter(Boolean);
+  return `基础战力 ${b.base}（${powerScale(p)>1?'仙境 101–1000':'下界 0–100'}）${mods.length?'；'+mods.join('，'):''}；当前战力 ${b.total}`;
+}
 function attrVal(p,attr){
   let v=num(p.attributes[attr]);
-  if(attr==='武功'){
-    v+=weaponBonus(p);
-    v-=num(p.scarPower);
-    if(p.hp<30) v-=15;
-    if((p.status||[]).includes('走火入魔')) v-=10;
-  }
+  if(attr==='武功') v=powerBreakdown(p).total;
   return v;
 }
 /* ================= 判定（按钮与自由输入共用这一套） =================
@@ -5294,6 +5351,7 @@ function vStateText(v){
   return '正在暗中记恨，还没动身';
 }
 function vRatio(n){
+  if(powerScale(S.player)>1&&powerScale(n)===1) return 0;
   const me=Math.max(1,num(S.player&&S.player.attributes&&S.player.attributes['武功']));
   return num(n&&n['武功'])/me;
 }
@@ -5703,7 +5761,7 @@ const WORLD_RULES = `你是一个修仙文字游戏引擎。世界是一片架�
 - 感情戏：日常、含蓄、有来有往，可以在括号里写动作与心思；亲密之事点到为止，不写露骨内容。
 - 姓名铁律：主角与所有已登场人物的姓名以面板为准，任何时候都不可改写、换姓、换名或另起称呼。
 - {{CHOSEN}}
-属性规则（数值一律0-100）：
+属性规则（普通属性数值0-100，境界基础战力与法宝修正另算）：
 - 悟性：先天，终生不变，影响参悟功法、冲关。体魄：气血与肉身，体修看它。神识：法术、炼丹炼器、察觉，随境界涨。心性：抗心魔、抗诱惑，冲关时看它。谈吐：交际、说服、交易。体魄、神识、心性、谈吐可因经历小幅增减（写进playerChanges.attributes，一回合每项至多±3）。
 - 境界与灵力全由引擎记账：主角境界、灵力、能否冲关、冲关成败，你一概不可改写，也不可自己写主角突破；引擎判定冲关成功的那一回，照引擎写。主角闭关，引擎按月给灵力；灵力满了是「瓶颈」，玩家自己选冲关，引擎判成败。
 - 奇遇可以直接给灵力（服下灵果、吸纳灵脉、高人灌顶），写进playerChanges.lingli（增量），并在剧情里把来由写足；给多少由引擎裁定。
@@ -6161,6 +6219,7 @@ ${worldThreadBlock(action)}
 【主角面板】${JSON.stringify(pb)}（称号：${titleOf(p)}；${rankName()}位次：${rankText()}）
 ${sectRosterLine()}${S.sect&&!S.sect.own?`【宗门】${S.sect.name}${sectRank(S.sect.contrib)}，贡献${S.sect.contrib}${sectNext(S.sect.contrib)?`（攒到${sectNext(S.sect.contrib).need}升${sectNext(S.sect.contrib).name}）`:''}；剧情里称呼、差事都照这个位阶写\n`:''}【生计】身上${p.money}块${moneyUnit()}，${upkeepText()}${S.destitute?(inXianjie()?'；主角仙晶已经用尽，日子捉襟见肘':'；主角灵石已经用尽，日子捉襟见肘'):''}${inXianjie()&&num((p.wallet||{})['灵石'])?`；另有下界带上来的${num(p.wallet['灵石'])}块下品灵石，在仙界不顶用`:''}；年岁${p.age}，寿元${lifeText(p)}（${ageNote()}）
 【修为】${realmText(p.realm)}（修为驾驭得住的品阶到${gradeText(gradeCapFor(p))}；更高的法宝、功法也拿得到，只是发挥不全。越级的宝物要有来路：秘境、斗法战利品、高人相赠、重金买下，不要随手发；炼器想炼过这一档，剧情写成火候不够）；灵根${lgText(p.linggen)}；${lingliWord()}${Math.floor(num(p.lingli))}/${lingliNeed(p.realm)}${atBottleneck(p)?'（已到瓶颈，灵力攒不进去了，冲关要玩家自己发起）':''}${num(p.breakCD)>0?`；冲关受挫，还要调养${p.breakCD}个月`:''}；本境界一次闭关最长${durationText(closeMaxMonths())}
+【战力（引擎结算，不可自行改写）】${powerSummary(p)}；功法威力、熟练与境界压制在斗法中另算。
 ${debtBlock()}【标签】${(p.tags||[]).map(t=>t+'：'+(XTAGS[t]?XTAGS[t].desc:'')).join('；')||'无'}——数值部分引擎已经算进去了，你不用再加${tagLeanText(p)?`；要你在剧情里体现的倾向：${tagLeanText(p)}`:''}
 【终身旧伤（治不好，此后剧情须一直体现，不可写成痊愈）】${(S.scars||[]).length?S.scars.map(x=>x.name+'（'+x.text+'）').join('；'):'无'}
 【眼下的伤病（会自己好，引擎在倒计时，不必反复提，好了引擎会销）】${(S.ailments||[]).length?S.ailments.map(a=>`${a.name}${a.desc?'（'+a.desc+'）':''}——还需将养约${Math.max(1,Math.ceil(num(a.months)))}个月`).join('；'):'无'}
@@ -7068,12 +7127,11 @@ function settleTurnOnce(state,d,action,judge,id,forecast){
 
 /* ================= 状态更新 ================= */
 const clamp=(v,lo=0,hi=100)=>Math.max(lo,Math.min(hi,Math.round(v)));
-/* ================= 武功水位制 =================
-   随心所欲一档把武功上限放到 1000，天下英雄跟着一起涨，后期才有人可打。
-   其余两档照旧 0-100。属性判定的 need 一律还按老尺子（0-100）给，
-   所以武功练上去之后该碾压的地方就是碾压——这是这一档要的爽。 */
-function WCAP(){ const f=(typeof fdm==='function')&&fdm(); return (f&&f.wcap)||100; }
-const clampW=v=>Math.max(0,Math.min(WCAP(),Math.round(num(v))));
+/* ================= 战力尺度 =================
+   基础战力上限按人物修为确定，三档自由度都遵守下界 100、仙境 1000。
+   普通属性判定、气血、功法熟练度仍为 0–100。装备加成不受基础战力上限截断。 */
+function WCAP(o){ return powerScale(o)>1?1000:100; }
+const clampW=(v,o)=>Math.max(0,Math.min(WCAP(o),Math.round(num(v))));
 // 当世水位：修士榜最高的那个人与主角，取高者（最低 80，免得开局就飘）
 function powerLevel(){
   let top=80;
@@ -7082,8 +7140,8 @@ function powerLevel(){
   if(S&&S.player&&S.player.attributes) top=Math.max(top,num(S.player.attributes['武功']));
   return top;
 }
-// 面板与斗法里把武功折回 0-100 这把老尺子上
-function wuNorm(v){ const lv=Math.max(100,powerLevel()); return Math.round(num(v)/lv*100); }
+// 灵气储备的初值按人物自身的固定尺度换算，不读排行榜。
+function wuNorm(v,o){ return Math.round(num(v)/powerScale(o)); }
 const REALMS=[[0,'不入流'],[25,'三流'],[45,'二流'],[65,'一流'],[85,'超一流'],[105,'绝顶'],[160,'宗师'],[280,'大宗师'],[450,'天人'],[700,'神话']];
 function realmOf(v){ v=num(v); let r=REALMS[0][1]; for(const it of REALMS) if(v>=it[0]) r=it[1]; return r; }
 function num(v){ const n=Number(v); return isNaN(n)?0:n; }
@@ -7264,6 +7322,7 @@ function npcRealmOf(n){
   if(r) return r;
   // 没写境界：按旧的武功数反推，再没有就当凡人
   const w=num(n['武功']); if(!w) return {major:-1,minor:0,perfect:false,ascended:false};
+  if(w>100) return xianRealmForPow(w);
   for(let i=30;i>=1;i--){ const rr=i<=9?{major:0,minor:i}:{major:Math.floor((i-10)/3)+1,minor:(i-10)%3+1}; if(powerFromRealm(rr)<=w) return Object.assign(rr,{perfect:false,ascended:false}); }
   return newRealm(1);
 }
@@ -7740,7 +7799,7 @@ function applyTurn(d, action, judge){
     const art=artKnown(t.art); if(!art) continue;
     if(taughtByPlayer(tn,art.name)) continue;
     markTaught(tn,art.name);
-    tn['武功']=clampW(num(tn['武功'])+Math.max(1,Math.round(num(art.level)/8)));
+    syncPower(tn);   // 传授功法增加招式选择，不直接增加境界基础战力。
     ledger(`你把【${art.name}】传给了${tn.name}`);
   }
   for(const q of (d.newQuests||[])){ if(q&&q.title&&!S.quests.find(x=>x.title===q.title)&&S.quests.filter(x=>x.status==='进行中').length<5){ S.quests.push({title:q.title,desc:plain(q.desc),progress:0,status:'进行中'}); ledger(`许下一桩心愿「${q.title}」`); } }
@@ -7756,7 +7815,6 @@ function applyTurn(d, action, judge){
     const rr=parseRealm(r.realm); if(inXianjie()&&!(rr&&isXianRealm(rr))) continue;   // 仙榜只收仙界境界的人
     const w=rr?powerFromRealm(rr):Math.max(40,Math.min(98,Math.round(num(r['武功'])||rankFloor()+5)));
     if(w<rankFloor()-3) continue;                 // 武功不够就别往榜上塞
-    if(WCAP()>100&&w<powerLevel()*0.35) continue; // 水位高的时候，六七十的角色也上不了榜
     S.world.ranking.push({name:String(r.name).slice(0,8),gender:inferGender(r),faction:r.faction||'散修','武功':w,realm:rr||null,note:r.note||'',alive:true,age:num(r.age)||rnd(35,60)});
     news(`${r.name}名列${rankName()}`);
   }
@@ -7961,7 +8019,9 @@ const AD_MAJOR=12;
 function majorOf(o){ return o&&o.realm&&o.realm.major!=null?o.realm.major:-1; }
 function adHash(s){ let h=2166136261; for(const c of String(s)) { h^=c.charCodeAt(0); h=Math.imul(h,16777619); } return h>>>0; }
 function adRng(seed){ let a=seed>>>0; return ()=>{ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
-function adScale(){ return Math.max(100,powerLevel())/100; }
+// 斗法使用固定单位：有仙人参与时每十点绝对战力为一个战斗单位，否则每点为一个单位。
+// 不读榜单，不受当世最高战力影响；气血、熟练和五维仍使用原来的百分尺度。
+function adScale(a,b){ return Math.max(powerScale(a),b?powerScale(b):1); }
 
 /* NPC 只有一个武功数字和一句绝技名。头一回交手时按绝技名、性格配两三门，存进 n.kit，以后次次一样。 */
 function npcKit(n){
@@ -7969,7 +8029,7 @@ function npcKit(n){
   const r=adRng(adHash(n.name||'无名'));
   const pk=a=>a[Math.floor(r()*a.length)];
   const pr=oppProfile(n), evil=n.alignment==='邪道';
-  const wn=num(n['武功'])/adScale();
+  const wn=num(n['武功'])/powerScale(n);
   const lv=v=>clamp(v+Math.round((r()-0.5)*10),5,98);
   const main=clamp(10+wn*0.6);
   const kit=[], has=st=>kit.some(k=>k.style===st);
@@ -7993,12 +8053,12 @@ function npcKit(n){
    榜上、天骄再高 5。品阶比他境界驾驭得住的上限低一档。筑基以上必有攻伐、护体，元婴以上必有神通 */
 const NPC_KIT_LV=[22,38,50,60,70,78,85,92, 88,90,92,94,95,96,97];   // 熟练是绝对的，不分界：仙人的招式接着大乘往上练
 // NPC 身上也有趁手的法器：按境界驾驭得住的上限低一档折战力（主角是按自己行囊里最好的那件算）
-function npcGearBonus(n){ const r=npcRealmOf(n); if(!r||r.major<0) return 0; return Math.round(Math.max(0.5,gradePow(Math.max(1,gradeCapFor({realm:r})-1),{realm:r}),n.giftGrade?gradePow(num(n.giftGrade),{realm:r}):0)*weaponScale()); }
+function npcGearBonus(n){ const r=npcRealmOf(n); if(!r||r.major<0) return 0; return Math.round(Math.max(0.5,gradePow(Math.max(1,gradeCapFor({realm:r})-1),{realm:r}),n.giftGrade?gradePow(num(n.giftGrade),{realm:r}):0)*powerScale({realm:r})); }
 function npcRanked(n){ const nm=n&&n.name; return !!nm&&(((S.world&&S.world.ranking)||[]).some(r=>r&&r.name===nm)||((S.world&&S.world.tianjiao)||[]).some(r=>r&&r.name===nm)||!!n.elite); }
 function npcKitLive(n){
   const kit=npcKit(n), r=npcRealmOf(n), m=r?r.major:-1;
   if(m<0) return kit;
-  const rng=adRng(adHash((n.name||'无名')+'#lv')), pk=a=>a[Math.floor(rng()*a.length)], evil=n.alignment==='邪道';
+  const rng=adRng(adHash((n.name||'无名')+'#lv')), nameRng=adRng(adHash((n.name||'无名')+'#kitlive')), pk=a=>a[Math.floor(nameRng()*a.length)], evil=n.alignment==='邪道';
   const has=st=>kit.some(k=>k.style===st);
   if(m>=1&&!has('攻伐')) kit.push({name:pk(AD_POOL['攻伐']),style:'攻伐',level:0});
   if(m>=2&&evil&&!has('诡术')) kit.push({name:pk(AD_POOL['毒']),style:'诡术',level:0});
@@ -8006,7 +8066,7 @@ function npcKitLive(n){
   if(m>=3&&!has('神通')) kit.push({name:pk(AD_POOL['神通']),style:'神通',level:0});
   const base=NPC_KIT_LV[Math.min(XIAN_TOP,m)]+(m===0?Math.floor(num(r.minor)/3)*2:(num(r.minor)||1)*2-2)+(r.perfect?2:0)+(npcRanked(n)?5:0);
   const g=Math.max(1,gradeCapFor({realm:r})-1);
-  return kit.map((k,i)=>Object.assign({},k,{level:clamp(base+Math.round((rng()-0.5)*8)-(i?3:0),5,99),grade:gradeText(g)}));
+  return kit.map((k,i)=>Object.assign({},k,{level:clamp(base+Math.round((rng()-0.5)*8)-(i?3:0),5,99),grade:gradeText(g)})).concat(n.learnedArts||[]);
 }
 // 一门功法 → 一个技能。10-09：同路数先比发挥出来的品阶，品阶一样再比熟练；黄阶照旧，玄阶起每高一档威力 +6%
 function adSkillsFrom(arts,p){
@@ -8026,7 +8086,7 @@ function adSkillsFrom(arts,p){
 }
 
 function adUnit(side,o){
-  const s=adScale(), lvOf=st=>o.best[st]?clamp(num(o.best[st].level)):0;
+  const s=o.scale||adScale(), lvOf=st=>o.best[st]?clamp(num(o.best[st].level)):0;
   const lvS=lvOf('遁术'), lvG=lvOf('攻伐'), lvD=lvOf('护体'), lvT=lvOf('诡术');
   return {
     side, name:o.name, hpMax:o.hpMax||100, hp:clamp(o.hp,1,o.hpMax||100), qi:clamp(o.qi), atkMul:o.atkMul||1, escape:num(o.escape),
@@ -8047,14 +8107,15 @@ function adBuild(d){
   const pk=adSkillsFrom(p.arts,p), ok=adSkillsFrom(npcKitLive(o),o);
   const pr=d.profile;
   const w=(p.items['法器']||[]).slice().sort((a,b)=>gradePow(num(b.bonus),p)-gradePow(num(a.bonus),p))[0];
-  // 10-12：仙凡之隔。一边是仙人、一边是下界的人：仙人一方战力接在下界尺子顶上（+100），大境界差再多算两层
+  // 仙凡之隔保留两层境界压制，绝对战力已经贯通两界，取消旧版 +100 的换界补偿。
   const xp=majorOf(p)>=XIAN_PLANE_MAJOR, xo=majorOf(o)>=XIAN_PLANE_MAJOR, cross=xp!==xo&&majorOf(p)>=0&&majorOf(o)>=0;
-  const md=majorOf(p)-majorOf(o)+(cross?(xp?2:-2):0), mk=AD_MAJOR*adScale(), leap=tagAdd(p,'leap')*3.1*adScale();
-  const bridgeP=cross&&xp?100*adScale():0, bridgeO=cross&&xo?100*adScale():0;   // 天资卓绝：越一小阶
-  const P=adUnit('p',{name:p.name,hp:d.pHp,qi:d.pQi,W:d.pW+bridgeP+leap+Math.max(0,md)*mk,best:pk.best,skills:pk.skills,weapon:w?w.name:'',
-    med:duelPillIndex(p)>=0, hpMax:hpMaxOf(p), first:hasTag(p,'杀伐果断')||undefined, atkMul:tagMul(p,'atk'), escape:tagAdd(p,'escape')+num((p.eggFx||{}).escape), rage:(p.eggFx||{}).rageAtk||0, shield0:(p.eggFx||{}).duelShield||0, relic:1, lame:hasScar('跛足'), spdMod:hasScar('跛足')?-((d.pW/adScale())*0.15):0});
+  const scale=adScale(p,o), md=majorOf(p)+(p.realm&&p.realm.dao?1:0)-majorOf(o)-(o.realm&&o.realm.dao?1:0)+(cross?(xp?2:-2):0), mk=AD_MAJOR*scale;
+  const row=xp?XIAN_POWER[p.realm.major-XIAN_PLANE_MAJOR]:null;
+  const leap=tagAdd(p,'leap')*(row?row[1]-row[0]:3.1);   // 天资卓绝补一个小阶的基础差距。
+  const P=adUnit('p',{scale,name:p.name,hp:d.pHp,qi:d.pQi,W:d.pW+leap+Math.max(0,md)*mk,best:pk.best,skills:pk.skills,weapon:w?w.name:'',
+    med:duelPillIndex(p)>=0, hpMax:hpMaxOf(p), first:hasTag(p,'杀伐果断')||undefined, atkMul:tagMul(p,'atk'), escape:tagAdd(p,'escape')+num((p.eggFx||{}).escape), rage:(p.eggFx||{}).rageAtk||0, shield0:(p.eggFx||{}).duelShield||0, relic:1, lame:hasScar('跛足'), spdMod:hasScar('跛足')?-((d.pW/scale)*0.15):0});
   const sig=String(o.signature||'').replace(/[「」《》【】]/g,'');
-  const O=adUnit('o',{name:o.name,hp:d.oHp,qi:d.oQi,W:d.oppW+bridgeO+Math.max(0,-md)*mk,best:ok.best,skills:ok.skills,weapon:sig,
+  const O=adUnit('o',{scale,name:o.name,hp:d.oHp,qi:d.oQi,W:d.oppW+Math.max(0,-md)*mk,best:ok.best,skills:ok.skills,weapon:sig,
     spdMod:(/轻|灵|活|跳脱|机敏/.test(persArr(o.personality).join(''))?4:0)-(pr.def?3:0),
     critMod:pr.trick?0.03:pr.agg?0.02:0});
   // 致敬物在斗法里的效果
@@ -8252,11 +8313,11 @@ function adRound(d){
 function startDuel(opp, o){
   o=o||{};
   const p=S.player;
-  const oppW=clampW(opp['武功']+diff().opp+(o.noGear?0:npcGearBonus(opp)));
+  const oppW=Math.max(0,basePowerOf(opp)+diff().opp*powerScale(opp)+(o.noGear?0:npcGearBonus(opp)));
   duelStop();
   duel={
     opp, lethal:!!o.lethal, reason:o.reason||'', action:o.action||`与${opp.name}斗法`, judge:o.judge||null, vendetta:o.vendetta||null, war:!!o.war,
-    pHp:p.hp, oHp:o.oppHp||100, pQi:clamp(50+wuNorm(p.attributes['武功'])/2), oQi:clamp(50+wuNorm(oppW)/2),
+    pHp:p.hp, oHp:o.oppHp||100, pQi:clamp(50+wuNorm(basePowerOf(p),p)/2), oQi:clamp(50+wuNorm(oppW,opp)/2),
     oppW, pW:attrVal(p,'武功'), round:0, log:[], over:false, result:null, resultText:'', profile:oppProfile(opp), friendly:!!o.friendly,
     started:false, useDart:false
   };
@@ -8265,7 +8326,7 @@ function startDuel(opp, o){
   $('duelSub').textContent=(duel.reason||'')+(duel.lethal?'　⚠ 对方不会留手，此战可能致命':'　点到为止');
   { const pr=p.realm, orr=npcRealmOf(opp), gap=(orr?realmIndex(orr):0)-(pr?realmIndex(pr):0), bigGap=orr&&pr&&orr.major!==pr.major;
     const feel=(bigGap&&gap>0)?'灵压沉沉压过来，境界比你高出一截':(bigGap&&gap<0)?(orr.major<0?'只是凡人，经不起修士一击，出手要留分寸':`修为比你低了${['','一','两','三','四','五','六','七','八','九','十'][pr.major-orr.major]||(pr.major-orr.major)}个大境界${isXianRealm(pr)&&!isXianRealm(orr)?'，又隔着仙凡之别':''}，但不可轻敌`):gap>=3?'气息比你浑厚不少':gap<=-3?'气息比你弱些，不可轻敌':'与你修为相仿，胜负难料';
-    $('duelLog').innerHTML=`<div class="r sys">${esc(opp.name)}${feel}。你${pr?realmText(pr):''}，战力${duel.pW}（含法器）；对方${orr?realmText(orr):'境界不明'}，战力约${duel.oppW}。</div>`; }
+    $('duelLog').innerHTML=`<div class="r sys">${esc(opp.name)}${feel}。你${pr?realmText(pr):''}，基础战力${basePowerOf(p)}，当前战力${duel.pW}（含法宝与伤势）；对方${orr?realmText(orr):'境界不明'}，基础战力${basePowerOf(opp)}，当前战力约${duel.oppW}。功法与境界压制在交手时另算。</div>`; }
   renderDuel();
   $('duelMask').classList.add('on');
   snapshotDuel();
@@ -8607,7 +8668,7 @@ function endDuel(kind){
       if(duel.opp.alignment==='邪道') sev+=0.12;
       if(duel.opp['好感度']<=15) sev+=0.08;
       if(S.difficulty==='hard') sev+=0.12; if(S.difficulty==='easy') sev-=0.15;
-      const cripple=duel.oppW>=num(S.player.attributes['武功'])*1.15&&duel.oppW>=Math.max(88,powerLevel()*0.85);   // 远胜于你的高手才废得了你
+      const cripple=duel.oppW>=basePowerOf(S.player)*1.15&&duel.oppW>=88*powerScale(duel.opp);   // 固定门槛，不随榜首变动。
       const inj=sufferInjury(sev,`败于${him}之手`,cripple);
       if(inj){ txt+=`。这一战还落下了【${inj.name}】：${inj.text}`; duelSys('⚑ '+inj.text); }
     }
@@ -8709,10 +8770,11 @@ function warHarsh(mine){ return mine?Math.max(0.12,fdm().injury):Math.max(0.5,fd
    门人和敌派弟子没有功法清单，照 NPC 的办法按名字配招，存进各自的 kit。
    带伤上阵：旧伤折成开打时的气血。 */
 function adQuick(a,b){
+  const scale=adScale(a,b);
   // 阵前临场发挥：各自武功上下浮动，保留旧制一半的骰子起伏，阵战才有以弱胜强
   const mk=(side,x)=>{
-    const k=adSkillsFrom(npcKitLive(x),x), W=Math.max(1,num(x['武功'])+Math.round(rollMod(d20())*AD.warSwing));
-    return adUnit(side,{name:x.name,hp:clamp(100-num(x.hurt)*0.6,30,100),qi:clamp(50+W/adScale()/2),W,best:k.best,skills:k.skills,weapon:''});
+    const k=adSkillsFrom(npcKitLive(x),x), W=Math.max(1,num(x['武功'])+Math.round(rollMod(d20())*AD.warSwing*scale));
+    return adUnit(side,{scale,name:x.name,hp:clamp(100-num(x.hurt)*0.6,30,100),qi:clamp(50+wuNorm(W,x)/2),W,best:k.best,skills:k.skills,weapon:''});
   };
   // 引擎里只有对手那一边会认输逃跑，谁站哪边掷硬币定，免得哪一方白占便宜
   const sw=Math.random()<0.5; if(sw){ const t=a; a=b; b=t; }
@@ -9192,7 +9254,7 @@ function applyConvoEffects(n, eff, attemptOk, line, reply){
     else if(own) out.push(`【${own.name}】你早就会了（熟练${own.level}），${n.name}教不出新东西`);
     else if(n.taught&&!c.free) out.push(`${n.name}该教的都教过了`);
     else if(c.fav<c.artGate) out.push(`${n.name}与你交情还不到传功授艺的份上`);
-    else if(!c.free&&num(n['武功'])<=num(p.attributes['武功'])+5) out.push(`${n.name}的功夫并不比你高明，教不了你什么`);
+    else if(!c.free&&num(n['武功'])<=basePowerOf(p)+5*powerScale(p)) out.push(`${n.name}的功夫并不比你高明，教不了你什么`);
     else{
       const a=normArt({name:nm, desc:eff.art.desc||`得自${n.name}`, style:eff.art.style, level:Math.min(30,num(eff.art.level)||18)});
       if(a){ p.arts.push(a); n.taught=true; gain(out,`${n.name}传你一套【${a.name}】（${a.style}，熟练${a.level}）`); }
@@ -10013,7 +10075,7 @@ function showNpc(n){
   const rows=[
     ['所属势力',n.faction||'散修'],['立场',n.alignment],['与主角',n.relation],['心情',n.mood||'平静'],
     [love?'爱恋值':'好感度',(love?n['爱恋值']:n['好感度'])+' / 100'],
-    ['境界',(unkOf(n,'R')?'未知（等剧情里交代）':realmText(n.realm))+'　战力 '+n['武功']+(n.signature?'　拿手「'+n.signature+'」':'')],
+    ['境界',(unkOf(n,'R')?'未知（等剧情里交代）':realmText(n.realm))+'　基础战力 '+basePowerOf(n)+(n.signature?'　拿手「'+n.signature+'」':'')],
     ['灵根',n.lgHidden?'六岁测灵根':lgText(n.linggen)],
     ['标签',(n.tags||[]).map(t=>t+(XTAGS[t]?'（'+XTAGS[t].desc+'）':'')).join('；')||'—'],
     ['招式',(n.kit&&n.kit.length)?n.kit.map(k=>`${k.name}（${k.style}）`).join('、'):'未曾领教'],['谈吐',n['谈吐']+' / 100'],
