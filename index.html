@@ -1337,6 +1337,9 @@ function migrate(s){
   if(!s.chapters) s.chapters=[];
   if(s.scene) s.scene=normScene(s.scene);
   if(s.v<14) migratePowerState(s);
+  // 补回既有成长法器的引擎标记；待重试预演也同步，避免提交时覆盖修复。
+  eggScaleWeapons(s.player,true);
+  if(s.pending&&s.pending.forecast&&s.pending.forecast.state) eggScaleWeapons(s.pending.forecast.state.player,true);
   return s;
 }
 
@@ -4369,6 +4372,8 @@ function applyEggStart(p,key){
     if(it.cat==='法器'){ o.grade=it.scale?gradeText(gradeCapFor(p)):(it.grade||'黄阶下品'); normWeapon(o); }
     p.items[it.cat].push(o);
   }
+  // 模型已写进起手物时也要补成长规则，不能因同名去重跳过引擎属性。
+  eggScaleWeapons(p,true);
   for(const a of e.arts||[]){ if(!artKnown(a.name)){ const na=normArt(a); na.level=a.level; na.grade=a.grade; if(a.element) na.element=a.element; p.arts.push(na); } }
   if(e.fx&&e.fx.noFightArt) p.arts=p.arts.filter(a=>a.style!=='攻伐'&&a.style!=='神通');
   if(e.money===0) p.money=0;
@@ -4385,7 +4390,20 @@ function eggPromptLines(key){
   return out;
 }
 // 品阶随境界升的那件法器
-function eggScaleWeapons(p){ for(const w of (p.items['法器']||[])) if(w.eggScale){ const g=gradeCapFor(p); if((gradeIndex(w.grade)||0)<g){ w.grade=gradeText(g); w.bonus=g; news(`【${w.name}】像是跟着主角一起长了一截`); } } }
+function eggScaleWeapons(p,quiet){
+  if(!p||!p.items) return;
+  const start=(EGGS[p.egg]&&EGGS[p.egg].items)||[];
+  for(const w of (p.items['法器']||[])){
+    if(!w) continue;
+    const r=w.relic&&RELIC[w.relic];
+    if(start.some(it=>it.cat==='法器'&&it.scale&&it.name===w.name)||(r&&r.scale)) w.eggScale=1;
+    if(r&&r.noOffer) w.noOffer=1;
+    if(!w.eggScale) continue;
+    const before=gradeIndex(w.grade)||Math.min(GRADE_TOP,Math.max(1,num(w.bonus))), g=Math.max(before,gradeCapFor(p));
+    w.grade=gradeText(g);w.bonus=g;
+    if(g>before&&!quiet) news(`【${w.name}】像是跟着主角一起长了一截`);
+  }
+}
 /* ================= F3 冲关准备（引擎层） =================
    能不能用、用掉什么、欠谁人情都在这里判；效果数在数值核心 PREP_FX。 */
 const GATE_NAME=['','筑基','金丹','元婴','化神','合体','渡劫','大乘','飞升','天仙','真仙','玄仙','金仙','太乙金仙','大罗金仙','证道'];
