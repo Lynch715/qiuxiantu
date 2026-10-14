@@ -1339,7 +1339,8 @@ function migrate(s){
   if(s.v<14) migratePowerState(s);
   // 补回既有成长法器的引擎标记；待重试预演也同步，避免提交时覆盖修复。
   eggScaleWeapons(s.player,true);
-  if(s.pending&&s.pending.forecast&&s.pending.forecast.state) eggScaleWeapons(s.pending.forecast.state.player,true);
+  repairHiredVendettas(s);
+  if(s.pending&&s.pending.forecast&&s.pending.forecast.state){ eggScaleWeapons(s.pending.forecast.state.player,true); repairHiredVendettas(s.pending.forecast.state); }
   return s;
 }
 
@@ -5809,6 +5810,7 @@ function vSetOut(v,n){
   news(`${v.name}放出话来，正循着你的行踪一路寻来`);
 }
 function tickVendettas(months){
+  repairHiredVendettas(S);
   if(!S.vendettas||!S.vendettas.length) return;
   const warnBefore=(S.vendettas||[]).map(v=>({n:v.name,e:v.eta}));
   const mul=(S.difficulty==='hard'?1.4:(S.difficulty==='easy'?0.6:1))*fdm().vendetta;
@@ -5846,6 +5848,55 @@ function tickVendettas(months){
   }
   S.vendettas=S.vendettas.filter(v=>v.heat>0);
 }
+// 雇凶是额外的利益交易，不能凭同门/邪道标签把主角亲友变成杀手。
+// 读档也调用这组纯状态判断，不能借用当前 S 去判断另一个存档的家人。
+function hireProtected(n,s){
+  s=s||S; const p=s&&s.player; if(!p||!n) return false;
+  if(n.name===p.name||num(n['好感度'])>=45) return true;
+  const edges=s.rels||[], pair=(a,b)=>edges.find(r=>(r.a===a&&r.b===b)||(r.a===b&&r.b===a));
+  const r=pair(p.name,n.name);
+  if(r&&['亲属','夫妻','妾室','恋人','师徒','好友'].includes(r.type)) return true;
+  const family=/父亲|母亲|爹|娘|祖父|祖母|爷爷|奶奶|外公|外婆|兄长|哥哥|弟弟|姐姐|妹妹|儿子|女儿|孙子|孙女|伯父|叔父|叔叔|姑母|姑姑|舅|姨母|姨妈|堂兄|堂弟|堂姐|堂妹|表兄|表哥|表弟|表姐|表妹|岳父|岳母|公公|婆婆|丈人|丈母娘|翁婿|女婿|儿媳|义父|义母|义兄|义弟|义姐|义妹/;
+  const relation=String(n.relation||'');
+  if(family.test(relation)||family.test(String((s.origRel||{})[n.name]||''))) return true;
+  if(/老婆|老公|妻子|妻|丈夫|夫君|夫人|相公|道侣|妾|恋人|情人|未婚|师父|师尊|师傅|恩师|徒弟|徒儿|挚友|好友|结义/.test(relation)&&!/^前|^原|已休|已和离|已断绝/.test(relation)) return true;
+  const parents=o=>[o&&o.parents&&o.parents.father,o&&o.parents&&o.parents.mother].filter(Boolean);
+  const all=[p,...(s.npcs||[]),...Object.values(s.planes||{}).flatMap(b=>b.npcs||[])];
+  const byName=name=>all.find(x=>x.name===name);
+  const kin=(a,b)=>{
+    if(!a||!b) return false;
+    const ap=parents(a),bp=parents(b);
+    return (pair(a.name,b.name)||{}).type==='亲属'||ap.includes(b.name)||bp.includes(a.name)||ap.some(x=>bp.includes(x))||ap.some(x=>parents(byName(x)).includes(b.name))||bp.some(x=>parents(byName(x)).includes(a.name));
+  };
+  if(kin(p,n)) return true;
+  // 配偶父母（岳父母/公婆）及父母的配偶（继父母），不能只靠显示称谓。
+  const spouses=name=>edges.filter(r=>(r.a===name||r.b===name)&&['夫妻','妾室'].includes(r.type)).map(r=>r.a===name?r.b:r.a).concat(name===p.name?all.filter(x=>/^(?:我的|主角的)?(?:妻子|妻|老婆|丈夫|老公|夫君|夫人|相公|道侣|妾室|侍妾)$/.test(String(x.relation||''))).map(x=>x.name):[]);
+  return spouses(p.name).some(x=>kin(byName(x),n))||parents(p).some(x=>spouses(x).includes(n.name));
+}
+function repairHiredVendettas(s){
+  if(!s||!s.player) return;
+  for(const bag of [s,...Object.values(s.planes||{})]){
+    const removed=new Set(), context=bag===s?s:Object.assign({},s,{origRel:bag.origRel||{}});
+    bag.vendettas=(bag.vendettas||[]).filter(v=>{
+      const n=(bag.npcs||[]).find(x=>x.name===v.name);
+      if(!v.hiredBy||!hireProtected(n,context)) return true;
+      removed.add(v.name); delete v.hiredBy; v.eta=null;
+      // 旧版已覆盖的雇凶记录撤销；有独立过节的记录只解除雇佣关系。
+      return !/^受.+之托来取你性命$/.test(String(v.reason||''));
+    });
+    for(const v of bag.vendettas) if(v.hired&&(removed.has(v.hired)||hireProtected((bag.npcs||[]).find(n=>n.name===v.hired),context))){ delete v.hired; }
+    // 未消费的引擎风闻不再把已撤销的雇佣关系交给模型；历史正文保持原样。
+    const stale=t=>[...removed].some(name=>String(t).includes(name)&&/花钱请动|请了.+来对付你|已经追到左近|正循着你的行踪/.test(String(t)));
+    for(const key of ['engineNews','mail']) if(Array.isArray(bag[key])) bag[key]=bag[key].filter(t=>!stale(t));
+  }
+}
+function canHireThug(n,boss){
+  if(!n||!n.alive||n.name===boss.name||hireProtected(n,S)) return false;
+  // 已有自己的仇怨，不允许雇佣任务覆写原因、死仇程度与雇主。
+  if((S.vendettas||[]).some(v=>v.name===n.name)) return false;
+  const sameSect=!!boss.faction&&boss.faction===n.faction&&!/^(?:散修|凡人|无|无门无派|中立)$/.test(boss.faction);
+  return sameSect||n.alignment==='邪道';
+}
 // 打不过就花钱雇人、或者请动门里真正压得住你的人
 function hireThug(v,n){
   if(num(v.cool)>0||v.hired) return;
@@ -5861,7 +5912,7 @@ function hireThug(v,n){
     return;
   }
   // 先看他同门里有没有现成的硬手
-  const pool=(S.npcs||[]).filter(x=>x.alive&&x.name!==n.name&&num(x['武功'])>=me*0.85&&(x.faction===n.faction||x.alignment==='邪道'));
+  const pool=(S.npcs||[]).filter(x=>canHireThug(x,n)&&num(x['武功'])>=me*0.85);
   let hand=pool.length?pool[Math.floor(Math.random()*pool.length)]:null;
   if(!hand){
     // 没有就花钱请一个：武功按你的水平来，但不超过钱买得到的上限
@@ -6660,7 +6711,7 @@ ${sectRosterLine()}${S.sect&&!S.sect.own?`【宗门】${S.sect.name}${sectRank(S
 ${debtBlock()}【标签】${(p.tags||[]).map(t=>t+'：'+(XTAGS[t]?XTAGS[t].desc:'')).join('；')||'无'}——数值部分引擎已经算进去了，你不用再加${tagLeanText(p)?`；要你在剧情里体现的倾向：${tagLeanText(p)}`:''}
 【终身旧伤（治不好，此后剧情须一直体现，不可写成痊愈）】${(S.scars||[]).length?S.scars.map(x=>x.name+'（'+x.text+'）').join('；'):'无'}
 【眼下的伤病（会自己好，引擎在倒计时，不必反复提，好了引擎会销）】${(S.ailments||[]).length?S.ailments.map(a=>`${a.name}${a.desc?'（'+a.desc+'）':''}——还需将养约${Math.max(1,Math.ceil(num(a.months)))}个月`).join('；'):'无'}
-【盯着主角的仇家】${(S.vendettas||[]).filter(v=>v.heat>0).length?S.vendettas.filter(v=>v.heat>0).map(v=>`${v.name}（${v.reason}，${vStateText(v)}）`).join('；'):'无'}——仇家要打上门来由引擎裁定，你不可自作主张写他突然出现动手；上面写「尚在远处」「不敢露面」的人，这一回合就不会到。
+【盯着主角的仇家】${(S.vendettas||[]).filter(v=>v.heat>0).length?S.vendettas.filter(v=>v.heat>0).map(v=>`${v.name}（${v.reason}，${vStateText(v)}）`).join('；'):'无'}——雇凶人选与雇佣关系由引擎裁定，不能自行让主角的配偶、血亲、姻亲、师徒或好友收钱来杀主角，也不能凭同门或邪道身份虚构亲友背叛。仇家要打上门来由引擎裁定，你不可自作主张写他突然出现动手；上面写「尚在远处」「不敢露面」的人，这一回合就不会到。
 ${realmStatusLine()}${wushuaiBlock()}【刚做过的事（已经到手的结果不要再领一遍；连续修炼、调查可以接着做，写新的阶段）】
 ${(S.history||[]).slice(-3).map(h=>`第${h.turn}回：${h.action}`).join('；')||'（无）'}
 【和这回有关的旧事（引擎记的账，全部为真）】
@@ -12683,6 +12734,7 @@ async function runTurn(action, judge, extra){
       const n=findNpc(d.duel.opponent);
       if(n&&n.alive){ renderOptions([]); saveGame(); setBusy(false); startDuel(n,{lethal:!!d.duel.lethal,reason:d.duel.reason||'',action:`（承上）与${n.name}动手`,judge:{fate:d20(),check:null,worldEvent:null}}); return; }
     }
+    repairHiredVendettas(S);
     // 仇家寻上门来
     // 寻仇：光有杀心不够，还得走得到你跟前
     const hunter=(S.vendettas||[]).find(v=>{
