@@ -1877,7 +1877,8 @@ function xianRulesText(){
 - 境界为王，比下界更狠：低一个大境界见面要执晚辈礼，低两个大境界连话都插不上。称呼：地仙、天仙称「上仙」「前辈」，真仙、玄仙称「仙君」，金仙称「仙尊」，太乙金仙称「道君」，大罗金仙称「帝君」；同境界称「道友」「仙友」。
 - 飞升者：仙界土生土长的仙人看不起从下界飞升上来的人，背后叫「下界来的」「飞升仙」。主角是飞升者，境界又低，刚来时处处吃亏、仰人鼻息，好差事轮不到他，坏事先找上他。
 - 仙界的钱是仙晶，playerChanges.money 记的就是仙晶。仙晶金贵：寻常一回合进项在零到两块之间，十块以上必须有大来由。一块仙晶抵下界一万块下品灵石；下界带上来的灵石、丹药、法宝在仙界不值什么钱。
-- 仙界的东西：仙府、仙宗、仙庭、接引殿、飞升台、仙市、仙丹、仙术、法则、仙气。法宝与功法的品阶（grade）用仙界的写法：灵宝、玄宝、天宝、仙宝、尊宝、帝宝、道宝，后接下品、中品、上品，如「玄宝中品」。地仙用得最顺手的是灵宝；下界的天阶法宝在这里只算凑合。
+- 仙界的东西：仙府、仙宗、仙庭、接引殿、飞升台、仙市、仙丹、仙术、法则、仙气。法宝与功法的品阶（grade）用仙界的写法：灵宝、玄宝、天宝、仙宝、尊宝、帝宝、道宝，后接下品、中品、上品，如「玄宝中品」。地仙用得最顺手的是灵宝；下界天阶上品在这里只够入门过渡，略逊于灵宝下品。
+${xianGearRulesText()}
 - 时间更长：仙人闭关以百年计。
 - 仙榜：仙界的高手榜叫「仙榜」，规矩同修士榜（字段仍是 ranking、rankingAdd、rankingUpdates），只认打出来的名次；补进榜的人境界必须是仙界境界。
 - 飞升者榜：近千年从各个下界飞升上来、还在地仙境的人，成了天仙就出榜。主角是地仙时可以去挑战榜上人物。
@@ -3110,6 +3111,45 @@ const XLOOT_MATS=['九天玄铁','星辰仙砂','万年仙玉','混沌石','先�
 const REALM_NAMES=['落星谷','寒潭古府','万妖林','太虚遗迹','赤霞洞天','沉剑渊','青冥古战场','九曲幽泉','焚天火域','白骨荒原','碧落仙宫','雷泽'];
 const LOOT_MATS=['千年灵芝','玄冰髓','赤炎晶','星辰砂','雷击木','万年寒铁','血菩提','紫金藤','龙鳞草','空冥石'];
 const LOOT_GEAR=['飞剑','玉印','宝镜','金铃','葫芦','护身玉佩','法袍','缚妖索','令旗','玉尺'];
+// 仙界法宝原型：各档三品各有定名、器形和来路。基础威力统一由品阶结算，器形描述不另叠被动。
+const XIAN_GEAR_NAMES=[
+  ['青罡仙剑','流云护元衣','镇岳仙印'],
+  ['霆光玄剑','玄龟宝甲','摄霞宝镜'],
+  ['星河天刃','九曜天罗伞','镇海天珠'],
+  ['焚霄仙轮','四象仙鼎','山河仙图'],
+  ['斩劫尊剑','玄黄尊塔','万象尊印'],
+  ['太乙帝钟','九宸帝幡','周天帝盘'],
+  ['归墟道尺','混元道鼎','太初道图']
+];
+const XIAN_GEAR_FORMS=[
+  ['仙铁铸成，剑脊刻三道引元纹','云蚕丝织就，衣内缀有护元阵纹','青玉为印，印底镌山岳纹'],
+  ['雷砂淬刃，出鞘时有细密电光','玄龟甲片相缀，以仙银连作一体','霞玉磨镜，镜背布满折光纹'],
+  ['星辰仙砂熔入刃身，刃口如一线星河','九根玉骨撑起伞面，星纹逐次相连','海眼寒玉凝珠，珠内水纹往复'],
+  ['火曜晶铸成双轮，轮沿刻有火纹','鼎身分刻四象，以仙髓温养','山川纹理织入图中，展开时墨光流转'],
+  ['劫雷淬成剑脊，剑刃遍布金痕','玄黄仙金铸塔，层层塔檐垂下金光','万象法纹刻于印面，细看各不相同'],
+  ['太乙仙金铸钟，钟腹刻周天星位','九宸星丝织幡，幡骨以星核打磨','周天仙玉琢盘，盘上星轨环环相扣'],
+  ['归墟道石为尺，尺面留有大道刻痕','混元道金铸鼎，鼎壁道纹浑然一体','先天道丝织图，图中明暗如天地初分']
+];
+const XIAN_GEAR=XIAN_GEAR_NAMES.flatMap((names,t)=>names.map((name,q)=>({
+  id:`xgear_${13+t*3+q}`,name,g:13+t*3+q,desc:XIAN_GEAR_FORMS[t][q],
+  source:t===0?'仙市采买、仙宗兑换、小仙府':t===1?'小仙府、天仙炼器师':t<4?'古仙遗迹、同阶炼器师':'混沌秘境、同阶炼器师'
+})));
+function xianGearItem(g,source){
+  const def=XIAN_GEAR[Math.max(13,Math.min(33,Math.round(num(g))))-13];
+  return {name:def.name,grade:gradeText(def.g),bonus:def.g,desc:def.desc+(source?`；${source}`:''),xianTemplate:def.id};
+}
+function xianGearRulesText(){
+  const cap=gradeCapFor(S.player),near=XIAN_GEAR.filter(d=>d.g>=cap-2&&d.g<=Math.min(33,cap+3));
+  return `- 仙界法宝规矩：下界黄、玄、地、天仍有强弱之分，天阶上品仅够初入仙界过渡，略逊于灵宝下品；保留旧名旧品阶，普通法宝不会因飞升自动升品。已有成长标记的特殊宝物沿用其成长规则，不能给普通器物补此待遇。
+- 品阶决定当前基础威力，古老来历、神秘名字、器形和潜力不额外增加数值；宝物越级时只发挥部分威力，不能凭一件宝物抹去大境界压制。当前档与相邻档原型：${near.map(d=>`${d.name}（${gradeText(d.g)}；${d.desc}；来路：${d.source}）`).join('；')}。
+- 原型是有据可查的常见制式，不是自动赠品；新取原型照其初始品阶，重炼旧物须有对应仙材、炼器修为与消耗经过，不得只改名字就升品。仙市常备仅灵宝三品，价格分别为8、16、28仙晶；更高品阶须写明秘境、同阶炼器或相称的战利品来路。实际买入、兑换与秘境所得以引擎账目为准，已到账不得重复发放。
+- 法宝描述只写器形、施展方式和已有结算效果，不虚构额外无敌、替死、时间加速、永久属性或无限仙元；普通法宝战力只取最强一件，不把整袋宝物的加成相加。`;
+}
+function xianGearCatalogHtml(){
+  return '<details class="eggd"><summary>仙界宝录 · 七档二十一种</summary><div class="note">天阶上品可供飞升初期过渡，略逊于灵宝下品。旧物保留原品阶；普通器物须重炼才能升品。法宝战力取最强一件，越级威力受修为限制。</div>'+XGRADE_TIERS.map((tier,t)=>
+    `<div style="margin-top:12px"><b class="gq${13+t*3}">${tier} · ${XIAN.majors[XIAN_PLANE_MAJOR+t]}</b>${XIAN_GEAR.filter(d=>Math.floor((d.g-13)/3)===t).map(d=>`<div class="note" style="margin:6px 0">${esc(d.name)}（${gradeText(d.g)}）<br>${esc(d.desc)}<br>来路：${esc(d.source)}</div>`).join('')}</div>`).join('')+'</details>';
+}
+
 function xsched(){
   if(!S) return null;
   if(!S.xs){
@@ -3197,7 +3237,7 @@ function realmBeat(R,fate){
   if(roll>=(karma?10:(num((p.eggFx||{}).realmLuck)?11:13))){
     const k=pick(['gear','mat','pill','lingli']);
     let got;
-    if(k==='gear'){ const g=rnd(t.gradeLo,t.gradeHi); got={cat:'法器',item:{name:pick(['古','残','玄','青','血','紫'])+pick(LOOT_GEAR),desc:`得自${R.name}`,grade:gradeText(g),bonus:g}}; }
+    if(k==='gear'){ const g=rnd(t.gradeLo,t.gradeHi); got={cat:'法器',item:/^x/.test(t.key)?xianGearItem(g,`得自${R.name}`):{name:pick(['古','残','玄','青','血','紫'])+pick(LOOT_GEAR),desc:`得自${R.name}`,grade:gradeText(g),bonus:g}}; }
     else if(k==='mat') got={cat:'灵材',item:{name:pick(isXianRealm(p.realm)?XLOOT_MATS:LOOT_MATS),desc:`得自${R.name}`}};
     else if(k==='pill') got={cat:'丹药',item:{name:pick(isXianRealm(p.realm)?['聚仙丹','回元仙丹',XPILL_FOR[Math.min(14,p.realm.major+1)]||'聚仙丹','延寿仙桃']:['聚灵丹','回春丹','破境丹','延寿丹']),desc:`在${R.name}一处石室里找到的`}};
     else got={lingli:Math.round(lingliNeed(p.realm)*0.25)};
@@ -3677,7 +3717,7 @@ function npcGiftMonth(q){
     else if(row[1]==='灵石'){ const m=rnd(10,40)*Math.max(1,n.realm&&n.realm.major>0?n.realm.major*2:1); p.money+=m; what=`${m}块灵石`; }
     else{
       const it={name:pick(row[2]),desc:`${n.name}托人捎来的`};
-      if(row[1]==='法器'&&isXianRealm(n.realm)){ it.grade=gradeText(Math.max(13,gradeCapFor({realm:n.realm})-2)); normWeapon(it); }
+      if(row[1]==='法器'&&isXianRealm(n.realm)){ Object.assign(it,xianGearItem(Math.max(13,gradeCapFor({realm:n.realm})-2),`${n.name}托人捎来的`)); }
       else if(row[1]==='法器'){ it.grade=gradeText(Math.max(1,Math.min(6,1+Math.max(0,(n.realm&&n.realm.major)||0)*2))); normWeapon(it); }
       p.items[row[1]]=p.items[row[1]]||[]; p.items[row[1]].push(it); what=it.name;
     }
@@ -4427,9 +4467,16 @@ const SECT_SHOP=[
 function planeGood(it){ return (it.plane||'下界')===curPlane(); }
 const MARKET_GOODS=[{name:'筑基丹',price:150,gate:1,odds:0.5,cat:'丹药'},{name:'凝金丹',price:500,gate:2,odds:0.5,cat:'丹药'},{name:'地阶阵盘',price:3000,gate:6,odds:1,prep:'array'},
   {name:'聚仙丹',price:3,gate:0,odds:0.8,cat:'丹药',plane:'仙界'},{name:'天元丹',price:25,gate:9,odds:0.5,cat:'丹药',plane:'仙界'},{name:'真灵丹',price:60,gate:10,odds:0.35,cat:'丹药',plane:'仙界'},{name:'延寿仙桃',price:40,gate:0,odds:0.2,cat:'丹药',plane:'仙界'}];
+for(const [i,price] of [8,16,28].entries()){
+  const def=XIAN_GEAR[i];
+  MARKET_GOODS.push({name:def.name,price,gate:0,odds:1,cat:'法器',plane:'仙界',xianGrade:def.g});
+  SECT_SHOP.push({key:def.name,cost:price*10,cat:'法器',plane:'仙界',xianGrade:def.g});
+}
 function marketStock(){
   const y=Math.floor(num(S.months)/12);
   if(!S.market||S.market.year!==y){ S.market={year:y,stock:{}}; for(const g of MARKET_GOODS) S.market.stock[g.name]=Math.random()<g.odds; }
+  // 旧档当年货单只补新增品种；买空的 false 不重置。
+  for(const g of MARKET_GOODS) if(!Object.prototype.hasOwnProperty.call(S.market.stock,g.name)) S.market.stock[g.name]=Math.random()<g.odds;
   return S.market.stock;
 }
 function guardOk(p,n,g){ if(!n||n.alive===false) return false; const r=npcRealmOf(n); return !!(r&&r.major>=Math.min(g,XIAN_TOP)); }
@@ -4661,7 +4708,7 @@ function sectBuy(key){
   S.sect.spent=num(S.sect.spent)+it.cost;
   if(it.guard){ prepState(S.player).sectGuard=it.gate; ledger(`以 ${it.cost} 贡献换得宗门为你冲${GATE_NAME[it.gate]}护法`); }
   else if(it.prep){ if(prepState(S.player)[it.prep]) return {ok:false,why:'已经换过'}; prepState(S.player)[it.prep]=true; ledger(`以 ${it.cost} 贡献换得【${it.key}】`); }
-  else{ S.player.items['丹药'].push(Object.assign({},it.item)); ledger(`以 ${it.cost} 贡献向宗门换得【${it.item.name}】`); }
+  else{ const cat=it.cat||'丹药',item=it.xianGrade?xianGearItem(it.xianGrade,'仙宗兑换所得'):Object.assign({},it.item); (S.player.items[cat]=S.player.items[cat]||[]).push(item); ledger(`以 ${it.cost} 贡献向宗门换得【${item.name}】`); }
   return {ok:true};
 }
 function marketBuy(name){
@@ -4669,7 +4716,7 @@ function marketBuy(name){
   const stock=marketStock(); if(!stock[name]) return {ok:false,why:'今年坊市没货'};
   if(S.player.money<g.price) return {ok:false,why:inXianjie()?'仙晶不够':'灵石不够'};
   S.player.money-=g.price; stock[name]=false;
-  if(g.prep) prepState(S.player)[g.prep]=true; else S.player.items[g.cat].push({name,desc:'坊市高价购得'});
+  if(g.prep) prepState(S.player)[g.prep]=true; else (S.player.items[g.cat]=S.player.items[g.cat]||[]).push(g.xianGrade?xianGearItem(g.xianGrade,'仙市购得'):{name,desc:'坊市高价购得'});
   ledger(`在${inXianjie()?'仙市':'坊市'}花 ${g.price} 块${inXianjie()?'仙晶':'灵石'}买下【${name}】`); return {ok:true};
 }
 function askGuard(n){
@@ -4695,13 +4742,13 @@ function openShop(){
   const p=S.player, g=gateOf(p.realm), stock=marketStock();
   const sect=S.sect&&!S.sect.own;
   const sRows=sect?SECT_SHOP.filter(planeGood).map(it=>{ const why=it.rank&&!rankAtLeast(it.rank)?`要${it.rank}以上`:(sectAvail()<it.cost?'贡献不够':''); const had=(it.guard&&prepState(p).sectGuard===it.gate)||(it.prep&&!!prepState(p)[it.prep]);
-    return `<div class="nrow shoprow"><b>${esc(it.key)}</b><span>${it.cost} 贡献${had?'　已换':''}　<button class="mbtn sm" data-s="${esc(it.key)}" ${why||had?'disabled':''}>${why||'兑换'}</button></span></div>`; }).join(''):'<div class="note">散修没有宗门可换，只能去坊市碰运气。</div>';
-  const mRows=MARKET_GOODS.filter(planeGood).map(it=>`<div class="nrow shoprow"><b>${esc(it.name)}</b><span>${it.price} ${inXianjie()?'仙晶':'灵石'}　<button class="mbtn sm" data-m="${esc(it.name)}" ${!stock[it.name]||p.money<it.price?'disabled':''}>${!stock[it.name]?'今年没货':(p.money<it.price?(inXianjie()?'仙晶不够':'灵石不够'):'买')}</button></span></div>`).join('');
+    return `<div class="nrow shoprow"><b>${esc(it.key)}${it.cat==='法器'?`<small class="note"> · ${gradeText(it.xianGrade)}</small>`:''}</b><span>${it.cost} 贡献${had?'　已换':''}　<button class="mbtn sm" data-s="${esc(it.key)}" ${why||had?'disabled':''}>${why||'兑换'}</button></span></div>`; }).join(''):'<div class="note">散修没有宗门可换，只能去坊市碰运气。</div>';
+  const mRows=MARKET_GOODS.filter(planeGood).map(it=>`<div class="nrow shoprow"><b>${esc(it.name)}${it.xianGrade?`<small class="note"> · ${gradeText(it.xianGrade)}</small>`:''}</b><span>${it.price} ${inXianjie()?'仙晶':'灵石'}　<button class="mbtn sm" data-m="${esc(it.name)}" ${!stock[it.name]||p.money<it.price?'disabled':''}>${!stock[it.name]?'今年没货':(p.money<it.price?(inXianjie()?'仙晶不够':'灵石不够'):'买')}</button></span></div>`).join('');
   const st=S.relicStall&&S.relicStall.seen!==false&&RELIC[S.relicStall.id];
   const known=st&&(S.relicStall.known||S.relicStall.seen===undefined);
   const stallRow=st?`<div class="note" style="margin:10px 0 4px">坊市角落的摊子（说不清来历，年底就走）</div><div class="nrow shoprow"><b>${esc(known?st.name:spotShort(st))}</b>${!known&&!S.relicStall.peeked?'<button class="mbtn sm" id="xStallPeek" style="margin-left:6px">细看（神识）</button>':(!known?'<span class="note" style="margin-left:6px">没看出门道</span>':'')}<span>${S.relicStall.price} 灵石　<button class="mbtn sm" id="xStallBuy" ${p.money<S.relicStall.price?'disabled':''}>${p.money<S.relicStall.price?'灵石不够':'买'}</button></span></div><div class="note">${esc(st.desc)}</div>`:'';
   xModal('兑换与采买',`${sect?'可用贡献 '+sectAvail()+'　·　':''}${inXianjie()?'仙晶':'灵石'} ${p.money}${g?'　·　下一关：'+GATE_NAME[g]:''}`,
-    `${sect?`<div class="note" style="margin-bottom:4px">宗门（花掉的是可用贡献，位阶照累计算）</div>${sRows}`:sRows}<div class="note" style="margin:10px 0 4px">坊市（每年进一次货，有没有看运气）</div>${mRows}${stallRow}`,[{text:'关上'}]);
+    `${sect?`<div class="note" style="margin-bottom:4px">宗门（花掉的是可用贡献，位阶照累计算）</div>${sRows}`:sRows}<div class="note" style="margin:10px 0 4px">坊市（每年进一次货，有没有看运气）</div>${mRows}${stallRow}${inXianjie()?xianGearCatalogHtml():''}`,[{text:'关上'}]);
   const sp2=$('xStallPeek'); if(sp2) sp2.onclick=()=>{ const r=stallPeek(); toast(r.known?'看出门道了':'看不出门道'); saveGame(); openShop(); };
   const sb2=$('xStallBuy'); if(sb2) sb2.onclick=()=>{ const r=stallBuy(); if(!r.ok){ toast(r.why); return; } toast('买下了'); saveGame(); renderPanel(); openShop(); };
   document.querySelectorAll('#xMask button[data-s]').forEach(b=>b.onclick=()=>{ const r=sectBuy(b.dataset.s); if(!r.ok){ toast(r.why); return; } toast('换到了'); saveGame(); renderPanel(); openShop(); });
@@ -4941,6 +4988,7 @@ function weaponScale(p){ return powerScale(p); }
 function weaponPower(it){ return Math.round(gradePow(Math.min(GRADE_TOP,Math.max(0,num(it&&it.bonus))),S&&S.player)*weaponScale()); }
 // 模型常忘了填 bonus，按名号成色估一个，免得新得的神兵一点加成都没有
 function guessWeaponBonus(it){
+  const preset=XIAN_GEAR.find(d=>d.name===plain(it&&it.name)); if(preset) return preset.g;
   const s=((it&&it.name)||'')+((it&&it.desc)||'');
   if(/针|钉|飞刀|暗器/.test(s)) return 1;
   if(/仙|神器|通灵|灵宝|本命|上古|绝世|无双/.test(s)) return 8;
@@ -4962,7 +5010,7 @@ function gradeText(i){ return GRADES[Math.max(1,Math.min(GRADE_TOP,i))-1]; }
 function normWeapon(it){ if(!it) return it;
   const g=gradeIndex(it.grade);
   if(g){ it.grade=gradeText(g); it.bonus=g; return it; }
-  const b=Math.min(GRADE_TOP,Math.max(0,num(it.bonus))); it.bonus=b||Math.min(12,guessWeaponBonus(it)); it.grade=gradeText(Math.max(1,it.bonus)); return it; }
+  const b=Math.min(GRADE_TOP,Math.max(0,num(it.bonus))); it.bonus=b||Math.min(GRADE_TOP,guessWeaponBonus(it)); it.grade=gradeText(Math.max(1,it.bonus)); return it; }
 function weaponBonus(p){ let b=0; for(const w of (p.items&&p.items['法器']||[])) b=Math.max(b,gradePow(Math.min(GRADE_TOP,Math.max(0,num(w.bonus))),p)); return Math.round(b*weaponScale(p)); }
 function powerBreakdown(p){
   const scale=powerScale(p), base=basePowerOf(p), gear=weaponBonus(p);
@@ -6744,7 +6792,7 @@ ${JSON_RULE}
 {"narrative":"本回合剧情","summary":"一句话概括本回合（30字内）","scene":{"location":"","present":["本回结束时在场人物的准确姓名"],"unresolved":[]},"resolvedInfo":[],
 "check":null或{"success":true或false，照本回合引擎判定原样填},
 "playerChanges":{"lifespan":0,"lifespanReason":null,"attributes":{"体魄":0,"神识":0,"心性":0,"谈吐":0},"lingli":0,"lingliReason":null,"hp":0,"fame":{"声望":0,"凶名":0},"money":0,"moneyReason":null,"faction":null,"contrib":0,"skills":{"手艺名":{"level":增量数字,"desc":"可选，改写说明"}},"artsAdd":[{"name":"","desc":"","style":"","level":0,"grade":"黄阶下品","element":""}],"artsTrain":[{"name":"已有功法名","level":熟练度增量}],"personalityAdd":[],"statusAdd":[{"name":"","desc":"","months":0}],"statusRemove":["伤名"],"itemsAdd":{"法器":[{"name":"","desc":"","grade":"黄阶下品"}],"玉简":[],"丹药":[{"name":"","desc":"","count":1}],"符箓":[],"毒药":[],"灵材":[],"其他":[]},"itemsRemove":[{"name":"","count":1}]},
-"npcUpdates":[{"name":"名册上的全名","好感度":0,"爱恋值":null,"mood":null,"relation":null,"alive":true,"identity":null,"faction":null,"notes":"新添的一句备注（引擎接在旧备注后面，不会覆盖）","realm":null,"secretRevealed":false}],
+"npcUpdates":[{"name":"名册上的全名","好感度":0,"爱恋值":null,"mood":null,"relation":null,"alive":null,"identity":null,"faction":null,"notes":"新添的一句备注（引擎接在旧备注后面，不会覆盖）","realm":null,"secretRevealed":false}],
 "taughtNpc":[{"name":"NPC姓名","art":"主角教给他的功法名"}],
 "newNpcs":[${NPC_SCHEMA}],
 "npcEvents":[],"rumors":[],"newVendettas":[{"name":"","reason":"","lethal":false}],
@@ -7095,9 +7143,9 @@ async function llmJSON(prompt, onPartial, opt){
       if(last&&last!==field) delete d0[last];
       truncNote='回复被截断，最后一部分变化没有入账';
     }
-    let d;
+    let d; const snap=d0&&typeof d0==='object'?JSON.parse(JSON.stringify(d0)):d0;
     try{ d=opt.validate?opt.validate(d0,{lenient:false}):d0; }
-    catch(e){ const softOk=e.consistency&&e.soft&&opt.validate&&(final||tries>=2); if(!softOk&&(e.consistency||!final||!opt.validate)) throw e; d=opt.validate(d0,{lenient:true}); if(typeof console!=='undefined') console.warn('宽松收下：',e.message); }
+    catch(e){ const softOk=e.consistency&&e.soft&&opt.validate&&(final||tries>=2&&!e.grave); if(!softOk&&(e.consistency||!final||!opt.validate)) throw e; d=opt.validate(snap,{lenient:true}); if(typeof console!=='undefined') console.warn('宽松收下：',e.message); }
     if(truncNote&&d&&typeof d==='object'){ d.fixNotes=d.fixNotes||[]; d.fixNotes.push(truncNote); }
     if(st&&d){ const r=styleFix(d,st,final); if(r.redo) throw new Error('文风不合要求：'+r.redo.join('；')); }
     return d;
@@ -7199,9 +7247,18 @@ function syncKnownEntities(st){
 }
 function consistencyError(message){ const e=new Error('事实校验：'+message);e.consistency=true;throw e; }
 // 软校验：严格模式退回重写；宽松模式按引擎改掉并记一笔，不让整回失败
-function consistencySoft(d,lenient,message,fix,note){
-  if(!lenient){ const e=new Error('事实校验：'+message);e.consistency=true;e.soft=true;throw e; }
-  if(fix) fix(); (d.fixNotes=d.fixNotes||(d.fixNotes=[])).push(note||message);
+function consistencySoft(d,lenient,message,fix,note,grave){
+  if(!lenient){ const e=new Error('事实校验：'+message);e.consistency=true;e.soft=true;if(grave)e.grave=true;throw e; }
+  if(fix) fix(); const t=note||message; d.fixNotes=d.fixNotes||[]; if(!d.fixNotes.includes(t)) d.fixNotes.push(t);
+}
+// 一段正文里某个物品出现过的全部数量（「出丹十二颗，自留两颗」两个都算）
+function countsInText(text,name){
+  const k=reLiteral(itemIdentity(name));if(!k)return [];
+  const clean=String(text||'').replace(/[《》「」【】]/g,''),out=[];
+  for(const re of [new RegExp(CONS_NUM+'\\s*(?:颗|枚|份|瓶|本|块)\\s*'+k,'g'),new RegExp(k+'[，,：: ]{0,2}'+CONS_NUM+'\\s*(?:颗|枚|份|瓶|本|块)','g')])
+    for(const m of clean.matchAll(re)) out.push(cnToNum(m[1]));
+  if(clean.includes(itemIdentity(name))) for(const m of clean.matchAll(new RegExp('(?:自留|留下|留了|收了|收下|得了|拿了|分到)\\s*'+CONS_NUM+'\\s*(?:颗|枚|份|瓶|本|块)','g'))) out.push(cnToNum(m[1]));
+  return out;
 }
 // 同一处地方：完全相同、一个包含另一个、同属一个势力驻地、或地名开头三字相同（同城同山的不同院落）
 function samePlace(a,b,st){
@@ -7266,7 +7323,7 @@ function rewardReference(st,action,ch){
   const t=String(action||'');if(!(num(ch.money)>0)||!/赏赐|奖励|恭贺|贺礼/.test(t))return '';
   const source=(st.player&&st.player.faction)||'散修';
   const refs=rewardReferences(st);
-  if(ch.rewardRef){if(!refs.includes(ch.rewardRef))consistencyError('rewardRef必须引用已有境界、胜场、已完成事件或长期事实');return source+'|'+ch.rewardRef;}
+  if(ch.rewardRef){if(refs.includes(ch.rewardRef))return source+'|'+ch.rewardRef;delete ch.rewardRef;}
   if(/天骄|仙榜|修士榜|挑战|斗法/.test(t))return source+'|challenge:'+num(st.stats&&st.stats.duelWins);
   if(/晋升|突破|进阶|金丹|筑基|元婴/.test(t))return source+'|realm:'+realmIndex(st.player.realm);
   if(/布阵|阵法|大阵/.test(t)){
@@ -7296,50 +7353,79 @@ function continuityBlock(st,action){
     '心愿进度必须同时填写questUpdates.reason或milestone，写出这回实际取得的新成果；重复线索和无关行动不算成果。'+
     '新机缘可以建立特殊能力，但效果和条件一经确定须作为长期事实保留，不能在普通叙述里扩大。\n';
 }
-function assertWorldText(text,st,allow){
-  text=String(text||'');const c=continuityState(st);
+const REALM_SPEC_RE=/阶|层|重|初期|中期|后期|圆满/;
+// 名字和境界之间隔着这些，说的就不是此人眼下的境界：打算、尝试、没成、差多少；转述、听说；别人（亲属、师长、对手）
+const REALM_INTENT_RE=/准备|打算|想|要|欲|尝试|试着|冲击|未能|没能|不能|失败|差|离|距|若|如果|等|将来|日后|以后|梦|说|道|称|讲|听|问|告诉|看着|望着|瞧着|觉得|以为|传闻|据说|的(?:师父|师尊|父|母|爹|娘|兄|姐|弟|妹|夫|妻|道侣|对手|仇|徒|儿|女)/;
+// 写到亡者、但不是让亡者在场的句子：追忆、祭奠、遗物、遗体、梦与幻象
+const DEAD_OK_RE=/曾经|当年|往日|生前|回忆|想起|记得|遗言|旧信|梦中|幻象|画像|傀儡|墓|坟|灵位|牌位|灵前|灵堂|碑|遗像|遗体|尸|骨灰|祭|悼|追思|衣冠冢|故去|已故|亡故|死前|临终|托梦|残魂|英灵|那年|那时|从前|昔日|在世时/;
+function assertWorldText(text,st,allow,ctx){
+  text=String(text||'');const c=continuityState(st);ctx=ctx||{};
+  const soft=ctx.soft||(msg=>consistencyError(msg)), replace=ctx.replace||(()=>{});
+  const living=(st.npcs||[]).filter(n=>n&&n.name&&n.alive!==false).map(n=>n.name);
   for(const key of Object.keys(c.dead)){
     if(!key.startsWith((st.plane||'下界')+'|'))continue;
     const name=key.split('|').slice(1).join('|'),N=reLiteral(name);
-    // 回忆、遗物和死因调查是合法的；只拒绝明确的当场言行动词。
+    const longer=living.filter(x=>x!==name&&x.startsWith(name));   // 活人的名字以亡者名字打头（亡者「姬言」、活人「姬言志」）
     for(const sentence of text.split(/[。！？\n]/)){
-      if(/曾经|当年|往日|生前|回忆|想起|记得|遗言|旧信|梦中|幻象|画像|傀儡/.test(sentence))continue;
-      if(new RegExp(N+'[^。！？]{0,14}(?:说道|开口|抬手|走来|走进|坐在|坐主位|立在|主持|睁眼|递给|站在|点头)').test(sentence))consistencyError(name+'已经亡故，不能在场言行');
+      if(DEAD_OK_RE.test(sentence))continue;
+      const m=sentence.match(new RegExp(N+'[^。！？]{0,14}(?:说道|开口|抬手|走来|走进|坐在|坐主位|立在|主持|睁眼|递给|站在|点头)'));
+      if(!m||longer.some(x=>sentence.slice(m.index).startsWith(x)))continue;
+      soft(name+'已经亡故，不能在场言行（只能追忆、祭奠或查旧事）',null,'正文里已故的'+name+'有在场言行，按追忆或幻象算，仍记为已故',true);
     }
   }
   for(const n of st.npcs||[]){
     if(!n||n.alive===false||!n.realm||unkOf(n,'R')||!text.includes(n.name))continue;
-    const target=allow&&allow[n.name]||n.realm;
-    const re=new RegExp(reLiteral(n.name)+'[^。！？\\n]{0,16}?(?:突破|破入|进至|晋入|修为(?:是|已到|进至)|已是|已经是)('+REALM_TXT+')','g');let m;
-    while((m=re.exec(text))){const r=parseRealm(fixRealmText(m[1]));if(r&&realmIndex(r)!==realmIndex(target))consistencyError(n.name+'的境界与人物表不一致');}
+    const target=allow&&allow[n.name]||n.realm, others=(st.npcs||[]).filter(x=>x!==n&&x.name&&x.name.length>=2).map(x=>x.name);
+    const re=new RegExp(reLiteral(n.name)+'([^。！？\\n]{0,16}?)(?:突破|破入|进至|晋入|修为(?:是|已到|进至)|已是|已经是)(?:了|到|至)?('+REALM_TXT+')','g');let m;
+    while((m=re.exec(text))){
+      const gap=m[1];if(REALM_INTENT_RE.test(gap)||others.some(x=>gap.includes(x)))continue;
+      const r=parseRealm(fixRealmText(m[2]));if(!r)continue;
+      if(REALM_SPEC_RE.test(m[2])?realmIndex(r)===realmIndex(target):r.major===target.major)continue;   // 没写到阶，只比大境界
+      const want=realmText(target),seg=m[0];
+      soft(n.name+'的境界与人物表不一致（记录是'+want+'，正文写'+m[2]+'）',()=>replace(seg,seg.slice(0,seg.length-m[2].length)+want),'正文写'+n.name+'「'+m[2]+'」，账上是'+want+'，已照账改');
+    }
   }
+  const pending={};for(const f of ctx.factionUpdates||[])if(f&&f.name&&f.leader)pending[plain(f.name)]=plain(f.leader);
   for(const f of (st.world&&st.world.factions)||[]){
     if(!f||!f.leader)continue;
+    const cur=pending[f.name]||f.leader;
     const re=new RegExp(reLiteral(f.name)+'(?:的)?(?:现任)?(?:宗主|家主|首领)(?:是|为|由|叫|：|:)?([一-龥]{2,12})','g');let m;
-    while((m=re.exec(text))){const n=(st.npcs||[]).find(n=>m[1].startsWith(n.name));if(n&&n.name!==f.leader)consistencyError(f.name+'当前首领是'+f.leader+'，不能写成'+n.name);}
+    while((m=re.exec(text))){
+      const n=(st.npcs||[]).find(n=>m[1].startsWith(n.name));if(!n||n.name===cur)continue;
+      if(/^(?:生前|在世|当年|那年|时|之时|坐化|故去|亡故|已故|过世)/.test(m[1].slice(n.name.length)))continue;   // 说的是先前那位
+      soft(f.name+'当前首领是'+cur+'，不能写成'+n.name,null,'正文把'+n.name+'写成了'+f.name+'首领，记录里仍是'+cur);
+    }
   }
   const kin=st.npcs||[];
   for(const child of kin) for(const kind of ['father','mother']){
     const parentName=child.parents&&child.parents[kind];if(!parentName||!text.includes(child.name)||!text.includes(parentName))continue;
     const pair=reLiteral(parentName)+'[、和与， ]{1,3}'+reLiteral(child.name)+'|'+reLiteral(child.name)+'[、和与， ]{1,3}'+reLiteral(parentName);
-    if(new RegExp('(?:'+pair+')[^。\\n]{0,10}(?:爷孙|祖孙|兄弟|姐妹)').test(text))consistencyError('已确定的父母子女关系不能写成另一种辈分');
+    if(new RegExp('(?:'+pair+')[^。\\n]{0,10}(?:爷孙|祖孙|兄弟|姐妹)').test(text))soft('已确定的父母子女关系不能写成另一种辈分',null,'正文把'+parentName+'和'+child.name+'的辈分写混了，记录不变');
   }
 }
-function validateFactUpdates(d,st,text){
+function validateFactUpdates(d,st,text,soft){
+  soft=soft||(msg=>consistencyError(msg));text=String(text||'');
   const c=continuityState(st),known=new Set((st.npcs||[]).map(n=>n.name).concat((st.world.factions||[]).map(f=>f.name),st.player.name,'修真界',st.world.land&&st.world.land.name));
   for(const n of d.newNpcs||[])if(n.name)known.add(n.name);
   for(const cat in (d.playerChanges&&d.playerChanges.itemsAdd)||{})for(const it of d.playerChanges.itemsAdd[cat]||[])if(it.name)known.add(it.name);
+  const badClaims=[];
   for(const claim of Array.isArray(d.factClaims)?d.factClaims:[]){
-    const current=c.facts.find(f=>f.subject===claim.subject&&f.key===claim.key&&f.plane===(st.plane||'下界'));
-    if(current&&current.value!==claim.value)consistencyError('旧事实引用错误：'+claim.subject+'·'+claim.key+'当前为'+current.value);
+    const current=c.facts.find(f=>f&&claim&&f.subject===claim.subject&&f.key===claim.key&&f.plane===(st.plane||'下界'));
+    if(current&&current.value!==claim.value)soft('旧事实引用错误：'+claim.subject+'·'+claim.key+'当前为'+current.value,()=>badClaims.push(claim),'引用的旧事实（'+claim.subject+'·'+claim.key+'）与记录不符，以记录为准');
   }
+  if(Array.isArray(d.factClaims))d.factClaims=d.factClaims.filter(x=>!badClaims.includes(x));
   d.factUpdates=(Array.isArray(d.factUpdates)?d.factUpdates:[]).filter(f=>f&&typeof f==='object').slice(0,4).map(f=>({subject:plain(f.subject),key:plain(f.key).slice(0,40),value:plain(f.value).slice(0,200),reason:plain(f.reason).slice(0,100)}));
+  const drop=[];
   for(const f of d.factUpdates){
-    if(!known.has(f.subject)||!f.key||!f.value||!f.reason||!String(text).includes(f.reason))consistencyError('长期事实必须对应已知对象和正文中实际发生的经过');
-    if(/^(生死|境界|年龄|性别|宗主|首领|关系|灵石|余额|背包)$/.test(f.key))consistencyError('人物、职位和财物请使用专属结算字段，不能通过长期事实另建一份');
+    // 对象：已知人物势力，或正文里写到的地点、秘境、物件；经过：正文原句，或与正文有三字以上相同的概括
+    const subjectOk=known.has(f.subject)||f.subject.length>=2&&text.includes(f.subject);
+    const reasonOk=f.reason&&(text.includes(f.reason)||shareRun(f.reason,text,3));
+    if(!subjectOk||!f.key||!f.value||!reasonOk){soft('长期事实必须对应已知对象和正文中实际发生的经过',()=>drop.push(f),'长期事实「'+f.subject+'·'+f.key+'」在正文里找不到经过，没有记');continue;}
+    if(/^(生死|境界|年龄|性别|宗主|首领|关系|灵石|余额|背包)$/.test(f.key)){soft('人物、职位和财物请使用专属结算字段，不能通过长期事实另建一份',()=>drop.push(f),'「'+f.key+'」由引擎专门结算，长期事实里这条没有记');continue;}
     const current=c.facts.find(x=>x.subject===f.subject&&x.key===f.key&&x.plane===(st.plane||'下界'));
-    if(current&&current.value!==f.value&&current.reason===f.reason)consistencyError('不能用旧事件再次改变已确定的事实');
+    if(current&&current.value!==f.value&&current.reason===f.reason)soft('不能用旧事件再次改变已确定的事实',()=>drop.push(f),'「'+f.subject+'·'+f.key+'」拿旧事改写，没有记');
   }
+  d.factUpdates=d.factUpdates.filter(f=>!drop.includes(f));
 }
 function commitFactUpdates(d,st){
   const c=continuityState(st);
@@ -7357,8 +7443,9 @@ function textJaccard(a,b){ const A=bigrams(String(a||'').replace(/\s/g,'')),B=bi
 const ATTR_EVIDENCE={体魄:/服|吞|吃|丹|锻|练体|淬|修炼|闭关|苦修|打熬|锤炼|体魄|筋骨|站桩|斗法|切磋|厮杀/,神识:/服|吞|吃|丹|参悟|修炼|闭关|冥想|悟|神识|养神|观想|推演|炼丹|炼器|布阵/};
 function validateTurnConsistency(d,action,judge,st,opt){
   const text=String(d.narrative||''),ch=d.playerChanges||{},c=continuityState(st),allow={},lenient=!!(opt&&opt.lenient);
-  const soft=(msg,fix,note)=>consistencySoft(d,lenient,msg,fix,note);
-  const fixNote=t=>{(d.fixNotes=d.fixNotes||[]).push(t);};
+  const soft=(msg,fix,note,grave)=>consistencySoft(d,lenient,msg,fix,note,grave);
+  const fixNote=t=>{d.fixNotes=d.fixNotes||[];if(!d.fixNotes.includes(t))d.fixNotes.push(t);};
+  const replace=(from,to)=>{ if(!from||from===to) return; for(const k of ['narrative','summary']) if(typeof d[k]==='string') d[k]=d[k].split(from).join(to); };
   // 属性增长要有这回的来由：没提服丹、修炼、锻体的回合不顺带上回的加点
   { const why=String(action||'')+'\n'+text;
     for(const k in ch.attributes||{}){ const dv=num(ch.attributes[k]); if(dv>0&&ATTR_EVIDENCE[k]&&!ATTR_EVIDENCE[k].test(why)){ delete ch.attributes[k]; fixNote(`${k}+${dv}这回没有来由，没有记`); } } }
@@ -7373,19 +7460,20 @@ function validateTurnConsistency(d,action,judge,st,opt){
   }
   for(const u of d.npcUpdates||[]){
     const n=(st.npcs||[]).find(n=>n.name===u.name);if(!n)continue;
-    if(u.alive===true&&n.alive===false)consistencyError(n.name+'不可复活');
+    if(n.alive===false&&u.alive===true) delete u.alive;   // 模板里 alive 曾默认填 true，对亡者照抄不算复活
     const r=u.realm&&parseRealm(fixRealmText(u.realm));
     if(r&&!unkOf(n,'R')){
-      const bad=realmIndex(r)<realmIndex(n.realm)?n.name+'不能无故降境或重新入门'
-        :realmIndex(r)>realmIndex(n.realm)+1?n.name+'不能一次跳过多阶'
-        :realmIndex(r)>realmIndex(n.realm)&&decreeHits(st,n.name).some(e=>e.f.realm)?n.name+'当前境界受定论保护，突破须由修炼引擎处理':'';
-      if(bad) soft(bad,()=>{delete u.realm;},n.name+'的境界变动没有依据，仍按'+realmText(n.realm)+'记');
+      const ri=realmIndex(r),ni=realmIndex(n.realm),lock=decreeHits(st,n.name).some(e=>e.f.realm);
+      if(ri<ni) soft(n.name+'不能无故降境或重新入门',()=>{delete u.realm;},n.name+'的境界没有降，仍按'+realmText(n.realm)+'记');
+      else if(ri>ni&&lock) soft(n.name+'当前境界受定论保护，突破须由修炼引擎处理',()=>{delete u.realm;},n.name+'的境界受玩家定论保护，仍按'+realmText(n.realm)+'记');
+      else if(ri>ni+1){ const step=realmFromIdx(ni+1); soft(n.name+'不能一次跳过多阶（记录是'+realmText(n.realm)+'，这回最多到'+step+'）',()=>{u.realm=step;allow[n.name]=parseRealm(step);},n.name+'一回只能进一阶，记为'+step); }
       else allow[n.name]=r;
     }
     if(u.relation&&u.relation!==n.relation&&!relationEventEvidence(n,u.relation,{act:action,txt:text}))soft(n.name+'的关系变化没有经过，称谓不等于正式关系',()=>{delete u.relation;},n.name+'的关系没有正式确立，仍按「'+(n.relation||'相识')+'」记');
   }
-  for(const f of d.factionUpdates||[]){if(f.leader&&c.dead[continuityKey(st,f.leader)])consistencyError('不能任命亡故人物为首领');}
-  for(const name of (d.scene&&d.scene.present)||[])if(c.dead[continuityKey(st,name)])consistencyError('亡故人物不能进入在场列表');
+  for(const f of d.factionUpdates||[]){if(f.leader&&c.dead[continuityKey(st,f.leader)]){const who=plain(f.leader);soft('不能任命亡故人物为首领',()=>{delete f.leader;},who+'已故，不能当首领，这条任命没有记');}}
+  // 亡者被列进在场名单（多半是被追忆）：直接拿掉，不为这个重写
+  if(d.scene&&Array.isArray(d.scene.present)){ const gone=d.scene.present.filter(nm=>c.dead[continuityKey(st,nm)]); if(gone.length){ d.scene.present=d.scene.present.filter(nm=>!gone.includes(nm)); fixNote(gone.join('、')+'已故，没有记为在场'); } }
   const location=d.scene&&d.scene.location||st.scene&&st.scene.location,prevLoc=st.scene&&st.scene.location||'';
   for(const name of ((d.scene&&d.scene.present)||[]).slice()){
     const n=(st.npcs||[]).find(x=>x.name===name);
@@ -7400,45 +7488,50 @@ function validateTurnConsistency(d,action,judge,st,opt){
   for(const n of st.npcs||[]){
     if(n.secretKnown||!n.secret||n.secret.length<12||!text.includes(n.secret))continue;
     const disclosed=(d.npcUpdates||[]).some(u=>u.name===n.name&&u.secretRevealed);
-    if(!disclosed)consistencyError(n.name+'的秘密未揭开，不能直接作为主角已知事实');
+    if(!disclosed)soft(n.name+'的秘密未揭开，不能直接作为主角已知事实',()=>{ let u=(d.npcUpdates||(d.npcUpdates=[])).find(x=>x.name===n.name); if(!u){u={name:n.name};d.npcUpdates.push(u);} u.secretRevealed=true; },'正文道破了'+n.name+'的秘密，记为已揭开');
   }
-  assertWorldText(text+'\n'+String(d.summary||'')+'\n'+(d.rumors||[]).join('\n'),st,allow);
+  assertWorldText(text+'\n'+String(d.summary||'')+'\n'+(d.rumors||[]).join('\n'),st,allow,{soft,replace,factionUpdates:d.factionUpdates});
   const t=String(action||'');
   const keep=t.match(new RegExp('(?:自留|留下|留出)\\s*'+CONS_NUM+'\\s*(?:颗|枚|份)'));
-  if(keep&&new RegExp('每炉[^。\\n]{0,6}(?:留|收)[^。\\n]{0,4}'+CONS_NUM+'\\s*(?:颗|枚)').test(text))consistencyError('玩家要求总共自留'+cnToNum(keep[1])+'份，不能扩写成每炉自留');
+  if(keep&&new RegExp('每炉[^。\\n]{0,6}(?:留|收)[^。\\n]{0,4}'+CONS_NUM+'\\s*(?:颗|枚)').test(text))soft('玩家要求总共自留'+cnToNum(keep[1])+'份，不能扩写成每炉自留',null,'正文写成了每炉自留，仍按总共自留'+cnToNum(keep[1])+'份入账');
   for(const cat in ch.itemsAdd||{})for(const it of ch.itemsAdd[cat]||[]){
-    let qty=countInText(text,it.name);const supplied=it.count!=null||it.n!=null;
+    let qty=countInText(text,it.name),cands=countsInText(text,it.name);const supplied=it.count!=null||it.n!=null;
     const product=t.match(/炼制([^，。\d]{1,12}?丹)/);
     if(keep&&product&&itemIdentity(product[1])===itemIdentity(it.name)){
       const retained=cnToNum(keep[1]),spent=itemRemoveList(ch.itemsRemove||[]).filter(x=>itemIdentity(x[0])===itemIdentity(it.name)).reduce((s,x)=>s+x[1],0);
-      qty=retained+spent;
+      qty=retained+spent;cands=[qty];
       const privateClaim=text.match(new RegExp(CONS_NUM+'\\s*(?:颗|枚)\\s*'+reLiteral(itemIdentity(it.name))+'[^。\\n]{0,5}(?:在储物袋|收进储物袋)'));
-      if(privateClaim&&cnToNum(privateClaim[1])!==ownedCount(st.player,it.name)+retained)consistencyError('私囊数量应按实际自留与已有库存计算，不能包含已上缴的丹药');
+      if(privateClaim&&cnToNum(privateClaim[1])!==ownedCount(st.player,it.name)+retained)soft('私囊数量应按实际自留与已有库存计算，不能包含已上缴的丹药',null,'正文写的私囊数量不对，按实际自留'+retained+'份入账');
     }
-    if(qty!=null&&qty>0){if(supplied&&itemCountOf(it,cat).n!==qty)consistencyError(it.name+'正文数量与入囊数量不同');if(!supplied)it.count=qty;}
+    if(qty!=null&&qty>0){ const have=itemCountOf(it,cat).n;
+      if(supplied){ if(!cands.includes(have)) soft(it.name+'正文数量与入囊数量不同（入囊'+have+'，正文写'+cands.join('/')+'）',null,'【'+it.name+'】按'+have+'份入账（正文写的是'+cands.join('/')+'）'); }
+      else it.count=qty; }
   }
   const expected=t.match(new RegExp('(?:赏赐|奖励|给我)[^。\\n]{0,20}?'+CONS_NUM+'\\s*块(?:下品)?(?:灵石|仙晶)'));
-  if(expected&&num(ch.money)>0&&num(ch.money)!==cnToNum(expected[1])&&!/额度|实际|只批|只给|只发|改为|改作|未能|不够|上限/.test(text))consistencyError('本回奖励数量与明确行动要求不同；调整必须解释实际额度，不能改为旧奖励');
-  const paid=text.match(new RegExp('(?:奖励|赏赐|赏|给了你|给你)[^。\\n]{0,20}?'+CONS_NUM+'\\s*块(?:下品)?(?:灵石|仙晶)'));
-  if(paid&&!/不给|未给|没有给|原本|上回|上次/.test(paid[0])&&num(ch.money)!==cnToNum(paid[1])&&!(judge&&judge.convo))consistencyError('正文奖励金额与结算金额不同');
-  if(num(ch.money)>0&&/(?:中品|上品)灵石/.test(text)&&!/换算|折合/.test(text))consistencyError('高品灵石必须按实际币种折算入账，不能正文额外赠送');
-  if(judge&&judge.convo&&(num(ch.money)||Object.values(ch.itemsAdd||{}).some(x=>x.length)))consistencyError('面谈已经结算财物，余波不得再次发放');
+  if(expected&&num(ch.money)>0&&num(ch.money)!==cnToNum(expected[1])&&!/额度|实际|只批|只给|只发|改为|改作|未能|不够|上限/.test(text))soft('本回奖励数量与明确行动要求不同；调整必须解释实际额度，不能改为旧奖励',null,'行动里要的是'+cnToNum(expected[1])+'块，实际入账'+num(ch.money)+'块');
+  // 正文里写明「赏／给你 N 块」的：结算至少要有这么多（另有卖货等进项，多出来不算错）
+  const paidAll=[...text.matchAll(new RegExp('(?:奖励|赏赐|赏|给了你|给你)[^。\\n]{0,20}?'+CONS_NUM+'\\s*块(?:下品)?(?:灵石|仙晶)','g'))].filter(m=>!/不给|未给|没有给|原本|上回|上次/.test(m[0])).map(m=>cnToNum(m[1]));
+  if(paidAll.length&&!(judge&&judge.convo)&&num(ch.money)<Math.max(...paidAll))soft('正文奖励金额与结算金额不同（正文写'+Math.max(...paidAll)+'块，money是'+num(ch.money)+'）',null,'正文写给了'+Math.max(...paidAll)+'块，实际入账'+num(ch.money)+'块');
+  if(num(ch.money)>0&&/(?:给|赏|送|得|收|赚|换得|换了|拿到|到手|奖)[^。\n]{0,8}(?:中品|上品)灵石/.test(text)&&!/换算|折合/.test(text))soft('高品灵石必须按实际币种折算入账，不能正文额外赠送',null,'正文里的中品、上品灵石不另入账，只按'+num(ch.money)+'块下品灵石计');
+  if(judge&&judge.convo&&(num(ch.money)>0||Object.values(ch.itemsAdd||{}).some(x=>x.length)))soft('面谈已经结算财物，余波不得再次发放',()=>{ if(num(ch.money)>0) delete ch.money; ch.itemsAdd={}; },'面谈里已经结算过财物，余波里再给的没有入账');
   const removed=itemRemoveList(ch.itemsRemove||[]).map(x=>itemIdentity(x[0]));
   const newAssets=Object.entries(ch.itemsAdd||{}).some(([cat,items])=>items.some(it=>{
     // 失败时退回原来那件非消耗品不算新增收益；升级仍由原有失败分支拒绝。
     return !(['法器','玉简'].includes(cat)&&ownedCount(st.player,it.name)>0&&removed.includes(itemIdentity(it.name)));
   }));
-  if(judge&&judge.check&&judge.check.success===false&&(num(ch.money)>0||newAssets))consistencyError('引擎判定未成，本回不能叙述或结算正向财物收益');
+  if(judge&&judge.check&&judge.check.success===false&&(num(ch.money)>0||newAssets))soft('引擎判定未成，本回不能叙述或结算正向财物收益',()=>{ if(num(ch.money)>0) delete ch.money; for(const cat in ch.itemsAdd||{}) ch.itemsAdd[cat]=(ch.itemsAdd[cat]||[]).filter(it=>['法器','玉简'].includes(cat)&&ownedCount(st.player,it.name)>0&&removed.includes(itemIdentity(it.name))); },'判定没成，正文里到手的财物没有入账');
+  // 花钱不能超过身上有的（买东西的情形前面已处理）
+  if(num(ch.money)<0&&-num(ch.money)>num(st.player.money)){ const have=Math.max(0,num(st.player.money)),want=-num(ch.money); soft('主角身上只有'+have+'块'+moneyUnit()+'，付不出'+want+'块：按实际能付的写',()=>{ch.money=-have;},'身上只有'+have+'块'+moneyUnit()+'，只付出了这些（正文写的是'+want+'块）'); }
   const cap=turnIncomeCap(st.player,judge);
   if(num(ch.money)>cap){const asked=num(ch.money);soft('本回实际进项上限为'+cap+'块'+moneyUnit()+'，请按这个额度写正文与money，或说明未获批',()=>{ch.money=cap;},moneyUnit()+'只入账 '+cap+' 块（正文写的 '+asked+' 块超出本境上限）');}
-  const ref=rewardReference(st,t,ch);if(ref&&c.rewarded[ref])consistencyError('这笔事件奖励已经领取，不能重述后再发');d._rewardRef=ref;
+  let ref=rewardReference(st,t,ch);if(ref&&c.rewarded[ref])soft('这笔事件奖励已经领取，不能重述后再发',()=>{ if(num(ch.money)>0) delete ch.money; ref=''; },'这笔奖励先前已经领过，这回没有再入账');d._rewardRef=ref;
   if(judge&&judge.months!=null){
     const elapsed=text.match(new RegExp('(?:这一坐就是|过了|过去了|跋涉了?|赶路了?|走了)\\s*'+CONS_NUM+'(?:个)?(天|日|月|年)'));
     if(elapsed){const days=cnToNum(elapsed[1])*(elapsed[2]==='年'?360:elapsed[2]==='月'?30:1);if(days>Math.round(num(judge.months)*30)+1)soft('正文耗时超过引擎已确定的时间',null,'正文写的耗时比引擎多，时间仍按引擎推进');}
     const nth=[...text.matchAll(/第([0-9]+|[一二三四五六七八九十百]+)(?:天|日)/g)].map(m=>cnToNum(m[1]));
     if(nth.some(v=>v>Math.round(num(judge.months)*30)+1))soft('正文天数超过本回时间范围',null,'正文提到的天数超出本回时间，时间仍按引擎推进');
   }
-  validateFactUpdates(d,st,text);
+  validateFactUpdates(d,st,text,soft);
   for(const q of d.questUpdates||[]){
     if(!(num(q.progress)>0||q.status==='完成'))continue;
     const old=(st.quests||[]).find(x=>x.title===q.title);if(!old||old.status!=='进行中')continue;
@@ -7451,15 +7544,22 @@ function validateTurnConsistency(d,action,judge,st,opt){
   return d;
 }
 function assertSettledOutcomes(d,st,judge){
-  assertWorldText(d.narrative+'\n'+String(d.summary||''),st);
+  // 10-14：这时正文已经拿到、钱物已经入账，再抛错只会让整回作废。对不上的照实记进起居注，必要时在正文末尾补一句。
+  const note=t=>{ d.fixNotes=d.fixNotes||[]; if(d.fixNotes.includes(t)) return; d.fixNotes.push(t); lastDeltas['修正']=(lastDeltas['修正']?lastDeltas['修正']+'；':'')+t; };
+  const replace=(from,to)=>{ if(!from||from===to) return; for(const k of ['narrative','summary']) if(typeof d[k]==='string') d[k]=d[k].split(from).join(to); };
+  assertWorldText(d.narrative+'\n'+String(d.summary||''),st,null,{soft:(msg,fix,n)=>{ if(fix) fix(); note(n||msg); },replace});
   const wanted=num(d.playerChanges&&d.playerChanges.money),accepted=num(lastDeltas['家财']);
   const tradeBonus=wanted>0&&hasTag(st.player,'贪财')&&TRADE_RE.test(String(d._action||'')+plain(d.summary));
   const expected=tradeBonus?Math.min(turnIncomeCap(st.player,judge),Math.round(wanted*tagMul(st.player,'trade'))):wanted;
-  if(wanted&&expected!==accepted&&!(judge&&judge.doom))consistencyError('正文依据的财物变化与最终接受的结算不同，应按实际额度重写');
+  if(wanted&&expected!==accepted&&!(judge&&judge.doom))note(moneyUnit()+'按实际入账 '+(accepted>0?'+':'')+accepted+' 块（正文依据的是 '+wanted+' 块）');
   d.acceptedOutcomes={money:accepted,bonus:tradeBonus?accepted-wanted:0};
   const text=String(d.narrative||'');
-  if(d.deathFix&&/(?:死了|身死|气绝|咽气|陨落|没了气息)/.test(text)&&!/(?:未死|没死|险些|差点|活了下来)/.test(text))consistencyError('禁止死亡的结尾尚未修复，不能保存为已发生事件');
-  if(d.checkFix&&!/(?:未能|没能|未成|没成|失败|不肯|拒绝|没有答应|白跑|卡住)/.test(text))consistencyError('失败判定的正文尚未修复，不能保存成功情节');
+  if(d.deathFix&&/(?:死了|身死|气绝|咽气|陨落|没了气息)/.test(text)&&!/(?:未死|没死|险些|差点|活了下来|一口气|救下|救活|保住了?性命)/.test(text)){
+    d.narrative=text.replace(/\s+$/,'')+'\n\n（'+st.player.name+'伤重垂危，终究吊住了一口气，没有死。）';note('本局不许剧情写死主角：结尾补记为重伤未死');
+  }
+  if(d.checkFix&&!/(?:未能|没能|未成|没成|失败|不肯|拒绝|没有答应|没答应|白跑|卡住|不允|不答应|摇头|作罢|落空|无功|徒劳|没办成|没有办成|未果|婉拒|回绝|空手|碰了壁|闭门羹)/.test(text)){
+    d.narrative=text.replace(/\s+$/,'')+'\n\n（此事终究没有办成，所得一概未入账。）';note('判定没成：正文结尾补记为没有办成');
+  }
 }
 function commitTurnContinuity(d,st){
   const c=continuityState(st);if(d._rewardRef)c.rewarded[d._rewardRef]={turn:st.turn,money:num(d.playerChanges.money)};
@@ -7467,42 +7567,50 @@ function commitTurnContinuity(d,st){
   commitFactUpdates(d,st);syncKnownEntities(st);
 }
 function validateConvoConsistency(d,n,st,ctx){
-  ctx=ctx||{};const line=String(ctx.line||''),gift=ctx.gift,e=d.effects||{};
-  assertWorldText(d.reply+'\n'+String(d.summary||''),st);
+  ctx=ctx||{};const line=String(ctx.line||''),gift=ctx.gift,e=d.effects||{},lenient=!!ctx.lenient;
+  const soft=(msg,fix,note,grave)=>consistencySoft(d,lenient,msg,fix,note,grave);
+  const replace=(from,to)=>{ if(from&&from!==to&&typeof d.reply==='string') d.reply=d.reply.split(from).join(to); };
+  assertWorldText(d.reply+'\n'+String(d.summary||''),st,null,{soft,replace});
   if(n.alive===false)consistencyError('亡故人物不能面谈');
-  if(e.relation&&e.relation!==n.relation&&!relationEventEvidence(n,e.relation,{actorName:n.name,act:line,txt:d.reply}))consistencyError('称谓不能直接改变正式关系，必须写出双方确立关系的经过');
+  if(e.relation&&e.relation!==n.relation&&!relationEventEvidence(n,e.relation,{actorName:n.name,act:line,txt:d.reply}))soft('称谓不能直接改变正式关系，必须写出双方确立关系的经过',()=>{delete e.relation;},n.name+'的关系没有正式确立，仍按「'+(n.relation||'相识')+'」记');
   const material=num(e.money)||(e.give||[]).length||(e.take||[]).length||e.art||e.skill||e.teach||num(e.contrib)||num(e.hp);
-  if(isAcknowledgement(line)&&material)consistencyError('这句只是确认旧事，effects不得重复发钱、给物或授艺');
-  const caps=convoCaps(n),remaining=Math.max(0,caps.lifetime-num(n.gave));
-  if(num(e.money)>Math.min(caps.money,remaining))consistencyError('面谈金额超出当前可实际发放额度');
-  if(num(e.money)<0&&-num(e.money)>num(st.player.money))consistencyError('主角付不起这笔灵石');
-  if(num(e.hp)>Math.min(caps.hp,hpMaxOf(st.player)-st.player.hp))consistencyError('疗伤回复超过当前实际可恢复气血');
+  if(isAcknowledgement(line)&&material)soft('这句只是确认旧事，effects不得重复发钱、给物或授艺',()=>{ for(const k of ['money','give','take','art','skill','teach','contrib','hp']) delete e[k]; },'这句只是确认旧事，这回没有再给东西');
+  const caps=convoCaps(n),remaining=Math.max(0,caps.lifetime-num(n.gave)),lim=Math.min(caps.money,remaining),unit=moneyUnit();
+  if(num(e.money)>lim)soft('面谈金额超出当前可实际发放额度（此人眼下最多'+lim+'块）',()=>{e.money=lim;},n.name+'眼下最多拿得出 '+lim+' 块'+unit+'，按此入账');
+  if(num(e.money)<0&&-num(e.money)>num(st.player.money))soft('主角付不起这笔'+unit,()=>{e.money=-Math.max(0,num(st.player.money));},'身上只有 '+num(st.player.money)+' 块'+unit+'，只付了这些');
+  const hl=Math.max(0,Math.min(caps.hp,hpMaxOf(st.player)-st.player.hp));
+  if(num(e.hp)>hl)soft('疗伤回复超过当前实际可恢复气血',()=>{e.hp=hl;},'疗伤按实际能恢复的气血记');
   if(e.art){
-    if(artKnown(bareArtName(e.art.name))||taughtByPlayer(n,e.art.name))consistencyError('这门功法主角已经会了，不能作为本次新传授');
-    if(!caps.free&&(n.taught||caps.fav<caps.artGate||realmIndex(n.realm)<=realmIndex(st.player.realm)))consistencyError('当前条件不支持传授这门功法');
+    if(artKnown(bareArtName(e.art.name))||taughtByPlayer(n,e.art.name))soft('这门功法主角已经会了，不能作为本次新传授',()=>{delete e.art;},'这门功法主角已经会了，没有再记一次');
+    else if(!caps.free&&(n.taught||caps.fav<caps.artGate||realmIndex(n.realm)<=realmIndex(st.player.realm)))soft('当前条件不支持传授这门功法',()=>{delete e.art;},n.name+'眼下不会传功法，这门没有记');
   }
+  const dropGive=[];
   for(const it of e.give||[]){
-    if(gift&&itemIdentity(it.name)===itemIdentity(gift.name))consistencyError('本次是主角赠送，不得把同一物品再记成对方赠送');
-    if(ownedCount(n,it.name)>0&&!/还给我|退给我|归还|拿回来/.test(line))consistencyError('对方收到的主角赠物不能无故反向赠回');
-    if(!caps.canItem)consistencyError('此人当前不会交出物品，正文不能写已到手');
-    if(it.cat==='玉简'&&(manualHeld(it.name)||artKnown(bareArtName(it.name))||taughtByPlayer(n,it.name)))consistencyError('这份玉简已经拥有或学会，不能再叙述为新赠物');
-    const qty=countInText(d.reply,it.name);if(qty!=null){if(it.count!=null&&itemCountOf(it,it.cat).n!==qty)consistencyError('面谈物品数量与回复不一致');it.count=qty;}
-    if(itemCountOf(it,it.cat).n>5)consistencyError('本次可实际赠送数量至多五份，请正文照实际额度写');
+    if(gift&&itemIdentity(it.name)===itemIdentity(gift.name)){soft('本次是主角赠送，不得把同一物品再记成对方赠送',()=>dropGive.push(it),'主角送出的【'+it.name+'】没有再记成对方回赠');continue;}
+    if(ownedCount(n,it.name)>0&&!/还给我|退给我|归还|拿回来/.test(line)){soft('对方收到的主角赠物不能无故反向赠回',()=>dropGive.push(it),'【'+it.name+'】是主角先前送的，没有再记回来');continue;}
+    if(!caps.canItem){soft('此人当前不会交出物品，正文不能写已到手',()=>dropGive.push(it),n.name+'眼下不会交出东西，【'+it.name+'】没有入账');continue;}
+    if(it.cat==='玉简'&&(manualHeld(it.name)||artKnown(bareArtName(it.name))||taughtByPlayer(n,it.name))){soft('这份玉简已经拥有或学会，不能再叙述为新赠物',()=>dropGive.push(it),'【'+it.name+'】已经有了，没有再记');continue;}
+    const qty=countInText(d.reply,it.name);
+    if(qty!=null){ if(it.count!=null&&itemCountOf(it,it.cat).n!==qty) soft('面谈物品数量与回复不一致',()=>{it.count=qty;},'【'+it.name+'】按回复里写的'+qty+'份入账'); else it.count=qty; }
+    if(itemCountOf(it,it.cat).n>5)soft('本次可实际赠送数量至多五份，请正文照实际额度写',()=>{it.count=5;},'【'+it.name+'】一次至多给五份，按五份入账');
   }
+  if(e.give)e.give=e.give.filter(x=>!dropGive.includes(x));
   e.take=(e.take||[]).filter(x=>!gift||itemIdentity(typeof x==='object'?x.name:x)!==itemIdentity(gift.name));
-  for(const x of e.take){const pair=itemRemoveList([x])[0];if(pair&&ownedCount(st.player,pair[0])<pair[1])consistencyError('主角没有足够的'+pair[0]+'可交出');}
-  if(e.skill&&!caps.free&&npcSkillLevel(n,e.skill.name)<=skillLevel(st.player.skills[e.skill.name]))consistencyError('此人没有高于主角的相应技艺，不能反向指点');
-  const reward=d.reply.match(new RegExp('(?:给你|给了你|送你)[^。\\n]{0,8}?'+CONS_NUM+'\\s*块(?:下品)?灵石'));
-  if(reward&&num(e.money)>0&&cnToNum(reward[1])!==num(e.money))consistencyError('面谈回复金额与effects.money不一致');
+  const dropTake=[];
+  for(const x of e.take){const pair=itemRemoveList([x])[0];if(pair&&ownedCount(st.player,pair[0])<pair[1])soft('主角没有足够的'+pair[0]+'可交出',()=>dropTake.push(x),'行囊里没有足够的'+pair[0]+'，没有扣');}
+  e.take=e.take.filter(x=>!dropTake.includes(x));
+  if(e.skill&&!caps.free&&npcSkillLevel(n,e.skill.name)<=skillLevel(st.player.skills[e.skill.name])){const sk=e.skill.name;soft('此人没有高于主角的相应技艺，不能反向指点',()=>{delete e.skill;},n.name+'的'+sk+'不比主角高，指点没有记');}
+  const reward=d.reply.match(new RegExp('(?:给你|给了你|送你)[^。\\n]{0,8}?'+CONS_NUM+'\\s*块(?:下品)?(?:灵石|仙晶)'))||d.reply.match(new RegExp(CONS_NUM+'\\s*块(?:下品)?(?:灵石|仙晶)[^。\\n]{0,4}(?:给你|送你|拿去|你拿着|收下)'));
+  if(reward&&num(e.money)>0&&cnToNum(reward[1])!==num(e.money)){ const said=Math.min(cnToNum(reward[1]),lim); soft('面谈回复金额与effects.money不一致',()=>{e.money=said;},'按回复里说的 '+said+' 块'+unit+'入账'); }
   if(e.questProgress){const reason=plain(e.questProgress.reason||e.questProgress.milestone);if(!reason||!d.reply.includes(reason))delete e.questProgress;}
-  d.effects=e;validateFactUpdates(d,st,d.reply);return d;
+  d.effects=e;validateFactUpdates(d,st,d.reply,soft);return d;
 }
 function commitConvoOnce(st,name,d,gift,line,id){
   const previous=continuityState(st).receipts[id];if(previous)return Object.assign({},previous,{replayed:true});
   const owner=S,staged=JSON.parse(JSON.stringify(st));S=staged;
   try{
     const n=staged.npcs.find(x=>x.name===name);if(!n||n.alive===false)consistencyError('交谈对象不在当前局');
-    validateConvoConsistency(d,n,staged,{line,gift});
+    validateConvoConsistency(d,n,staged,{line,gift,lenient:true});
     const explicit=[];
     if(gift){
       if(gift.virtual){if(staged.player.money<50)consistencyError('灵石不够');staged.player.money-=50;explicit.push('你给了'+name+' 50 块灵石');}
@@ -7521,18 +7629,19 @@ function commitConvoOnce(st,name,d,gift,line,id){
     const secret=!!(d.revealSecret&&!n.secretKnown);
     if(secret){n.secretKnown=true;staged.stats.secrets++;ledger('探知'+name+'的秘密：'+(n.secret||'一桩隐情'));}
     commitFactUpdates(d,staged);syncKnownEntities(staged);
-    const receipt={gains,favor,secret,turn:staged.turn};continuityState(staged).receipts[id]=receipt;
+    const receipt={gains,favor,secret,turn:staged.turn,notes:(d.fixNotes||[]).slice()};continuityState(staged).receipts[id]=receipt;
     for(const k of Object.keys(st))if(!(k in staged))delete st[k];Object.assign(st,staged);
     return receipt;
   }finally{S=owner;}
 }
-const CORR_STRONG=/记错|记录有误|档案(?:写错|有误|里)|名册(?:写错|有误)|更正(?:记录|档案)|写错了|从.{0,8}(?:妾室|家室|妻妾|道侣|恋人|夫妻).{0,6}(?:去掉|删掉|删除|移除|拿掉|撤掉)/;
+const CORR_WEAK=/记错|写错/;
+const CORR_STRONG=/记录有误|记录(?:里|上)?(?:写错|记错|有误|不对)|档案(?:写错|有误|里)|名册(?:写错|有误|里)|面板(?:上)?(?:写错|有误|不对)|人物表|更正(?:记录|档案)|从.{0,8}(?:妾室|家室|妻妾|道侣|恋人|夫妻).{0,6}(?:去掉|删掉|删除|移除|拿掉|撤掉)/;
 const CORR_REMOVE=/从(?:我的?)?(妾室|家室|妻妾|道侣|恋人|夫妻)(?:里|中|栏|一栏)?(?:去掉|删掉|删除|移除|拿掉|撤掉)|(?:不是|并非)(?:我的?)?(妾室|妾|侧室|妻子|夫人|丈夫|夫君|道侣|恋人)/;
 function corrRemoveKind(w){ return /妾|侧室/.test(w)?'妾室':/恋人/.test(w)?'恋人':/家室|妻妾/.test(w)?'家室':'夫妻'; }
 // 更正只改记录，不推演剧情、不推进时间、不新增玩家没说的关系
 function correctionPlan(action){
   action=String(action||'');
-  const strong=CORR_STRONG.test(action), soft=/更正|纠正|改正/.test(action);
+  const strong=CORR_STRONG.test(action), soft=/更正|纠正|改正/.test(action)||CORR_WEAK.test(action);
   if(!strong&&!soft) return null;
   const n=(S.npcs||[]).filter(n=>n&&n.name&&action.includes(n.name)).sort((a,b)=>b.name.length-a.name.length)[0];
   if(!n) return strong?{kind:'unclear'}:null;
@@ -8197,8 +8306,8 @@ function gradeUseText(g,p){ g=num(g); if(!g||!S||!S.player) return ''; const cap
 function capForMajor(m){ return gradeCapFor({realm:{major:m}}); }
 function gradeCapFor(p){ const m=p&&p.realm&&p.realm.major>=0?p.realm.major:0; if(m>=XIAN_PLANE_MAJOR) return 15+(Math.min(XIAN_TOP,m)-XIAN_PLANE_MAJOR)*3; return m<=1?3:(m<=3?6:(m<=5?9:12)); }
 /* 10-12：品阶折成战力、威力用的「本界品级」。下界的人照旧（0–12，越级部分三成五）；
-   仙界的人按仙界品阶折回 0–12（每品 12/21），下界的东西在仙界只算半品。下界的人拿到仙界法宝，按天阶上品再加越级的三成五 */
-function gradePow(g,p){ const e=effGrade(g,p); if(majorOf(p)>=XIAN_PLANE_MAJOR) return e<=12?0.5:(e-12)*12/21; return e; }
+   仙界的人按仙界品阶折回 0–12（每品 12/21），下界十二品在仙界递增折为 1/24 至半品，天阶上品略逊于灵宝下品。下界的人拿到仙界法宝，按天阶上品再加越级的三成五 */
+function gradePow(g,p){ const e=effGrade(g,p); if(majorOf(p)>=XIAN_PLANE_MAJOR) return e<=12?Math.max(0,e)/24:(e-12)*12/21; return e; }
 // 被引擎拦下的改动：记进修正日志，起居注里也看得到
 // 备注往后接，不覆盖；超过 200 字从最早的一句删起
 function appendNote(n,t){
@@ -10239,7 +10348,7 @@ function validateConvo(d,npc,roll,opt,ctx){
     for(const k of ['give','take'])if(d.effects[k]!=null&&!Array.isArray(d.effects[k])) d.effects[k]=typeof d.effects[k]==='object'||typeof d.effects[k]==='string'&&d.effects[k].trim()?[d.effects[k]]:[];
     for(const k of ['money','hp','contrib'])if(d.effects[k]!=null&&(typeof d.effects[k]!=='number'||!Number.isFinite(d.effects[k]))){ const n=toNum(d.effects[k]); if(n==null) delete d.effects[k]; else d.effects[k]=n; }
   }
-  validateConvoConsistency(d,npc,S,ctx);
+  validateConvoConsistency(d,npc,S,Object.assign({},ctx,{lenient}));
   if(typeof d.reply==='string') d.reply=auditText(d.reply,S).text;   // 10-09：回话里提到人，境界、年龄、称呼照账
   if(fdm().freeAct){d.attempt=null;return d;}
   const att=roll&&typeof roll==='object'?roll:null;
@@ -10263,7 +10372,7 @@ function openConvo(npc,offered){
   if(busy||!S||S.over) return;
   if(!npc.alive){ toast(npc.name+'已经不在人世了'); return; }
   // 剧情给出的面谈选项，说明人就在跟前，引擎的地点账跟着剧情走
-  if(npc.location&&S.scene&&npc.location!==S.scene.location&&!fdm().freeAct&&!offered){
+  if(npc.location&&S.scene&&npc.location!==S.scene.location&&!samePlace(npc.location,S.scene.location,S)&&!fdm().freeAct&&!offered){
     toast(npc.name+'在'+npc.location+'，先前往当地再见面');
     return;
   }
@@ -10326,6 +10435,7 @@ async function convoSend(text, gift){
       snapshotConvo();saveGame();
       if(receipt.favor)convoBubble(`${esc(n.name)}${receipt.favor>0?'好感 +'+receipt.favor:'好感 '+receipt.favor}`,'sys');
       if(receipt.secret){convo.secretRevealed=true;convoBubble(`✦ 你探知了${esc(n.name)}的秘密：${esc(myConvo.npc.secret)}`,'sys');}
+      if(receipt.notes&&receipt.notes.length) convoBubble('引擎修正：'+esc(receipt.notes.join('；')),'sys');
       if(receipt.gains.length){for(const g of receipt.gains)convoBubble('✦ '+esc(g),'sys');renderPanel();}
     }
     if(d.summary) convo.summary=d.summary;
@@ -10588,7 +10698,7 @@ function eggArtInfo(a){
   if(e&&(e.arts||[]).some(x=>x.name===a.name)) return {key:'ea:'+a.name,can:EGG_ART_CARD[a.name]||'起手功法',cost:`出自命格·${EGG_CARD[p.egg]?EGG_CARD[p.egg].tag:''}，代价见面板上的命格`};
   return null;
 }
-function renderGqKey(){ const k=$('gqKey'); if(!k||!S||!S.player) return; if(!isXianRealm(S.player.realm)){ if(k.dataset.x){ k.innerHTML=k.dataset.low; delete k.dataset.x; } return; } if(k.dataset.x) return; k.dataset.low=k.innerHTML; k.dataset.x=1; k.innerHTML='品阶　'+XGRADE_TIERS.map((t,i)=>`<span class="gq${14+i*3}">${t}</span>`).join(' · ')+'，同一档颜色越深越好；下界的黄玄地天四阶在仙界只算凑合'; }
+function renderGqKey(){ const k=$('gqKey'); if(!k||!S||!S.player) return; if(!isXianRealm(S.player.realm)){ if(k.dataset.x){ k.innerHTML=k.dataset.low; delete k.dataset.x; } return; } if(k.dataset.x) return; k.dataset.low=k.innerHTML; k.dataset.x=1; k.innerHTML='品阶　'+XGRADE_TIERS.map((t,i)=>`<span class="gq${14+i*3}">${t}</span>`).join(' · ')+'，同一档颜色越深越好；下界黄玄地天仍有强弱，天阶上品仅够入门，略逊于灵宝下品'; }
 function renderPanel(){
   renderGqKey();
   if(!S||!S.player) return;
@@ -12021,6 +12131,7 @@ function inputConflicts(action){
     if(!n||!n.name||n.alive===false||!n.realm||unkOf(n,'R')||!t.includes(n.name)) continue;
     const m=t.match(new RegExp(reLiteral(n.name)+'[^，。！？]{0,6}?(?:突破|进至|晋入|破入|达到|修为到了?|升到)(?:了)?('+REALM_TXT+')'));
     const r=m&&parseRealm(fixRealmText(m[1]));
+    if(r&&!REALM_SPEC_RE.test(m[1])&&r.major===n.realm.major) continue;   // 没写到阶，只说了大境界
     if(r&&realmIndex(r)<realmIndex(n.realm)) out.push({n,claimed:r});
   }
   return out;
