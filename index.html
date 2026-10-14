@@ -3145,10 +3145,10 @@ function xianGearRulesText(){
   return `- 仙界法宝规矩：下界黄、玄、地、天仍有强弱之分，天阶上品仅够初入仙界过渡，略逊于灵宝下品；保留旧名旧品阶，普通法宝不会因飞升自动升品。已有成长标记的特殊宝物沿用其成长规则，不能给普通器物补此待遇。
 - 品阶决定当前基础威力，古老来历、神秘名字、器形和潜力不额外增加数值；宝物越级时只发挥部分威力，不能凭一件宝物抹去大境界压制。当前档与相邻档原型：${near.map(d=>`${d.name}（${gradeText(d.g)}；${d.desc}；来路：${d.source}）`).join('；')}。
 - 原型是有据可查的常见制式，不是自动赠品；新取原型照其初始品阶，重炼旧物须有对应仙材、炼器修为与消耗经过，不得只改名字就升品。仙市常备仅灵宝三品，价格分别为8、16、28仙晶；更高品阶须写明秘境、同阶炼器或相称的战利品来路。实际买入、兑换与秘境所得以引擎账目为准，已到账不得重复发放。
-- 法宝描述只写器形、施展方式和已有结算效果，不虚构额外无敌、替死、时间加速、永久属性或无限仙元；普通法宝战力只取最强一件，不把整袋宝物的加成相加。`;
+- 法宝描述只写器形、施展方式和已有结算效果，不虚构额外无敌、替死、时间加速、永久属性或无限仙元；行囊内法宝按每件的有效战力逐件叠加，越级折损已由引擎计算；同名的实际多件也逐件计入，一套法宝只按行囊中的一件计算。斗法普通攻击轮换施展法宝，已计入战力，不额外增加攻击次数或重复加伤害。`;
 }
 function xianGearCatalogHtml(){
-  return '<details class="eggd"><summary>仙界宝录 · 七档二十一种</summary><div class="note">天阶上品可供飞升初期过渡，略逊于灵宝下品。旧物保留原品阶；普通器物须重炼才能升品。法宝战力取最强一件，越级威力受修为限制。</div>'+XGRADE_TIERS.map((tier,t)=>
+  return '<details class="eggd"><summary>仙界宝录 · 七档二十一种</summary><div class="note">天阶上品可供飞升初期过渡，略逊于灵宝下品。旧物保留原品阶；普通器物须重炼才能升品。行囊法宝的有效战力逐件叠加，越级威力受修为限制。</div>'+XGRADE_TIERS.map((tier,t)=>
     `<div style="margin-top:12px"><b class="gq${13+t*3}">${tier} · ${XIAN.majors[XIAN_PLANE_MAJOR+t]}</b>${XIAN_GEAR.filter(d=>Math.floor((d.g-13)/3)===t).map(d=>`<div class="note" style="margin:6px 0">${esc(d.name)}（${gradeText(d.g)}）<br>${esc(d.desc)}<br>来路：${esc(d.source)}</div>`).join('')}</div>`).join('')+'</details>';
 }
 
@@ -4988,7 +4988,7 @@ function markTaught(n,artName){
 
 // 法宝发挥的品阶换算为固定加成：下界每单位一点，仙境每单位十点，不读榜首。
 function weaponScale(p){ return powerScale(p); }
-function weaponPower(it){ return Math.round(gradePow(Math.min(GRADE_TOP,Math.max(0,num(it&&it.bonus))),S&&S.player)*weaponScale()); }
+function weaponPower(it,p){ p=p||(S&&S.player); return Math.round(gradePow(Math.min(GRADE_TOP,Math.max(0,num(it&&it.bonus))),p)*weaponScale(p)); }
 // 模型常忘了填 bonus，按名号成色估一个，免得新得的神兵一点加成都没有
 function guessWeaponBonus(it){
   const preset=XIAN_GEAR.find(d=>d.name===plain(it&&it.name)); if(preset) return preset.g;
@@ -5014,7 +5014,8 @@ function normWeapon(it){ if(!it) return it;
   const g=gradeIndex(it.grade);
   if(g){ it.grade=gradeText(g); it.bonus=g; return it; }
   const b=Math.min(GRADE_TOP,Math.max(0,num(it.bonus))); it.bonus=b||Math.min(GRADE_TOP,guessWeaponBonus(it)); it.grade=gradeText(Math.max(1,it.bonus)); return it; }
-function weaponBonus(p){ let b=0; for(const w of (p.items&&p.items['法器']||[])) b=Math.max(b,gradePow(Math.min(GRADE_TOP,Math.max(0,num(w.bonus))),p)); return Math.round(b*weaponScale(p)); }
+// 逐件累加已按修为折算、取整的有效战力，与行囊每件显示一致。
+function weaponBonus(p){ return (p.items&&p.items['法器']||[]).reduce((sum,w)=>sum+weaponPower(w,p),0); }
 function powerBreakdown(p){
   const scale=powerScale(p), base=basePowerOf(p), gear=weaponBonus(p);
   const scar=Math.round(num(p.scarPower)*scale), hurt=(p.hp<30?15:0)*scale, deviation=((p.status||[]).includes('走火入魔')?10:0)*scale;
@@ -6705,6 +6706,7 @@ ${crossPlaneBlock()}${clanBlock()}
 ${worldThreadBlock(action)}
 【实际在场人物】${asArr(S.scene&&S.scene.present).join('、')||'未确认，不可假定所有旧识都在这里'}
 【主角姓名】${p.name}${p.biaozi?`（字${p.biaozi}）`:''}——姓「${surnameOf(p.name)}」。叙述和旁人称呼一律用这个名字，绝不可换成别的姓或别的名字。
+【法宝战力】行囊中每件法宝的有效战力都计入当前战力；越级威力由引擎折算。已有特殊效果照常生效，叙事不得再次添加法宝战力或凭空增加攻击次数。
 【称呼与尊卑】${playerAddressRule()}至亲爱人保留亲近称呼；仇人不必行礼服软但要忌惮实力差；普通同门、弟子、陌生男女不算特殊关系。【眼下要紧的人】里每个人的「对主角」一栏写明了此人见主角该有的礼数，照办。
 【主角面板】${JSON.stringify(pb)}（称号：${titleOf(p)}；${rankName()}位次：${rankText()}）
 ${sectRosterLine()}${S.sect&&!S.sect.own?`【宗门】${S.sect.name}${sectRank(S.sect.contrib)}，贡献${S.sect.contrib}${sectNext(S.sect.contrib)?`（攒到${sectNext(S.sect.contrib).need}升${sectNext(S.sect.contrib).name}）`:''}；剧情里称呼、差事都照这个位阶写\n`:''}${courtLine()}【生计】身上${p.money}块${moneyUnit()}，${upkeepText()}${S.destitute?(inXianjie()?'；主角仙晶已经用尽，日子捉襟见肘':'；主角灵石已经用尽，日子捉襟见肘'):''}${inXianjie()&&num((p.wallet||{})['灵石'])?`；另有下界带上来的${num(p.wallet['灵石'])}块下品灵石，在仙界不顶用`:''}；年岁${p.age}，寿元${lifeText(p)}（${ageNote()}）
@@ -9168,14 +9170,15 @@ function adBuild(d){
   const p=S.player, o=d.opp;
   const pk=adSkillsFrom(p.arts,p), ok=adSkillsFrom(npcKitLive(o),o);
   const pr=d.profile;
-  const w=(p.items['法器']||[]).slice().sort((a,b)=>gradePow(num(b.bonus),p)-gradePow(num(a.bonus),p))[0];
+  const weapons=(p.items['法器']||[]).filter(w=>w&&w.name).slice().sort((a,b)=>weaponPower(b,p)-weaponPower(a,p)).map(w=>w.name);
   // 仙凡之隔保留两层境界压制，绝对战力已经贯通两界，取消旧版 +100 的换界补偿。
   const xp=majorOf(p)>=XIAN_PLANE_MAJOR, xo=majorOf(o)>=XIAN_PLANE_MAJOR, cross=xp!==xo&&majorOf(p)>=0&&majorOf(o)>=0;
   const scale=adScale(p,o), md=majorOf(p)+(p.realm&&p.realm.dao?1:0)-majorOf(o)-(o.realm&&o.realm.dao?1:0)+(cross?(xp?2:-2):0), mk=AD_MAJOR*scale;
   const row=xp?XIAN_POWER[p.realm.major-XIAN_PLANE_MAJOR]:null;
   const leap=tagAdd(p,'leap')*(row?row[1]-row[0]:3.1);   // 天资卓绝补一个小阶的基础差距。
-  const P=adUnit('p',{scale,name:p.name,hp:d.pHp,qi:d.pQi,W:d.pW+leap+Math.max(0,md)*mk,best:pk.best,skills:pk.skills,weapon:w?w.name:'',
+  const P=adUnit('p',{scale,name:p.name,hp:d.pHp,qi:d.pQi,W:d.pW+leap+Math.max(0,md)*mk,best:pk.best,skills:pk.skills,weapon:weapons[0]||'',
     med:duelPillIndex(p)>=0, hpMax:hpMaxOf(p), first:hasTag(p,'杀伐果断')||undefined, atkMul:tagMul(p,'atk'), escape:tagAdd(p,'escape')+num((p.eggFx||{}).escape), rage:(p.eggFx||{}).rageAtk||0, shield0:(p.eggFx||{}).duelShield||0, relic:1, lame:hasScar('跛足'), spdMod:hasScar('跛足')?-((d.pW/scale)*0.15):0});
+  P.weapons=weapons; P.weaponCursor=0;   // 随战斗快照保存；旧斗法没有此字段时沿用原武器。
   const sig=String(o.signature||'').replace(/[「」《》【】]/g,'');
   const O=adUnit('o',{scale,name:o.name,hp:d.oHp,qi:d.oQi,W:d.oppW+Math.max(0,-md)*mk,best:ok.best,skills:ok.skills,weapon:sig,
     spdMod:(/轻|灵|活|跳脱|机敏/.test(persArr(o.personality).join(''))?4:0)-(pr.def?3:0),
@@ -9238,6 +9241,8 @@ function adSay(u,key,list){ const E=duel&&duel.eng; const used=(E&&(E.said=E.sai
 function weaponKind(nm){ nm=String(nm||''); if(/印|钟|鼎|塔|锤|山|砖|瓶|葫芦|尺|锏|斧/.test(nm)) return 'smash'; if(/铃|镜|幡|旗|扇|琴|箫|珠|灯|笛|鼓|令/.test(nm)) return 'shine'; if(/索|绫|网|绳|鞭|丝|链|带/.test(nm)) return 'bind'; return 'blade'; }
 function unitEl(u){ if(u.el!=null) return u.el; const a=u.side==='p'&&S&&S.player?mainArt(S.player):null; let e=a&&a.element||''; if(!e) for(const s of u.skills||[]){ e=s.element||artElement(s.name); if(e) break; } u.el=EL_COLOR[e]?e:''; return u.el; }
 function adNormalLine(u,t){
+  // 只轮换普通攻击的器物表现，不多掷随机数、不增添攻击或伤害。
+  if(u.side==='p'&&u.weapons&&u.weapons.length){ const i=Math.max(0,num(u.weaponCursor))%u.weapons.length; u.weapon=u.weapons[i]; u.weaponCursor=(i+1)%u.weapons.length; }
   const me=adWho(u), him=adWho(t), w=u.weapon&&u.side==='p'?u.weapon:'';
   if(w){ const k=weaponKind(w), W=`【${w}】`;
     if(k==='smash') return adSay(u,'w',[`${me}祭起${W}，迎头朝${him}砸下`,`${W}迎风一涨，朝${him}压了过去`]);
@@ -10916,7 +10921,7 @@ function manualHtml(list){
 function renderBag(){
   normBag(S.player);
   const it=S.player.items;
-  $('bagWeapons').innerHTML=itemHtml(it['法器'],'#5E6F8A','器');
+  $('bagWeapons').innerHTML='<div class="note">法宝逐件叠加，当前合计战力 +'+weaponBonus(S.player)+'。每件加成已计入修为限制。</div>'+itemHtml(it['法器'],'#5E6F8A','器');
   $('bagManuals').innerHTML=manualHtml(it['玉简']);
   $('bagManuals').querySelectorAll('button[data-mi]').forEach(b=>b.onclick=()=>studyManual(+b.dataset.mi));
   $('bagMeds').innerHTML=itemHtml(it['丹药'],'#3F7A55','药');
