@@ -954,6 +954,15 @@ details.eggd.fate>summary{color:inherit;font-size:inherit}
   </div>
 </div>
 
+<!-- 玩家主动结束关系或心愿；页面内确认，手机与内嵌浏览器都可操作 -->
+<div class="modal-mask" id="managementMask" style="z-index:120">
+  <div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="managementTitle" aria-describedby="managementText" style="max-width:440px">
+    <h2 id="managementTitle">确认决定</h2>
+    <p id="managementText" style="white-space:pre-line;line-height:1.8"></p>
+    <div class="mbtnrow"><button class="mbtn" id="managementCancel">取消</button><button class="mbtn primary" id="managementAccept">确认</button></div>
+  </div>
+</div>
+
 <!-- NPC 详情弹窗 -->
 <div class="modal-mask" id="npcMask">
   <div class="modal" id="npcModal">
@@ -1618,7 +1627,7 @@ function decreeSync(st,n){
     if(f.realm){ const r=parseRealm(f.realm);
       // 读档时从旧行动里翻出来的：只往上补，不把这些年修上去的又压回去
       if(r&&(!e.old||realmIndex(r)>realmIndex(n.realm))&&realmText(r)!==realmText(n.realm)){ n.realm=r; syncPower(n); changed=true; } }
-    if(f.relation&&f.relation!==n.relation){ const before=n.relation; n.relation=f.relation; changed=true;
+    if(f.relation&&f.relation!==n.relation&&!(e.old&&n.relationshipExits&&n.relationshipExits[relationshipExitKind(f.relation)])){ const before=n.relation; n.relation=f.relation; changed=true;
       if(!e.old&&st===S&&typeof syncPlayerRel==='function'){ const why=syncPlayerRel(n,before); if(why&&typeof news==='function') news(why); } }
     if(n.stub){ if(f.gender) n.stubG=true; if(f.age) n.stubA=true; if(f.realm) n.stubR=true; if(n.stubG&&n.stubA&&n.stubR) n.stub=false; }
   }
@@ -3640,7 +3649,7 @@ function loveSheet(name){
   const mine=relsOfName(name);
   const sp=spouseOf(name);
   const lovers=mine.filter(r=>r.type==='恋人').map(r=>({with:relOther(r,name),since:r.since}));
-  const past=mine.filter(r=>r.history.some(h=>/成婚|走到了一起|私情/.test(h.text))&&!['夫妻','恋人'].includes(r.type)).map(r=>({with:relOther(r,name),how:r.history[r.history.length-1].text,date:r.history[r.history.length-1].date}));
+  const past=mine.filter(r=>r.history.some(h=>/成婚|结为夫妻|走到了一起|私情|解除婚姻|解除妾室|结束恋情|解除婚约/.test(h.text))&&!['夫妻','恋人'].includes(r.type)).map(r=>({with:relOther(r,name),how:r.history[r.history.length-1].text,date:r.history[r.history.length-1].date}));
   return {single:!sp&&!lovers.length, spouse:sp, lovers, affair:!!(sp&&lovers.length), past};
 }
 
@@ -3812,7 +3821,7 @@ function syncPlayerRel(n,before){
     if(/小爹/.test(n.relation||'')) return '';
     const r=relOf(me,n.name),kin=/义父|义母|干爹|干娘|义兄|义姐|义弟|义妹/.test(n.relation||'')||bloodRel(n.relation);
     if(kin) relSet(me,n.name,'亲属',`${n.name}与主角的正式关系为${n.relation}`);
-    else if(/师父|师尊|师傅|徒弟|徒儿/.test(n.relation||'')) relSet(me,n.name,'师徒',`${n.name}与主角的正式关系为${n.relation}`);
+    else if(mentorshipRel(n.relation)){ relSet(me,n.name,'师徒',`${n.name}与主角的正式关系为${n.relation}`);clearRelationshipExit(n,'mentorship'); }
     else if(r&&['夫妻','妾室','恋人'].includes(r.type)&&was) relSet(me,n.name,'相识',`与${n.name}断了`);
     return '';
   }
@@ -3821,6 +3830,7 @@ function syncPlayerRel(n,before){
     n.relation=before||'相识';
     return `${num(S.player.age)<18?'主角':n.name}还没满十八，婚事办不成`;
   }
+  if(['夫妻','妾室','恋人'].includes(kind))clearRelationshipExit(n,'romance');
   let k=kind;
   const sp=spouseOf(me);
   if(k==='夫妻'&&sp&&sp!==n.name) k='妾室';            // 正室只有一位，后进门的算妾室
@@ -3834,6 +3844,101 @@ function syncPlayerRel(n,before){
   if(affair) ledger(`背着${sp}与${n.name}有了私情`);
   return '';
 }
+// 玩家主动结束约定：即时记账，不走模型判定；有未提交回合时先完成或换个行动。
+function managementBlock(){
+  if(!S||!S.player)return '尚未开局';
+  if(S.over)return '本局已经结束';
+  if(busy||S.pending||S.lastTurn||S.duelState||S.war)return '请先结束当前推演或战斗；待重试的回合可先选「换个行动」';
+  if(convo||S.convoState)return '请先结束当前面谈';
+  return '';
+}
+function mentorshipRel(text){return /^(?:我的|主角的)?(?:亲传|记名|入室|嫡传)?(?:徒弟|徒儿|弟子|师父|师尊|师傅|恩师)(?:$|[，,（(])/.test(plain(text));}
+function relationshipExitKind(relation){
+  if(['夫妻','妾室','恋人'].includes(relKindOf(relation)))return 'romance';
+  return mentorshipRel(relation)?'mentorship':'';
+}
+function relationActions(n){
+  if(!S||!n||n.alive===false||!S.npcs.includes(n))return [];
+  const r=relOf(playerName(),n.name),kind=r&&['夫妻','妾室','恋人'].includes(r.type)?r.type:relKindOf(n.relation),out=[];
+  const blood=bloodRel(n.relation)||bloodRel((S.origRel||{})[n.name]);
+  if(!blood&&(kind==='夫妻'||kind==='妾室'||kind==='恋人'||/指腹为婚/.test(n.bond||n.relation||''))){
+    const label=kind==='夫妻'?'解除婚姻':kind==='妾室'?'解除妾室关系':/未婚|指腹为婚/.test(n.relation+' '+(n.bond||''))?'解除婚约':'结束恋情';
+    out.push({kind:'romance',label});
+  }
+  const member=clanDisciples().find(d=>(d.npcName||d.name)===n.name);
+  if(member)out.push({kind:'clan',label:'逐出门墙'});
+  else if(!blood&&((r&&r.type==='师徒')||mentorshipRel(n.relation)))out.push({kind:'mentorship',label:/师父|师尊|师傅|恩师/.test(n.relation)?'解除师徒关系':'逐出师门'});
+  return out;
+}
+function relationRestoreRequested(n,relation,ctx){
+  const kind=relationshipExitKind(relation),exit=n.relationshipExits&&n.relationshipExits[kind];if(!exit)return true;
+  const action=String(ctx&&ctx.act||'');
+  if(!(action.includes(n.name)||ctx&&ctx.actorName===n.name))return false;
+  if(/不想|不愿|不要|不再|不肯|拒绝|别再|放弃|未曾|没有/.test(action))return false;
+  return kind==='romance'?/复合|复婚|重新成亲|重新成婚|再娶|再嫁|结为道侣|结为夫妻|求婚|成亲|成婚|纳.{0,8}妾|与.{0,8}相恋/.test(action):/重新收|重入|重新拜|拜师|拜.{0,6}为师|收.{0,8}(?:为徒|徒弟|为弟子|门下)/.test(action);
+}
+function recordRelationshipExit(n,kind,label,detach){
+  const from=n.relation,me=playerName(),text=kind==='clan'?`${n.name}${label}（${me}决定）`:label==='逐出师门'?`${me}将${n.name}逐出师门，师徒关系已解除`:`${me}主动与${n.name}${label}`;
+  n.relationshipExits=n.relationshipExits||{};
+  n.relationshipExits[kind]={from,label,turn:S.turn,day:num(S.elapsedDays),date:S.date};
+  if(detach){
+    n.relation='故人';delete n.address;
+    const edge=relOf(me,n.name);if(!edge||edge.type!=='亲属')relSet(me,n.name,'相识',text);
+    // 最新的玩家决定覆盖旧称谓定论，原记录和生身父母资料仍保留。
+    decreeRecord(S,n.name+'（故人）',S.months,false);decreeSync(S,n);
+  }
+  if(kind==='romance'){n['爱恋值']=null;if(/指腹为婚|未婚/.test(n.bond||''))delete n.bond;}
+  n.memory=(n.memory||[]).concat(text).slice(-MEM().npcMem);
+  lifeLog(n,text);
+  commitFactUpdates({factUpdates:[{subject:n.name,key:kind==='romance'?'与主角的婚恋约定':kind==='clan'?'主角门下资格':'与主角的师徒约定',value:label+'；当前关系为'+n.relation,reason:'玩家主动决定'}]},S);
+  news(text);
+}
+function clearRelationshipExit(n,kind){
+  if(!n.relationshipExits||!n.relationshipExits[kind])return;
+  delete n.relationshipExits[kind];
+  if(kind!=='clan'){decreeRecord(S,n.name+'（'+n.relation+'）',S.months,false);decreeSync(S,n);}
+  commitFactUpdates({factUpdates:[{subject:n.name,key:kind==='romance'?'与主角的婚恋约定':kind==='clan'?'主角门下资格':'与主角的师徒约定',value:kind==='clan'?'玩家重新招入'+n.faction:'玩家重新缔结关系：'+n.relation,reason:'玩家主动重新缔结'}]},S);
+}
+function endPlayerRelation(name,kind){
+  const why=managementBlock();if(why)return {ok:false,why};
+  const n=findNpc(name),option=relationActions(n).find(x=>x.kind===kind);
+  if(!option)return {ok:false,why:'这段关系已经结束，或没有可解除的关系'};
+  if(kind==='clan'){
+    const d=clanDisciples().find(d=>(d.npcName||d.name)===n.name);
+    if(!expelDisciple(d))return {ok:false,why:'此人已经不在门下'};
+  }else{
+    recordRelationshipExit(n,kind,option.label,true);
+    if(kind==='mentorship'&&/^(?:亲传|记名|入室|嫡传)?(?:弟子|徒弟|徒儿)$/.test(n.identity||''))n.identity='修士';
+  }
+  return {ok:true,name:n.name,label:option.label};
+}
+function confirmManagement(text,label,accept){
+  const mask=$('managementMask'),cancel=$('managementCancel'),yes=$('managementAccept'),opener=document.activeElement;
+  $('managementText').textContent=text;yes.textContent='确认'+label;
+  let closed=false;
+  const finish=ok=>{if(closed)return;closed=true;mask.classList.remove('on');if(opener&&opener.isConnected)opener.focus();if(ok)accept();};
+  cancel.onclick=()=>finish(false);yes.onclick=()=>finish(true);
+  mask.onclick=e=>{if(e.target===mask)finish(false);};
+  mask.onkeydown=e=>{if(e.key==='Escape'){e.preventDefault();finish(false);}if(e.key==='Tab'){e.preventDefault();(document.activeElement===cancel?yes:cancel).focus();}};
+  mask.classList.add('on');cancel.focus();
+}
+function requestEndRelation(name,kind){
+  const why=managementBlock();if(why){toast(why);return;}
+  const owner=S,n=findNpc(name),option=relationActions(n).find(x=>x.kind===kind);if(!option)return;
+  const consequences=kind==='clan'?'此人将退出宗门，门人士气会下降，也可能结怨。':kind==='mentorship'?'解除双方的师徒关系，保留已有往来和经历。':'结束当前约定，保留往事、子女和已有身孕。';
+  confirmManagement(`确定对${n.name}「${option.label}」？\n${consequences}`,option.label,()=>{
+    if(S!==owner)return;
+    const result=endPlayerRelation(name,kind);if(!result.ok){toast(result.why);return;}
+    saveGame();renderPanel();renderPeople();renderFamily();if(hasClan())renderClan();
+    if($('npcMask').classList.contains('on'))showNpc(n);
+    toast(n.name+'：'+option.label+'，已记入往事');
+  });
+}
+function relationshipExitBlock(){
+  const rows=(S.npcs||[]).flatMap(n=>Object.values(n.relationshipExits||{}).map(e=>`${n.name}：${e.label}（${e.date||''}）；当前关系${n.relation}`));
+  return rows.length?'【玩家已结束的关系约定】'+rows.join('；')+'。往事与子女仍在；未经玩家主动重新缔结，不得恢复婚恋、师徒或被逐后的门下资格。\n':'';
+}
+
 // 子女怎么称呼家里的大人：正室叫母亲/父亲，妾室叫「某姨娘／某小爹」
 function addressFor(child,adult){
   if(!child||!adult) return '';
@@ -4954,15 +5059,18 @@ function renderFamily(){
   const L=loveSheet(me);
   const concub=relsOfName(me).filter(r=>r.type==='妾室');
   const face=name=>{ const n=findNpc(name); return n?`<span class="flink" data-n="${esc(name)}">${esc(name)}</span>${n.alive===false?'〔已故〕':''}`:esc(name); };
-  const hist=relsOfName(me).filter(r=>r.history.some(h=>/成婚|结为夫妻|纳为|走到了一起|私情|断了|和离/.test(h.text)));
+  const hist=relsOfName(me).filter(r=>r.history.some(h=>/成婚|结为夫妻|纳为|走到了一起|私情|断了|和离|解除婚姻|解除妾室|结束恋情|解除婚约/.test(h.text)));
   let h=`<div class="nrow"><b>正室</b><span>${L.spouse?face(L.spouse)+'　'+esc((relOf(me,L.spouse)||{}).since||''):'无'}</span></div>`;
   h+=`<div class="nrow"><b>妾室</b><span>${concub.length?concub.map(r=>face(relOther(r,me))+'（'+esc(r.since)+'）').join('、'):'无'}</span></div>`;
   h+=`<div class="nrow"><b>恋人</b><span>${L.lovers.length?L.lovers.map(x=>face(x.with)).join('、')+(L.affair?'　<small style="color:#9B4A3C">有正室在，这是私情</small>':''):'无'}</span></div>`;
   const preg=[S.player].concat(S.npcs).filter(o=>o&&o.alive!==false&&o.preg&&(o.name===me||o.preg.with===me));
   if(preg.length) h+=`<div class="nrow"><b>有孕</b><span>${preg.map(o=>`${esc(o.name)}（约 ${Math.max(1,Math.ceil((num(o.preg.due)-num(S.elapsedDays))/30))} 个月后生产）`).join('、')}</span></div>`;
-  if(hist.length) h+=`<div class="idesc" style="margin-top:6px">${hist.flatMap(r=>r.history.filter(x=>/成婚|结为夫妻|纳为|走到了一起|私情|断了|和离/.test(x.text)).map(x=>esc(x.date+'　'+x.text))).slice(-8).join('<br>')}</div>`;
+  if(hist.length) h+=`<div class="idesc" style="margin-top:6px">${hist.flatMap(r=>r.history.filter(x=>/成婚|结为夫妻|纳为|走到了一起|私情|断了|和离|解除婚姻|解除妾室|结束恋情|解除婚约/.test(x.text)).map(x=>esc(x.date+'　'+x.text))).slice(-8).join('<br>')}</div>`;
   if(num(S.player.age)<18) h+='<div class="note">不满十八，还不能婚嫁。</div>';
+  const exits=S.npcs.flatMap(n=>relationActions(n).filter(a=>a.kind==='romance').map(a=>({n,a})));
+  if(exits.length)h+='<div class="mbtnrow">'+exits.map(({n,a})=>`<button class="mbtn" data-end-love="${esc(n.name)}" ${managementBlock()?'disabled':''}>${esc(n.name)} · ${esc(a.label)}</button>`).join('')+'</div>';
   $('fLove').innerHTML=h;
+  $('fLove').querySelectorAll('[data-end-love]').forEach(b=>b.onclick=()=>requestEndRelation(b.dataset.endLove,'romance'));
   const kids=S.npcs.filter(n=>n.parents&&(n.parents.father===me||n.parents.mother===me));
   const head=L.spouse?findNpc(L.spouse):null;
   $('fKids').innerHTML=kids.length?kids.map(k=>`<div class="npc ${k.alive===false?'dead':''}" data-n="${esc(k.name)}">${avatarFace(k)}<div class="ninfo"><div class="nname">${esc(k.name)} <small>${k.gender==='男'?'子':'女'} · ${k.age}岁 · ${esc(k.legit||'')}</small>${k.alive===false?'〔已故〕':''}</div>
@@ -5321,18 +5429,20 @@ function setDiscRank(d,rank){
 }
 function setDiscJob(d,job){ if(!d||CLAN_JOBS.indexOf(job)<0) return; d.job=job; }
 function expelDisciple(d){
-  const c=clanOf(); if(!c||!d) return;
+  const c=clanOf(); if(!c||!d||!d.alive||!c.disciples.includes(d)) return false;
+  const nn=ensureNpcFor(d,'被逐门人',5),edge=relOf(playerName(),nn.name);
+  const detach=mentorshipRel(nn.relation)||edge&&edge.type==='师徒';
   d.alive=false; d.left=true; d.expelled=true;
+  if(nn.faction===c.name)nn.faction='散修';
+  if(!/宗主|门主/.test(nn.identity||''))nn.identity='被逐门人';
+  for(const list of [S.world&&S.world.ranking,S.world&&S.world.tianjiao,S.world&&S.world.hidden])for(const r of list||[])if(r.name===nn.name&&r.faction===c.name)r.faction='散修';
+  if(detach)recordRelationshipExit(nn,'mentorship','解除师徒关系',true);
+  recordRelationshipExit(nn,'clan','被逐出'+c.name,false);nn.relationshipExits.clan.faction=c.name;
   c.power=clamp(num(c.power)-1);
   for(const o of clanDisciples()) o.loyalty=clamp(num(o.loyalty)-3);
-  news(`${d.name}被逐出${c.name}`);
-  ledger(`逐${d.name}出门墙`);
-  if(Math.random()<0.55){
-    const nn=ensureNpcFor(d,'被逐门人',5);
-    nn.faction='散修';
-    addVendetta(nn.name,`你当众把他逐出${c.name}，这口气他咽不下`,false,rnd(30,48));
-  }
-  sweepGone();
+  news(`${d.name}被逐出${c.name}`);ledger(`逐${d.name}出门墙`);
+  if(Math.random()<0.55)addVendetta(nn.name,`你当众把他逐出${c.name}，这口气他咽不下`,false,rnd(30,48));
+  sweepGone();return true;
 }
 // 按资质自动分派：天资高的去修炼，武功高的去授艺与护山，年轻的出去云游，剩下的经商
 function autoAssignJobs(){
@@ -5648,6 +5758,7 @@ function recruitNpc(n){
     loyalty:clamp(30+Math.round(num(n['好感度'])*0.5)), from:'名录'});
   d.npcName=n.name;
   n.faction=c.name;
+  clearRelationshipExit(n,'clan');
   addDisciple(d,true);
   news(`${n.name}投入${c.name}，拜在你门下`);
   ledger(`${n.name}拜入${c.name}`);
@@ -6284,7 +6395,7 @@ function pickWorldEvent(action){
 
 /* ================= 系统提示词 ================= */
 const QUEST_RULES = `心愿规则：quests是有限、可完成的阶段目标，最多同时5条。每条completion固定最终要求，objectives将其拆成1至8个必要条件，id固定且不重复，不在途中追加门槛。每项格式{id:"o1",text:"具体验收条件",kind:"类型",target:"准确名称",value:数值}。kind可选：realm境界、faction宗门、item持有数量、art功法熟练(入门value=1)、manual玉简已参透、skill技艺等级、money持有钱数、attribute属性值、relationship关系(另填relation)、story剧情成果。名称使用面板记录；有实际状态可核对的用对应类型，只有叙事事实用story。复合目标逐项拆开；给药救人不能只列拿到药。学习的入门、参透玉简、熟练门槛分别按原要求选型，不能凭空加难度。
-心愿结算：引擎在实际变更入账后核对状态条件，全部条件达成即完成并奖励一次，不依赖status。每回检查所有进行中心愿；尚无条件清单的旧档，先在questUpdates里填plan:{completion:"原结愿条件逐字复制",objectives:[条件清单]}，保留已有要求与成果，只补一次。story成果用objectiveUpdates:[{id:"条件ID",progress:0至100的绝对完成百分比,status:"进行中或完成",evidence:"本回正文中的成果原句"}]；最终成果填100或完成，阶段线索不得冒充终点。复合条件可在不同回合分别完成，已满足的条件不重做。不得把回忆、计划、失败或无关内容报成果。旧档之前的已记成果确已满足某条件时，本回明确确认事实再引用，避免玩家重复跑。面谈在effects.questProgress中使用同一plan和objectiveUpdates协议；状态条件不由模型宣称完成。仅永久无法达成时填status="失败"与正文原因reason，一次行动失败不终止心愿。新心愿用newQuests添加。尚缺条件要给出一个当前可执行的推进选项，避免反复只发线索不收尾。`;
+心愿结算：引擎在实际变更入账后核对状态条件，全部条件达成即完成并奖励一次，不依赖status。每回检查所有进行中心愿；尚无条件清单的旧档，先在questUpdates里填plan:{completion:"原结愿条件逐字复制",objectives:[条件清单]}，保留已有要求与成果，只补一次。story成果用objectiveUpdates:[{id:"条件ID",progress:0至100的绝对完成百分比,status:"进行中或完成",evidence:"本回正文中的成果原句"}]；最终成果填100或完成，阶段线索不得冒充终点。复合条件可在不同回合分别完成，已满足的条件不重做。不得把回忆、计划、失败或无关内容报成果。旧档之前的已记成果确已满足某条件时，本回明确确认事实再引用，避免玩家重复跑。面谈在effects.questProgress中使用同一plan和objectiveUpdates协议；状态条件不由模型宣称完成。仅永久无法达成时填status="失败"与正文原因reason，一次行动失败不终止心愿。新心愿用newQuests添加。已放弃的心愿保留历史，不再推进、补计划、领奖、催办或换标题重建；只能由玩家主动放弃，不由模型代替玩家决定。进行中心愿尚缺条件要给出一个当前可执行的推进选项，避免反复只发线索不收尾。`;
 const WORLD_RULES = `你是一个修仙文字游戏引擎。世界是一片架空的修真大陆：有宗门、修仙世家、散修、魔道，也有凡人王朝和市井；修士修炼、炼丹、炼器、画符、布阵、驯养灵兽、闯秘境、逛坊市、斗法、结道侣、收弟子，也为灵石、资源和寿元算计。
 铁律：
 - 严禁出现系统流（面板提示、任务奖励）、穿越、重生、科幻、星际、鬼魂灵异、现代称谓与事物。元神、残魂、夺舍、轮回转世是修仙里本来就有的，可以写；禁的是带着前世记忆回到过去的重生，和鬼怪灵异那一路。
@@ -6751,7 +6862,7 @@ ${pendLed?`【这段光阴里引擎刚记的账（全部为真）】\n${pendLed}
 ${quests}
 【眼下要紧的人（此刻的好感、心情、近况；硬资料见人物名册，底子见人物谱）】${JSON.stringify(npcBrief)}
 ${familyBlock()}
-${crossPlaneBlock()}${clanBlock()}
+${relationshipExitBlock()}${crossPlaneBlock()}${clanBlock()}
 【当前时间】${S.date}（第${S.turn}回合）
 【当前场景】${S.scene?`主角现在${S.scene.location||'未知地点'}。未了结的事：${asArr(S.scene.unresolved).join('；')||'无'}`:'见最近剧情'}
 ${worldThreadBlock(action)}
@@ -7010,7 +7121,7 @@ ${convoVols?`【前尘卷录】\n${convoVols}\n`:''}${convoSum?`【前情提要�
 ${S.npcs.filter(x=>x&&x.alive&&x.name&&!x.beast).map(npcCard).join('\n')||'（尚无）'}
 【${npc.name}的资料】${JSON.stringify({name:npc.name,gender:unkOf(npc,'G')?'未定':npc.gender,age:unkOf(npc,'A')?'未定':npc.age,identity:npc.identity,faction:npc.faction,alignment:npc.alignment,personality:npc.personality,appearance:npc.appearance,portrait:npcPortrait(npc),境界:unkOf(npc,'R')?'未定':realmText(npc.realm),灵根:lgText(npc.linggen),标签:npc.tags||[],谈吐:npc['谈吐'],signature:npc.signature,relation:npc.relation,notes:npc.notes,alive:npc.alive})}
 【${npc.name}的秘密】${npc.secret||'无'}${npc.secretKnown?'（主角已经知道这个秘密）':(fdm().freeAct?`（主角不知道。本局言出法随：主角一问，你就原原本本说出来，revealSecret 填 true；他没问，你也可以主动透给他）`:`（主角不知道。除非主角说服/欺骗/威胁成功，或好感≥${fdm().secretGate}且被直接问及，绝不透露；被追问可以撒谎、打岔、翻脸）`)}
-${currentFacts}【对话至今】
+${currentFacts}${relationshipExitBlock()}【对话至今】
 ${log}
 【${npc.name}记得的往事】${(npc.memory||[]).join('；')||'无'}
 【主角】${p.name}（姓${surnameOf(p.name)}，称呼时用这个姓，不可写错），${p.gender}，${p.age}岁，${p.identity||p.backgroundType}，称号「${titleOf(p)}」；${realmText(p.realm)}，${lgText(p.linggen)}；谈吐${p.attributes['谈吐']}，神识${p.attributes['神识']}，心性${p.attributes['心性']}；声望${p['声望']}凶名${p['凶名']}；气血${p.hp}/100。
@@ -7020,7 +7131,7 @@ ${log}
 ${(npc.fromPlayer||[]).length?`【你这几门功夫是主角教的】${npc.fromPlayer.join('、')}——你绝不可能反过来把它们「传」给他，也拿不出对应的玉简
 `:''}【时间地点】${S.date}，${S.scene?S.scene.location:''}
 【主角眼下要做的事】${S.quests.filter(q=>q.status==='进行中').map(questContext).join('\n')||'无'}
-【未了之事】${S.scene?asArr(S.scene.unresolved).join('；')||'无':'无'}
+${abandonedQuestBlock()}【未了之事】${S.scene?asArr(S.scene.unresolved).join('；')||'无':'无'}
 【本次交接方向】${gift?`主角 ${p.name} → ${npc.name}：${gift.name} ×1；这件赠物由引擎自动扣除，不填give或take。`:isAcknowledgement(line)?'本句是确认或感谢，不是一次新的财物交接，effects不重复给钱给物。':'只有本句新谈成的交接才填effects。'}
 【本场已结算】${(convo.gains||[]).join('；')||'无'}
 （以下是此刻的情形，每句话都会变）
@@ -7741,7 +7852,43 @@ function questObjectiveHint(t,st){
   if(!questHasObjectives(t))return questArtHint(t,st);
   return t.objectives.map(o=>(o.done?'✓ ':'○ ')+o.text+(o.done?'':'（'+(o.kind==='story'?num(o.progress):Math.floor(questObjectiveValue(o,st)*100))+'%）')).join('；');
 }
-function questContext(t){return `- ${t.title}（${t.status}，进度${num(t.progress)}%）：${plain(t.desc)}；结愿条件：${questCondition(t)}；已记成果：${(t.milestones||[]).slice(-8).join('；')||'无'}；条件清单：${questHasObjectives(t)?JSON.stringify(t.objectives.map(o=>({id:o.id,text:o.text,kind:o.kind,target:o.target,value:o.value,relation:o.relation,progress:o.progress,done:!!o.done,proof:o.proof}))):'待补全：本次questUpdates填写plan，把原结愿条件拆为有限条件，不提高要求'}；实际进展：${questObjectiveHint(t,S)||'按条件逐项核对'}`;}
+function abandonedQuestMatch(st,q){
+  const title=plain(q&&q.title),goal=plain(q&&q.completion);
+  return (st.quests||[]).some(old=>old.status==='已放弃'&&(sameMatter(old.title,title)||(title.length>=3&&shareRun(old.title,title,3)&&simRatio(old.title,title)>=0.5)||(goal.length>=6&&sameMatter(questCondition(old),goal))));
+}
+function abandonedQuestBlock(){
+  const qs=(S.quests||[]).filter(q=>q.status==='已放弃');
+  return qs.length?'【已放弃的心愿】'+qs.map(q=>q.title+'（原约定：'+questCondition(q)+'）').join('；')+'。玩家已停止追求，不再催办、安排专门推进选项、补计划或换标题重新托付；过去的成果仍然存在。\n':'';
+}
+function abandonQuest(title){
+  const why=managementBlock();if(why)return {ok:false,why};
+  const q=S.quests.find(q=>q.title===title);
+  if(!q||q.status!=='进行中')return {ok:false,why:'只有进行中的心愿可以放弃'};
+  q.status='已放弃';q.abandonedAt={turn:S.turn,day:num(S.elapsedDays),date:S.date};
+  S.questNotices=(S.questNotices||[]).filter(n=>n.title!==q.title);
+  S.lastOptions=(S.lastOptions||[]).filter(o=>!(o.questTitle===q.title||String(o.text||'').includes(q.title)));
+  if(S.scene&&Array.isArray(S.scene.unresolved))S.scene.unresolved=S.scene.unresolved.filter(t=>!String(t).includes(q.title));
+  const text=`主动放弃心愿「${q.title}」，保留已经取得的成果，不再继续追求`;
+  ledger(text);news(text);
+  return {ok:true,title:q.title};
+}
+function requestAbandonQuest(q){
+  const why=managementBlock();if(why){toast(why);return;}
+  const owner=S;if(!S.quests.includes(q)||q.status!=='进行中')return;
+  confirmManagement(`放弃心愿「${q.title}」？\n已有成果和经历会保留，停止后续推进，不领取结愿奖励。`,'放弃心愿',()=>{
+    if(S!==owner)return;
+    const result=abandonQuest(q.title);if(!result.ok){toast(result.why);return;}
+    saveGame();renderPanel();renderWorld();renderOptions(S.lastOptions.length?S.lastOptions:fallbackOptions());
+    toast('已放弃「'+q.title+'」');
+  });
+}
+function renderQuests(){
+  const qs=S.quests||[];
+  $('wQuests').innerHTML=qs.length?qs.map((q,i)=>`<div class="quest ${q.status==='完成'?'done':['失败','已放弃'].includes(q.status)?'fail':''}"><div class="qt"><span>${esc(q.title)}</span><small>${q.status==='进行中'?q.progress+'%':q.status}</small></div><div class="qd">${esc(q.desc)}</div><div class="qd">结愿条件：${esc(questCondition(q))}</div>${questObjectiveHint(q,S)?`<div class="qd">${esc(questObjectiveHint(q,S))}</div>`:''}${q.status==='已放弃'?'<div class="qd">已停止追求，保留过往成果；不再推进或领取结愿奖励。</div>':''}<div class="bar"><i style="width:${pw(q.progress)}%;background:${q.status==='完成'?'#3F7A55':'#A8862F'}"></i></div>${q.status==='进行中'?`<button class="mbtn" style="margin-top:8px;padding:4px 12px;font-size:13px" data-abandon-quest="${i}" ${managementBlock()?'disabled':''}>放弃心愿</button>`:''}</div>`).join(''):'<div class="empty">尚无心愿，随剧情而生</div>';
+  $('wQuests').querySelectorAll('[data-abandon-quest]').forEach(b=>{const q=qs[Number(b.dataset.abandonQuest)];b.onclick=()=>requestAbandonQuest(q);});
+}
+
+function questContext(t){if(t.status==='已放弃')return `- ${t.title}（已放弃）：原约定${questCondition(t)}；既有成果保留，不再推进、补计划、领奖或换标题重建。`;return `- ${t.title}（${t.status}，进度${num(t.progress)}%）：${plain(t.desc)}；结愿条件：${questCondition(t)}；已记成果：${(t.milestones||[]).slice(-8).join('；')||'无'}；条件清单：${questHasObjectives(t)?JSON.stringify(t.objectives.map(o=>({id:o.id,text:o.text,kind:o.kind,target:o.target,value:o.value,relation:o.relation,progress:o.progress,done:!!o.done,proof:o.proof}))):'待补全：本次questUpdates填写plan，把原结愿条件拆为有限条件，不提高要求'}；实际进展：${questObjectiveHint(t,S)||'按条件逐项核对'}`;}
 // 有条件ID的剧情成果直接核对正文引用，不再要求某几个汉字或成功动词命中。
 function questQuotedEvidence(evidence,text){
   const key=questEvidenceKey(evidence),source=String(evidence||'').trim();
@@ -8248,7 +8395,7 @@ function validateTurn(d,action,judge,state,opt){
   // 同一桩心愿换个说法又报一次（「开春去青云宗」「拜入青云宗」），只留先来的
   { const have=(state.quests||[]).filter(q=>q.status==='进行中').map(q=>q.title); const keep=[];
     const hasRevenge=(state.quests||[]).some(q=>q.status==='进行中'&&REVENGE_RE.test(q.title+(q.desc||'')));
-    for(const q of d.newQuests){ const t=plain(q&&q.title); if(!t) continue; if(hasRevenge&&REVENGE_RE.test(t+plain(q.desc))) continue;   /* 一局里已经背着一桩仇了，不再加 */ if([...have,...keep.map(x=>x.title)].some(x=>sameMatter(x,t)||(shareRun(x,t,3)&&simRatio(x,t)>=0.5))) continue; keep.push(q); }
+    for(const q of d.newQuests){ const t=plain(q&&q.title); if(!t||abandonedQuestMatch(state,q)) continue; if(hasRevenge&&REVENGE_RE.test(t+plain(q.desc))) continue;   /* 一局里已经背着一桩仇了，不再加 */ if([...have,...keep.map(x=>x.title)].some(x=>sameMatter(x,t)||(shareRun(x,t,3)&&simRatio(x,t)>=0.5))) continue; keep.push(q); }
     d.newQuests=keep; }
   // 引用了人物表里没有的人：丢掉这一条，不为它重写整回
   /* 剧情里新认识的人，模型常常只写了 npcUpdates（好感+5）或 scene.present，忘了写进 newNpcs，以前就这么丢了，人脉里看不到。
@@ -8809,9 +8956,10 @@ function npcGuard(n,u,ctx){
     const dec=(typeof decreeHits==='function'?decreeHits(S,n.name):[]).map(e=>e.f.relation).filter(Boolean).pop();
     const romance=/恋人|道侣|妻|夫|未婚|仇|宿敌/.test(nr);
     let why='';
-    if(!relationEventEvidence(n,nr,ctx)) why='称谓含混或没有确立关系的经过';
+    if(!relationRestoreRequested(n,nr,ctx)) why='玩家已主动结束这段关系，尚未要求重新缔结';
+    else if(!relationEventEvidence(n,nr,ctx)) why='称谓含混或没有确立关系的经过';
     else if(bloodRel(orig)||bloodRel(or)) why='血亲改不了';
-    else if(dec&&dec!==nr&&!romance) why=`玩家写明是${dec}`;
+    else if(dec&&dec!==nr&&!romance&&!(dec==='故人'&&n.relationshipExits&&Object.keys(n.relationshipExits).length)&&!(n.relationshipExits&&n.relationshipExits[relationshipExitKind(nr)]&&relationRestoreRequested(n,nr,ctx))) why=`玩家写明是${dec}`;
     else if(PAST_REL.test(nr)||bloodRel(nr)) why='后来认识的人不会变成旧识、亲眷';
     else if(/师父|师尊|师傅|恩师|徒弟|徒儿|^弟子$/.test(nr)&&!/拜师|拜.{0,6}为师|收.{0,4}(?:为徒|徒弟|门下|为弟子)|拜师礼|认.{0,3}师父|入门/.test(all)) why='没有拜师收徒的经过';
     else if(/师兄|师姐|师弟|师妹|同门|师叔|师伯/.test(nr)&&!(S.sect&&plain(n.faction)===S.sect.name)&&!/同门|入门|拜入/.test(all)) why='不是同门';
@@ -8821,7 +8969,8 @@ function npcGuard(n,u,ctx){
   const moved=all.includes(n.name)&&/拜入|入门|加入|投入|投奔|改投|叛出|叛离|逐出|离开.{0,6}(?:宗|门|派|谷|山|阁|宫|家)|收入门下|收为(?:徒|弟子)/.test(all);
   const nf=plain(u.faction);
   if(nf&&nf!==plain(n.faction)){
-    if(wr) guardNote(`${n.name}是${wr.src}上的人物，所属以引擎的账为准`);
+    if(n.relationshipExits&&n.relationshipExits.clan&&nf===n.relationshipExits.clan.faction&&!((String(ctx.act||'').includes(n.name)||ctx.actorName===n.name)&&/重新招|重新收|重入|招入|收.{0,8}(?:门下|为弟子)/.test(String(ctx.act||''))&&!/不想|不愿|不要|拒绝/.test(String(ctx.act||''))))guardNote(`${n.name}已被逐出，玩家尚未重新招入`);
+    else if(wr) guardNote(`${n.name}是${wr.src}上的人物，所属以引擎的账为准`);
     else if((n.stub&&!plain(n.faction))||moved) out.faction=nf;
     else guardNote(`${n.name}的宗门不改成「${nf}」（正文没写他入门或叛出）`);
   }
@@ -9208,7 +9357,7 @@ function applyTurn(d, action, judge){
     syncPower(tn);   // 传授功法增加招式选择，不直接增加境界基础战力。
     ledger(`你把【${art.name}】传给了${tn.name}`);
   }
-  for(const q of (d.newQuests||[])){ if(q) q._created=false; if(q&&q.title&&!S.quests.find(x=>x.title===q.title)&&S.quests.filter(x=>x.status==='进行中').length<5){ q._created=true; S.quests.push(initQuest(q)); ledger(`许下一桩心愿「${q.title}」`); } }
+  for(const q of (d.newQuests||[])){ if(q) q._created=false; if(q&&q.title&&!abandonedQuestMatch(S,q)&&!S.quests.find(x=>x.title===q.title)&&S.quests.filter(x=>x.status==='进行中').length<5){ q._created=true; S.quests.push(initQuest(q)); ledger(`许下一桩心愿「${q.title}」`); } }
   // 修士榜、势力
   for(const r of (d.rankingUpdates||[])){
     const t=(S.world.ranking||[]).find(x=>x.name===r.name);
@@ -10746,7 +10895,7 @@ function applyConvoEffects(n, eff, attemptOk, line, reply){
   // 托付之事 → 心愿
   if(eff.quest&&eff.quest.title&&risky&&c.fav>=c.questGate){
     const t=String(eff.quest.title).slice(0,20);
-    if(!S.quests.find(x=>x.title===t)&&S.quests.filter(x=>x.status==='进行中').length<5){
+    if(!abandonedQuestMatch(S,eff.quest)&&!S.quests.find(x=>x.title===t)&&S.quests.filter(x=>x.status==='进行中').length<5){
       S.quests.push(initQuest(Object.assign({},eff.quest,{title:t,desc:eff.quest.desc||`${n.name}所托`})));
       gain(out,`${n.name}托付了一桩事：${t}`);
     }
@@ -11526,7 +11675,11 @@ function showNpc(n){
       <br><button class="mbtn" id="npcAppease" style="margin-top:6px;padding:4px 12px;font-size:13px" ${S.player.money<cost?'disabled':''}>破财消灾 · ${cost} 块灵石</button>
       <span style="font-size:12px;color:#7A8A80">${S.player.money<cost?'（灵石不够）':'（备重礼赔罪，追杀进度大减）'}</span></div>`;
   }
+  const exitActions=relationActions(n);
+  if(exitActions.length)html+='<div class="mbtnrow">'+exitActions.map(a=>`<button class="mbtn" data-end-relation="${a.kind}" ${managementBlock()?'disabled':''}>${esc(a.label)}</button>`).join('')+'</div>';
+  if(n.relationshipExits)html+=`<div class="nrow"><b>关系往事</b><span>${Object.values(n.relationshipExits).map(e=>esc((e.date||'')+' '+e.label)).join('<br>')}</span></div>`;
   $('npcMBody').innerHTML=html;
+  $('npcMBody').querySelectorAll('[data-end-relation]').forEach(b=>b.onclick=()=>requestEndRelation(n.name,b.dataset.endRelation));
   const sw=$('npcAvSwap');
   if(sw) sw.onclick=()=>openAvatarPicker(n,false);
   const ap=$('npcAppease');
@@ -11618,7 +11771,7 @@ function renderWorld(){
     $('wTianjiao').innerHTML=rows.map((r,i)=>`<div class="rank ${r.me?'me':''}"><span class="rn">${i+1}</span><span class="rname">${esc(r.name)}<small>${esc(r.sub)}</small></span><span class="rv">${esc(r.realm)}</span>${!r.me&&S.player.realm.major<=1?`<button class="mbtn" data-ch="${esc(r.name)}" style="padding:2px 8px;font-size:12px;margin-left:6px">挑战</button>`:''}</div>`).join('')+`<div style="font-size:12px;color:var(--ink-soft);margin-top:5px">${S.player.realm.major>1?'你已结丹，天骄榜与你无关了。':(S.tjRanked?'你已在榜。':'尚未入榜，胜过一位榜上人物才算数。')}榜上的人结成金丹就出榜。</div>`;
     $('wTianjiao').querySelectorAll('button[data-ch]').forEach(b=>b.onclick=()=>challengeRanked(b.dataset.ch)); }
   // 心愿
-  $('wQuests').innerHTML=S.quests.length?S.quests.map(q=>`<div class="quest ${q.status==='完成'?'done':q.status==='失败'?'fail':''}"><div class="qt"><span>${esc(q.title)}</span><small>${q.status==='进行中'?q.progress+'%':q.status}</small></div><div class="qd">${esc(q.desc)}</div><div class="qd">结愿条件：${esc(questCondition(q))}</div>${questObjectiveHint(q,S)?`<div class="qd">${esc(questObjectiveHint(q,S))}</div>`:''}<div class="bar"><i style="width:${pw(q.progress)}%;background:${q.status==='完成'?'#3F7A55':'#A8862F'}"></i></div></div>`).join(''):'<div class="empty">尚无心愿，随剧情而生</div>';
+  renderQuests();
   // 修士榜
   const rk=S.world&&S.world.ranking||[];
   if(!rk.length){ $('wRanking').innerHTML='<div class="empty">'+rankName()+'尚未铸成</div><button class="mbtn" id="forgeWorld" style="width:100%;margin-top:6px">铸造修真界格局</button>'; const b=$('forgeWorld'); if(b) b.onclick=forgeWorld; }
@@ -11985,11 +12138,15 @@ function showDisc(id){
   $('discMask').classList.add('on');
 }
 function expelSel(){
-  const d=discSel; if(!d) return;
-  if(!confirm(`将${d.name}逐出门墙？门下人人看着，士气要掉。`)) return;
-  expelDisciple(d);
-  $('discMask').classList.remove('on');
-  saveGame(); renderClan(); renderPanel();
+  const why=managementBlock();if(why){toast(why);return;}
+  const d=discSel,owner=S; if(!d) return;
+  confirmManagement(`将${d.name}逐出门墙？门下人人看着，士气要掉，也可能结怨。`,'逐出门墙',()=>{
+    if(S!==owner)return;
+    const why=managementBlock();if(why){toast(why);return;}
+    if(!expelDisciple(d))return;
+    $('discMask').classList.remove('on');
+    saveGame();renderClan();renderPanel();
+  });
 }
 
 
