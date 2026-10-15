@@ -938,6 +938,11 @@ details.eggd.fate>summary{color:inherit;font-size:inherit}
       </select>
       <div class="note" id="cfgMemNote"></div>
     </div>
+    <details class="field" id="llmMetricsDetails">
+      <summary style="cursor:pointer">缓存与耗时</summary>
+      <div class="note">仅保存在本机，最多 120 次请求；不记录密钥、提示词或剧情。接口未提供用量时显示“未报告”。首字指首个非思考片段；“已返回”不代表已通过剧情校验。</div>
+      <div id="llmMetrics" aria-live="polite"></div>
+    </details>
     <div class="contact">
       <b>联系作者</b>　遇到 bug、有想法、想聊聊修仙，都欢迎加微信。
       <div class="wx">微信号 <code id="wxId">lynchrrr</code><button type="button" id="wxCopy">复制</button></div>
@@ -6726,20 +6731,21 @@ function stateBlocks(action){
   for(const k of ['realm','linggen','lingli','breakCD','lifeBonus','cultMode','cultMul','scarPower','bottleneckNoted','lifespan','tags','prep']) delete pb[k];
   pb.attributes=Object.assign({},p.attributes); delete pb.attributes['武功'];
   if(p.items){ pb.items={}; for(const c in p.items) pb.items[c]=(c==='法器'||c==='玉简'?(p.items[c]||[]).map(it=>({item:it,count:1})):stackItems(p.items[c])).map(({item:it,count})=>{ if(!it||typeof it!=='object') return it; const o=Object.assign({},it); delete o.bonus; if(count>1) o.count=count; return o; }); }
-  return `${continuityBlock(S,action)}【主角身世（开局时写下的；其中的田产、欠账、谁欺负谁、灵根探没探出来，都只是开局时的样子，后来改变了的以长期事实、人物名册和近况为准）】${p.backstory}
-${timeAnchors()}
+  const currentFacts=continuityData(S,action), currentTime=timeAnchors();
+  return `${CONTINUITY_RULES}【主角身世（开局时写下的；其中的田产、欠账、谁欺负谁、灵根探没探出来，都只是开局时的样子，后来改变了的以长期事实、人物名册和近况为准）】${p.backstory}
 【前尘卷录（早年经历的概要）】
 ${vols}
+【早年台账（已折进卷录的那些回合里引擎记的账，全部为真）】
+${oldLed}
 【人物名册（主角认得的所有活人，引擎记的账：姓名｜性别｜年龄｜境界｜宗门｜身份｜和主角的关系｜性格。写到谁都照这里，不许改；按结识先后排）】
 ${census}
 【人物谱（要紧人物的底子：秘密、备注、画像、与旁人）】
 ${rosterText}
-【修真界格局】${S.world&&S.world.land&&S.world.land.name?`大陆：${S.world.land.name}（${S.world.land.desc}，灵气${S.world.aura>1?'充沛':(S.world.aura<1?'稀薄':'寻常')}）；凡人国度：${(S.world.mortal||[]).map(m=>m.name).join('、')||'不详'}\n`:''}${world}
-【已亡故】${goneText}
-【早年台账（已折进卷录的那些回合里引擎记的账，全部为真）】
-${oldLed}
 【流水账（前情与每回引擎记的账，全部为真，后文不得与之矛盾、不得当作没发生；最近几回附正文）】
 ${chron}
+【修真界格局】${S.world&&S.world.land&&S.world.land.name?`大陆：${S.world.land.name}（${S.world.land.desc}，灵气${S.world.aura>1?'充沛':(S.world.aura<1?'稀薄':'寻常')}）；凡人国度：${(S.world.mortal||[]).map(m=>m.name).join('、')||'不详'}\n`:''}${world}
+【已亡故】${goneText}
+${currentFacts}${currentTime}
 ${pendLed?`【这段光阴里引擎刚记的账（全部为真）】\n${pendLed}\n`:''}【当世大事】${(S.world&&S.world.events||[]).join('；')||'暂无新进展'}
 【心愿】
 ${quests}
@@ -6965,9 +6971,10 @@ function convoPrompt(npc, line, roll, gift){
   if(convo.ledAt==null) convo.ledAt=(S.ledger||[]).length;   // 谈话中途新记的账在【对话至今】里看得到，这里只用开谈时的那一份，前缀才不变
   const convoLed=M.convoLedger?((S.ledger||[]).slice(0,convo.ledAt).slice(-M.convoLedger).join('\n')):'';
   worldState();
+  const currentFacts=continuityData(S,npc.name+' '+line);
   return `${worldHead()}
 ${QUEST_RULES}
-${continuityBlock(S,npc.name+' '+line)}你现在扮演修真界中的人物「${npc.name}」，正与主角面对面交谈。你不是旁白，只输出${npc.name}的言行。
+${CONTINUITY_RULES}你现在扮演修真界中的人物「${npc.name}」，正与主角面对面交谈。你不是旁白，只输出${npc.name}的言行。
 规则：
 - ${fdm().freeAct?`说话带着${npc.name}的身份、性格、心情的腔调——但本局言出法随，腔调归腔调，事情一律照主角说的办。`:`说话完全符合${npc.name}的身份、性格、心情与好感。好感低时冷淡敌意，好感高时亲近；可以拒绝、撒谎、反问、发脾气，甚至拂袖而去（endTalk为true）。`}对方是长辈、仇人、爱人，语气都要不同。
 - 修真界以境界论尊卑：称呼和礼数照【境界之别】来。主角境界高出一截时，你再不服气心里也发怵，innerThought 里要写出这份忌惮；主角境界比你高，你不会用教训小辈的口气跟他说话。
@@ -6998,10 +7005,13 @@ ${fdm().freeAct?`  分寸：本局不看好感，主角要就给。灵石按此�
 - summary：对话至今的一句话摘要（30字内），供日后回忆。
 ${JSON_RULE}
 输出：{"reply":"","innerThought":"","mood":"两字心情","favor":0,"attempt":null或{"type":"说服","success":true},"revealSecret":false,"endTalk":false,"effects":null或上面那个对象,"summary":""}
+${convoVols?`【前尘卷录】\n${convoVols}\n`:''}${convoSum?`【前情提要】\n${convoSum}\n`:''}${convoLed?`【已成定局的旧事（引擎记的账，都是真的，不可否认）】\n${convoLed}\n`:''}【最近发生的事】${recent||'无'}
 【人物名册（引擎记的账：姓名｜性别｜年龄｜境界｜宗门｜身份｜和主角的关系｜性格。谈到谁都照这里）】
 ${S.npcs.filter(x=>x&&x.alive&&x.name&&!x.beast).map(npcCard).join('\n')||'（尚无）'}
 【${npc.name}的资料】${JSON.stringify({name:npc.name,gender:unkOf(npc,'G')?'未定':npc.gender,age:unkOf(npc,'A')?'未定':npc.age,identity:npc.identity,faction:npc.faction,alignment:npc.alignment,personality:npc.personality,appearance:npc.appearance,portrait:npcPortrait(npc),境界:unkOf(npc,'R')?'未定':realmText(npc.realm),灵根:lgText(npc.linggen),标签:npc.tags||[],谈吐:npc['谈吐'],signature:npc.signature,relation:npc.relation,notes:npc.notes,alive:npc.alive})}
 【${npc.name}的秘密】${npc.secret||'无'}${npc.secretKnown?'（主角已经知道这个秘密）':(fdm().freeAct?`（主角不知道。本局言出法随：主角一问，你就原原本本说出来，revealSecret 填 true；他没问，你也可以主动透给他）`:`（主角不知道。除非主角说服/欺骗/威胁成功，或好感≥${fdm().secretGate}且被直接问及，绝不透露；被追问可以撒谎、打岔、翻脸）`)}
+${currentFacts}【对话至今】
+${log}
 【${npc.name}记得的往事】${(npc.memory||[]).join('；')||'无'}
 【主角】${p.name}（姓${surnameOf(p.name)}，称呼时用这个姓，不可写错），${p.gender}，${p.age}岁，${p.identity||p.backgroundType}，称号「${titleOf(p)}」；${realmText(p.realm)}，${lgText(p.linggen)}；谈吐${p.attributes['谈吐']}，神识${p.attributes['神识']}，心性${p.attributes['心性']}；声望${p['声望']}凶名${p['凶名']}；气血${p.hp}/100。
 【境界之别】${npc.name}${realmStance(npc)||'——'}
@@ -7011,9 +7021,6 @@ ${(npc.fromPlayer||[]).length?`【你这几门功夫是主角教的】${npc.from
 `:''}【时间地点】${S.date}，${S.scene?S.scene.location:''}
 【主角眼下要做的事】${S.quests.filter(q=>q.status==='进行中').map(questContext).join('\n')||'无'}
 【未了之事】${S.scene?asArr(S.scene.unresolved).join('；')||'无':'无'}
-${convoVols?`【前尘卷录】\n${convoVols}\n`:''}${convoSum?`【前情提要】\n${convoSum}\n`:''}${convoLed?`【已成定局的旧事（引擎记的账，都是真的，不可否认）】\n${convoLed}\n`:''}【最近发生的事】${recent||'无'}
-【对话至今】
-${log}
 【本次交接方向】${gift?`主角 ${p.name} → ${npc.name}：${gift.name} ×1；这件赠物由引擎自动扣除，不填give或take。`:isAcknowledgement(line)?'本句是确认或感谢，不是一次新的财物交接，effects不重复给钱给物。':'只有本句新谈成的交接才填effects。'}
 【本场已结算】${(convo.gains||[]).join('；')||'无'}
 （以下是此刻的情形，每句话都会变）
@@ -7055,7 +7062,7 @@ async function foldHistoryInner(){
   if(!take.length)return;
   const from=take[0].turn, to=take[take.length-1].turn;
   try{
-    const d=await llmJSON(volumePrompt(take,from,to),null,{maxTokens:800,temperature:0.6});
+    const d=await llmJSON(volumePrompt(take,from,to),null,{kind:'summary',maxTokens:800,temperature:0.6});
     if(S!==owner||S.runId!==runId||!take.every((h,i)=>S.history[i]===h))return;
     if(d&&d.text){
       S.volumes=S.volumes||[];
@@ -7080,6 +7087,63 @@ ${JSON_RULE}
 }
 
 /* ================= LLM 调用 ================= */
+// 仅记录接口用量，不进入游戏存档、提示词或随机数序列。未知用量保留 null。
+const LS_LLM_METRICS='xian_llm_metrics_v1', LLM_METRICS_LIMIT=120;
+const LLM_KINDS={turn:'回合',talk:'面谈',classify:'分类',summary:'卷录',init:'开局',world:'铸世',duel:'斗法',war:'战争',bio:'立传',repair:'正文修正',other:'其他'};
+let llmMetricRows=null;
+function tokenCount(n){return typeof n==='number'&&Number.isSafeInteger(n)&&n>=0?n:null;}
+function llmUsage(u){
+  u=u&&typeof u==='object'?u:{};
+  let input=tokenCount(u.prompt_tokens)??tokenCount(u.input_tokens);
+  let hit=tokenCount(u.prompt_cache_hit_tokens)??tokenCount(u.prompt_tokens_details&&u.prompt_tokens_details.cached_tokens)??tokenCount(u.input_tokens_details&&u.input_tokens_details.cached_tokens);
+  let miss=tokenCount(u.prompt_cache_miss_tokens);
+  if(input===null&&hit!==null&&miss!==null)input=tokenCount(hit+miss);
+  if(miss===null&&input!==null&&hit!==null&&hit<=input)miss=input-hit;
+  if((input!==null&&((hit!==null&&hit>input)||(miss!==null&&miss>input)))||(input!==null&&hit!==null&&miss!==null&&hit+miss!==input)){hit=null;miss=null;}
+  return {input,output:tokenCount(u.completion_tokens)??tokenCount(u.output_tokens),hit,miss};
+}
+function cleanLlmMetric(r){
+  if(!r||typeof r!=='object'||tokenCount(r.at)===null)return null;
+  const usage=llmUsage({prompt_tokens:r.input,completion_tokens:r.output,prompt_cache_hit_tokens:r.hit,prompt_cache_miss_tokens:r.miss});
+  return Object.assign({at:r.at,kind:Object.prototype.hasOwnProperty.call(LLM_KINDS,r.kind)?r.kind:'other',model:String(r.model||'未知').slice(0,80),
+    status:['returned','empty','failed','cancelled'].includes(r.status)?r.status:'failed',
+    durationMs:tokenCount(r.durationMs),firstTextMs:tokenCount(r.firstTextMs),
+    networkAttempt:Math.max(1,Math.min(4,tokenCount(r.networkAttempt)||1)),formatAttempt:Math.max(1,Math.min(4,tokenCount(r.formatAttempt)||1))},usage);
+}
+function llmMetrics(){
+  if(llmMetricRows===null){
+    llmMetricRows=[];
+    try{const rows=JSON.parse(localStorage.getItem(LS_LLM_METRICS)||'[]');if(Array.isArray(rows))llmMetricRows=rows.slice(-LLM_METRICS_LIMIT).map(cleanLlmMetric).filter(Boolean);}catch(_){}
+  }
+  return llmMetricRows;
+}
+function recordLlmMetric(row){
+  // 存储满、隐私模式或面板渲染失败都不得影响模型回复及结算。
+  try{
+    const clean=cleanLlmMetric(row);if(!clean)return;
+    const rows=llmMetrics();rows.push(clean);if(rows.length>LLM_METRICS_LIMIT)rows.splice(0,rows.length-LLM_METRICS_LIMIT);
+    try{localStorage.setItem(LS_LLM_METRICS,JSON.stringify(rows));}catch(_){}
+    if($('settingsMask')&&$('settingsMask').classList.contains('on'))renderLlmMetrics();
+  }catch(_){}
+}
+function llmMetricSummary(rows){
+  const known=rows.filter(r=>r.hit!==null&&r.miss!==null),hit=known.reduce((n,r)=>n+r.hit,0),miss=known.reduce((n,r)=>n+r.miss,0);
+  const avg=k=>{const a=rows.filter(r=>r[k]!==null);return a.length?a.reduce((n,r)=>n+r[k],0)/a.length:null;};
+  return {count:rows.length,reported:known.length,hit,miss,ratio:hit+miss?hit/(hit+miss):null,firstTextMs:avg('firstTextMs'),durationMs:avg('durationMs'),retries:rows.filter(r=>r.networkAttempt>1||r.formatAttempt>1).length};
+}
+function renderLlmMetrics(){
+  const el=$('llmMetrics');if(!el)return;
+  const rows=llmMetrics(),s=llmMetricSummary(rows),sec=n=>n===null?'未报告':(n/1000).toFixed(1)+'秒';
+  const ratio=x=>x.ratio===null?'未报告':(x.ratio*100).toFixed(1)+'%';
+  if(!rows.length){el.innerHTML='<p class="note">尚无请求记录。下一次行动或面谈后可在这里查看。</p>';return;}
+  const labels={returned:'已返回',empty:'空回复',failed:'失败',cancelled:'已取消'};
+  el.innerHTML=`<p>最近 ${s.count} 次实际请求 · 缓存命中 ${ratio(s)}<br><span class="note">${s.reported} 次报告完整缓存用量；按已报告的输入 token 加权。重试 ${s.retries} 次。</span></p>`+
+    `<p class="note">平均首字 ${sec(s.firstTextMs)} · 平均总耗时 ${sec(s.durationMs)}（含失败请求）</p>`+
+    Object.entries(LLM_KINDS).filter(([k])=>rows.some(r=>r.kind===k)).map(([k,label])=>{const x=llmMetricSummary(rows.filter(r=>r.kind===k));return `<div class="note">${label}：${x.count} 次 · 命中 ${ratio(x)} · 有报告 ${x.reported} 次 · 重试 ${x.retries} 次</div>`;}).join('')+
+    '<p class="note">最近 8 次（由新到旧）</p>'+rows.slice(-8).reverse().map(r=>`<div style="border-top:1px dotted var(--line);padding:6px 0;overflow-wrap:anywhere">${esc(LLM_KINDS[r.kind])} · ${esc(labels[r.status])}${r.formatAttempt>1?' · 校验重试 '+r.formatAttempt:''}${r.networkAttempt>1?' · 网络重试 '+r.networkAttempt:''}<br><span class="note">${esc(r.model)} · 首字 ${sec(r.firstTextMs)} · 总计 ${sec(r.durationMs)}<br>输入 ${r.input??'未报告'} / 输出 ${r.output??'未报告'} token · 缓存命中 ${r.hit??'未报告'} / 未命中 ${r.miss??'未报告'}</span></div>`).join('');
+}
+function llmClock(){return typeof performance!=='undefined'&&typeof performance.now==='function'?performance.now():Date.now();}
+
 let lastFinish=null;
 /* 网络抖动、限流、服务端 5xx、等待超时、空回复：同一请求自动再发，最多两次，不惊动玩家。
    密钥错、余额不足、请求格式错（4xx 除 408/409/429）不重试。 */
@@ -7096,7 +7160,7 @@ async function callLLM(prompt, onPartial, opt){
   for(let i=0;;i++){
     if(bud){ if(bud.left<=0||Date.now()>bud.until) throw new Error('接口调用失败（这一回的请求次数用完了，点重试接着写）'); bud.left--; }
     try{
-      const raw=await callLLMOnce(prompt,onPartial,opt);
+      const raw=await callLLMOnce(prompt,onPartial,Object.assign({},opt,{networkAttempt:i+1}));
       if(!String(raw||'').trim()) throw new Error('接口调用失败（模型返回了空回复）');
       return raw;
     }catch(e){
@@ -7120,7 +7184,8 @@ async function callLLMOnce(prompt, onPartial, opt){
   const bump=()=>{if(ac){clearTimeout(timer);timer=setTimeout(abort,ms);}};
   if(opt.signal){if(opt.signal.aborted)throw new Error('接口调用失败（请求已取消）');opt.signal.addEventListener('abort',abort,{once:true});}
   bump();if(ac)total=setTimeout(abort,opt.totalTimeout||240000);
-  let raw='',buf='';
+  let raw='',buf='',usage={},firstTextMs=null,requestStatus='failed';
+  const started=llmClock();
   try{
     const resp=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+cfg.key},body:JSON.stringify(body),signal:ac?ac.signal:undefined});
     if(!resp.ok){let msg='HTTP '+resp.status;try{const e=await resp.json();msg+='：'+(e.error?.message||JSON.stringify(e));}catch(_){}throw new Error('接口调用失败（'+msg+'）');}
@@ -7128,16 +7193,22 @@ async function callLLMOnce(prompt, onPartial, opt){
     const consume=line=>{
       const t=line.trim();if(!t.startsWith('data:'))return;const payload=t.slice(5).trim();if(payload==='[DONE]')return;
       let j;try{j=JSON.parse(payload);}catch(_){return;}
-      const d=j.choices?.[0]?.delta?.content;if(d){raw+=d;if(onPartial)onPartial(raw);}
+      if(j.usage&&typeof j.usage==='object')usage=j.usage;
+      const d=j.choices?.[0]?.delta?.content;if(d){if(firstTextMs===null)firstTextMs=Math.max(0,Math.round(llmClock()-started));raw+=d;if(onPartial)onPartial(raw);}
       const fr=j.choices?.[0]?.finish_reason;if(fr)lastFinish=fr;
     };
     while(true){const {done,value}=await reader.read();if(done)break;bump();buf+=dec.decode(value,{stream:true});const lines=buf.split('\n');buf=lines.pop();for(const line of lines)consume(line);}
     buf+=dec.decode();if(buf.trim())consume(buf);
+    requestStatus=raw.trim()?'returned':'empty';
     return raw;
   }catch(e){
+    requestStatus=opt.signal&&opt.signal.aborted?'cancelled':'failed';
     if(e.message&&e.message.startsWith('接口调用失败'))throw e;
     throw new Error('接口调用失败（'+(opt.signal&&opt.signal.aborted?'请求已取消':e.name==='AbortError'?'等待超时，已中止':e.message||'网络不通')+'）');
-  }finally{clearTimeout(timer);clearTimeout(total);if(opt.signal)opt.signal.removeEventListener('abort',abort);}
+  }finally{
+    clearTimeout(timer);clearTimeout(total);if(opt.signal)opt.signal.removeEventListener('abort',abort);
+    recordLlmMetric(Object.assign({at:Date.now(),kind:opt.kind,model:body.model,status:requestStatus,durationMs:Math.max(0,Math.round(llmClock()-started)),firstTextMs,networkAttempt:opt.networkAttempt,formatAttempt:opt.formatAttempt},llmUsage(usage)));
+  }
 }
 
 function extractPartialField(raw, key){
@@ -7253,7 +7324,7 @@ async function llmJSON(prompt, onPartial, opt){
   };
   let note='', lastErr=null, tries=0;
   while(true){
-    const raw=await callLLM(note?prompt+note:prompt,onPartial,opt);
+    const raw=await callLLM(note?prompt+note:prompt,onPartial,Object.assign({},opt,{formatAttempt:tries+1}));
     const final=opt.budget.left<=0||Date.now()>opt.budget.until||++tries>=4;   // 自己也数着，防 callLLM 被替换时没扣预算
     try{ return take(raw,final); }
     catch(e){
@@ -7276,7 +7347,7 @@ async function fixCheckText(d,signal){
   try{
     toast('正文把没成的事写成了，正在照引擎判定改写……'); redoCount('改结尾');
     const p=`下面是一段修仙小说正文。这回主角做的事（${d.checkFixWhat||'这件事'}）引擎判定没成，可正文写成了。请只改后半段，改成没办成：对方没答应、东西没到手、事情卡住或白跑一趟，可以写出代价；前面没写到成败的部分一字不动，文风照旧，对白用「」。${JSON_RULE}\n输出：{"narrative":"改好的完整正文","summary":"一句话概括本回合（30字内）"}\n\n原文：\n${orig}`;
-    const raw=await callLLM(p,r=>{ const t=extractPartialField(r,'narrative'); if(t) updateChapterNarrative(t); },{maxTokens:2500,timeout:60000,totalTimeout:90000,signal,noRetry:true});
+    const raw=await callLLM(p,r=>{ const t=extractPartialField(r,'narrative'); if(t) updateChapterNarrative(t); },{kind:'repair',maxTokens:2500,timeout:60000,totalTimeout:90000,signal,noRetry:true});
     const j=parseJSONLoose(raw), t=j&&typeof j.narrative==='string'?j.narrative.trim():'';
     if(t.length>=orig.length*0.5){ d.narrative=styleAutoFix(t); if(typeof j.summary==='string'&&j.summary.trim()) d.summary=j.summary.trim(); }
   }catch(e){ if(typeof console!=='undefined') console.warn('改结尾失败',e.message); }
@@ -7287,7 +7358,7 @@ async function fixDeathText(d,signal){
   try{
     toast('正文把主角写死了，本局不许，正在改结尾……'); redoCount('改结尾');
     const p=`下面是一段修仙小说正文，结尾把主角${S.player.name}写死了。可这一局他不会死：请只改最后一两段，改成重伤未死、被人救下或侥幸逃得一命，前面的文字一字不动，文风照旧，对白用「」。${JSON_RULE}\n输出：{"narrative":"改好的完整正文"}\n\n原文：\n${orig}`;
-    const raw=await callLLM(p,r=>{ const t=extractPartialField(r,'narrative'); if(t) updateChapterNarrative(t); },{maxTokens:2500,timeout:60000,totalTimeout:90000,signal,noRetry:true});
+    const raw=await callLLM(p,r=>{ const t=extractPartialField(r,'narrative'); if(t) updateChapterNarrative(t); },{kind:'repair',maxTokens:2500,timeout:60000,totalTimeout:90000,signal,noRetry:true});
     const j=parseJSONLoose(raw), t=j&&typeof j.narrative==='string'?j.narrative.trim():'';
     if(t.length>=orig.length*0.5) d.narrative=styleAutoFix(t);
   }catch(e){ if(typeof console!=='undefined') console.warn('改结尾失败',e.message); }
@@ -7439,21 +7510,22 @@ function rewardReferences(st){
     .concat(((st.world&&st.world.threads)||[]).filter(e=>e.stage==='结束').map(e=>'event:'+e.id))
     .concat(c.facts.map(f=>'fact:'+f.id));
 }
-function continuityBlock(st,action){
-  const c=continuityState(st),names=(st.npcs||[]).map(n=>n.name).filter(n=>String(action||'').includes(n));
-  const facts=c.facts.filter(f=>!f.plane||f.plane===(st.plane||'下界'));
-  const relevant=facts.filter(f=>names.includes(f.subject)||shareRun(f.subject+f.key,action,2));
-  const selected=relevant.concat(facts.slice(-12)).filter((f,i,a)=>a.findIndex(x=>x.id===f.id)===i);
-  const dead=Object.keys(c.dead).filter(k=>k.startsWith((st.plane||'下界')+'|')).map(k=>k.split('|').slice(1).join('|'));
-  return `【事实与结算约束】\n已亡故（只能追忆、查旧案，不可在场说话）：${dead.join('、')||'无'}\n长期事实（当前值，不受前尘摘要和旧背景覆盖）：${JSON.stringify(selected)}\n已结算的奖励：${Object.keys(c.rewarded).slice(-30).join('；')||'无'}\n可引用的奖励依据：${rewardReferences(st).slice(-30).join('；')}\n`+
-    '只有本回新发生的变化才能落账；确认、感谢、回忆旧事不再领一次。财物必须说明来源、去向、总数量，不能把总量改成每炉或每人数量。'+
+const CONTINUITY_RULES='只有本回新发生的变化才能落账；确认、感谢、回忆旧事不再领一次。财物必须说明来源、去向、总数量，不能把总量改成每炉或每人数量。'+
     '正文、摘要、风闻中的生死、境界、身份、金额、数量与接受的结算一致。已解决事项再次发生须有新原因。'+
     '事实变动用factUpdates:[{subject:"人物或势力准确名称",key:"事实类别",value:"当前事实",reason:"本回具体经过"}]，最多四项；不变留空。'+
     '涉及旧事实时可用factClaims:[{subject:"",key:"",value:"所依据的当前值"}]引用；不得用旧摘要覆盖当前值。'+
     '奖励金额写playerChanges.money，奖励依据可填playerChanges.rewardRef；不得重复引用已付过的同一依据。'+
     '心愿按固定条件ID核对，剧情条件用objectiveUpdates及正文原句evidence；状态条件由实际账面结算；旧档未列条件时先补plan。重复线索和无关行动不算成果。'+
     '新机缘可以建立特殊能力，但效果和条件一经确定须作为长期事实保留，不能在普通叙述里扩大。\n';
+function continuityData(st,action){
+  const c=continuityState(st),names=(st.npcs||[]).map(n=>n.name).filter(n=>String(action||'').includes(n));
+  const facts=c.facts.filter(f=>!f.plane||f.plane===(st.plane||'下界'));
+  const relevant=facts.filter(f=>names.includes(f.subject)||shareRun(f.subject+f.key,action,2));
+  const selected=relevant.concat(facts.slice(-12)).filter((f,i,a)=>a.findIndex(x=>x.id===f.id)===i);
+  const dead=Object.keys(c.dead).filter(k=>k.startsWith((st.plane||'下界')+'|')).map(k=>k.split('|').slice(1).join('|'));
+  return `【事实与结算约束】\n已亡故（只能追忆、查旧案，不可在场说话）：${dead.join('、')||'无'}\n长期事实（当前值，不受前尘摘要和旧背景覆盖）：${JSON.stringify(selected)}\n已结算的奖励：${Object.keys(c.rewarded).slice(-30).join('；')||'无'}\n可引用的奖励依据：${rewardReferences(st).slice(-30).join('；')}\n`;
 }
+function continuityBlock(st,action){return continuityData(st,action)+CONTINUITY_RULES;}
 const REALM_SPEC_RE=/阶|层|重|初期|中期|后期|圆满/;
 // 名字和境界之间隔着这些，说的就不是此人眼下的境界：打算、尝试、没成、差多少；转述、听说；别人（亲属、师长、对手）
 const REALM_INTENT_RE=/准备|打算|想|要|欲|尝试|试着|冲击|未能|没能|不能|失败|差|离|距|若|如果|等|将来|日后|以后|梦|说|道|称|讲|听|问|告诉|看着|望着|瞧着|觉得|以为|传闻|据说|的(?:师父|师尊|父|母|爹|娘|兄|姐|弟|妹|夫|妻|道侣|对手|仇|徒|儿|女)/;
@@ -10809,7 +10881,7 @@ async function convoSend(text, gift){
   const roll=operation.roll===undefined?convoAttempt(n,text):operation.roll;operation.roll=roll;
   snapshotConvo();saveGame();   // 引擎先定成败；模型看不到骰子
   try{
-    const d=fixNames(await llmJSON(convoPrompt(n,text,roll,gift),raw=>{ if(convo===myConvo&&S===owner&&request===convoRequest&&t0(raw)) wait.innerHTML=esc(t0(raw)); },{maxTokens:2500,temperature:styleTemp(),timeout:90000,signal:controller&&controller.signal,validate:(d,o)=>validateConvo(d,n,roll,o,{line:text,gift}),style:{field:'reply',kind:'talk',noLen:fdm().freeAct&&parenReqs(text).length>0}}));
+    const d=fixNames(await llmJSON(convoPrompt(n,text,roll,gift),raw=>{ if(convo===myConvo&&S===owner&&request===convoRequest&&t0(raw)) wait.innerHTML=esc(t0(raw)); },{kind:'talk',maxTokens:2500,temperature:styleTemp(),timeout:90000,signal:controller&&controller.signal,validate:(d,o)=>validateConvo(d,n,roll,o,{line:text,gift}),style:{field:'reply',kind:'talk',noLen:fdm().freeAct&&parenReqs(text).length>0}}));
     if(convo!==myConvo||S!==owner||request!==convoRequest) return;          // 等回复的当口玩家已经告辞了，就当没说过
     const receipt=commitConvoOnce(owner,n.name,d,gift,text,operation.id);
     myConvo.npc=owner.npcs.find(x=>x.name===n.name);myConvo.pending=null;committed=true;
@@ -12212,8 +12284,8 @@ async function startNewGame(opts){
   setBusy(true,'天地初开，正在铸造你的修真界身世……');
   beginChapter('楔子','',null,null);
   try{
-    const worldP=llmJSON(worldPrompt(opts),null,{maxTokens:6000}).catch(e=>{ console.warn('world gen failed',e); return null; });
-    const d=await llmJSON(initSchemaPrompt(opts),raw=>{ const t=extractPartialField(raw,'opening')||extractPartialField(raw,'backstory'); if(t) updateChapterNarrative(t); },{validate:validateInit});
+    const worldP=llmJSON(worldPrompt(opts),null,{kind:'world',maxTokens:6000}).catch(e=>{ console.warn('world gen failed',e); return null; });
+    const d=await llmJSON(initSchemaPrompt(opts),raw=>{ const t=extractPartialField(raw,'opening')||extractPartialField(raw,'backstory'); if(t) updateChapterNarrative(t); },{kind:'init',validate:validateInit});
     applyInit(d,opts);
     updateChapterNarrative(d.opening);
     finishChapter({date:S.date,rumors:d.rumors,npcEvents:null},null,null);
@@ -12236,7 +12308,7 @@ async function startNewGame(opts){
 async function forgeWorld(){
   if(busy||!S) return;
   setBusy(true,'正在铸造修真界格局与高手榜……');
-  try{ const w=await llmJSON(worldPrompt({bg:S.player.backgroundType}),null,{maxTokens:6000}); applyWorld(w); renderWorld(); renderPanel(); saveGame(); toast('修士榜已铸成'); }
+  try{ const w=await llmJSON(worldPrompt({bg:S.player.backgroundType}),null,{kind:'world',maxTokens:6000}); applyWorld(w); renderWorld(); renderPanel(); saveGame(); toast('修士榜已铸成'); }
   catch(e){ toast('铸造失败：'+e.message); }
   setBusy(false);
 }
@@ -12404,7 +12476,7 @@ async function classifyAction(action,signal){
   const fb=heuristicClassify(action);
   if(fdm().freeAct||isCultAction(null,action)||!cfg.key) return fb;
   try{
-    const raw=await callLLM(classifyPrompt(action),null,{noSystem:true,temperature:0.2,maxTokens:200,timeout:20000,totalTimeout:30000,signal});
+    const raw=await callLLM(classifyPrompt(action),null,{kind:'classify',noSystem:true,temperature:0.2,maxTokens:200,timeout:20000,totalTimeout:30000,signal});
     return normClassify(parseJSONLoose(raw),fb);
   }catch(e){
     if(signal&&signal.aborted) throw e;
@@ -12678,7 +12750,7 @@ async function ascendFlow(){
   if(busy||!S||!S.pendingAscend) return;
   setBusy(true,'接引之光托着你往上走，正在铸造仙界……');
   let w=null;
-  try{ w=await llmJSON(xianWorldPrompt(),null,{maxTokens:6000}); }catch(e){ console.warn('仙界铸世失败，引擎自铸',e); }
+  try{ w=await llmJSON(xianWorldPrompt(),null,{kind:'world',maxTokens:6000}); }catch(e){ console.warn('仙界铸世失败，引擎自铸',e); }
   if(!S||!S.pendingAscend){ setBusy(false); return; }
   const info=performAscension(w,S.farewell);
   saveGame(); renderPanel(); if(typeof renderWorld==='function') renderWorld(); setDot('world',true);
@@ -13085,7 +13157,7 @@ async function runTurn(action, judge, extra){
     const d=fixNames(await llmJSON(prompt,raw=>{
       if(S!==owner||request!==turnRequest)return;
       const t=extractPartialField(raw,'narrative');if(t)updateChapterNarrative(t);
-    },{validate:valid,signal:controller&&controller.signal,style:{field:'narrative',kind:turnStyleKind(judge,extra),noLen}}));
+    },{kind:extra.warData?'war':extra.duelData?'duel':'turn',validate:valid,signal:controller&&controller.signal,style:{field:'narrative',kind:turnStyleKind(judge,extra),noLen}}));
     if(S!==owner||request!==turnRequest){if(request===turnRequest)setBusy(false);return;}
     if(d.deathFix) await fixDeathText(d,controller&&controller.signal);
     else if(d.checkFix) await fixCheckText(d,controller&&controller.signal);
@@ -13157,7 +13229,7 @@ async function gameOverFlow(cause){
   $('story').appendChild(div); div.scrollIntoView({behavior:'smooth',block:'end'});
   const nt=div.querySelector('.ntext');
   let bio={biography:'',epitaph:'',verdict:''};
-  try{ bio=fixNames(await llmJSON(bioPrompt(cause),raw=>{ const t=extractPartialField(raw,'biography'); if(t) nt.innerHTML=narrativeHtml(t); },{maxTokens:3000})); }catch(e){ bio.biography='（立传失败：'+e.message+'）'; }
+  try{ bio=fixNames(await llmJSON(bioPrompt(cause),raw=>{ const t=extractPartialField(raw,'biography'); if(t) nt.innerHTML=narrativeHtml(t); },{kind:'bio',maxTokens:3000})); }catch(e){ bio.biography='（立传失败：'+e.message+'）'; }
   const score=scoreOf();
   nt.innerHTML=narrativeHtml(bio.biography||'');
   div.querySelector('.endingblock').insertAdjacentHTML('beforeend',`${bio.epitaph?`<div class="epitaph">「${esc(bio.epitaph)}」</div>`:''}${legacyHeir()?`<div class="scoreline">道统传给了 ${esc(legacyHeir())}</div>`:''}<div class="scoreline">${esc(bio.verdict||'')}　·　评分 ${score}　·　历 ${S.turn} 回　·　成就 ${S.achievements.length}</div>`);
@@ -13547,6 +13619,7 @@ function openSettings(){
   $('cfgMemWrap').style.display=S?'block':'none';
   if(S){ $('cfgFreedom').value=S.freedom||'mid'; $('cfgFreeNote').textContent=freedomNote(S.freedom||'mid');
          $('cfgMem').value=S.memLong===false?'short':'long'; $('cfgMemNote').textContent=memNote(); }
+  renderLlmMetrics();
   $('settingsMask').classList.add('on');
 }
 function applyFreedomChange(){
