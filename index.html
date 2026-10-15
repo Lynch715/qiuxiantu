@@ -1341,7 +1341,8 @@ function migrate(s){
   eggScaleWeapons(s.player,true);
   for(const q of s.quests||[]) if(s.player) completeQuest(q,s);
   repairHiredVendettas(s);
-  if(s.pending&&s.pending.forecast&&s.pending.forecast.state){ eggScaleWeapons(s.pending.forecast.state.player,true); repairHiredVendettas(s.pending.forecast.state); for(const q of s.pending.forecast.state.quests||[]) completeQuest(q,s.pending.forecast.state); }
+  repairOriginFamily(s);
+  if(s.pending&&s.pending.forecast&&s.pending.forecast.state){ eggScaleWeapons(s.pending.forecast.state.player,true); repairHiredVendettas(s.pending.forecast.state); repairOriginFamily(s.pending.forecast.state); for(const q of s.pending.forecast.state.quests||[]) completeQuest(q,s.pending.forecast.state); }
   return s;
 }
 
@@ -3582,6 +3583,47 @@ function relSet(a,b,type,text){
 }
 function relsOfName(name){ return rels().filter(r=>r.a===name||r.b===name); }
 function relOther(r,name){ return r.a===name?r.b:r.a; }
+// 身世称谓先落成结构化父母与夫妻边；父母互为配偶，不是彼此的血亲。
+// 纯状态迁移：同样覆盖另一界与待提交预演，不借用当前全局 S。
+function repairOriginFamily(s){
+  if(!s||!s.player||s.originFamilyFix1) return;
+  const p=s.player, bags=[s,...Object.values(s.planes||{})], byName=new Map(), roles=new Map();
+  for(const bag of bags) for(const n of bag.npcs||[]){
+    if(!n||!n.name) continue;
+    byName.set(n.name,n);
+    const r=String((bag.origRel||{})[n.name]||n.relation||'').replace(/^(?:我的|主角的|亲生)/,'').split(/[，,；;（(]/)[0].trim();
+    if(/^(?:父亲|爹|爹爹|阿爹)$/.test(r)) roles.set(n.name,'father');
+    if(/^(?:母亲|娘|娘亲|阿娘)$/.test(r)) roles.set(n.name,'mother');
+  }
+  const edges=s.rels=s.rels||[], pair=(a,b)=>edges.find(r=>(r.a===a&&r.b===b)||(r.a===b&&r.b===a));
+  const put=(a,b,type,text)=>{
+    let r=pair(a,b);
+    if(!r){ r={k:relKey(a,b),a,b,type,since:s.date||'',day:num(s.elapsedDays),history:[]}; edges.push(r); }
+    r.type=type; r.history=r.history||[];
+    if(text) r.history.push({day:num(s.elapsedDays),date:s.date||'',text});
+    return r;
+  };
+  for(const kind of ['father','mother']){
+    const names=[...roles].filter(([name,k])=>k===kind).map(([name])=>name);
+    if(names.length===1&&!(p.parents&&p.parents[kind])){ p.parents=p.parents||{}; p.parents[kind]=names[0]; }
+  }
+  for(const name of parentsOf(p)){
+    if(name===p.name||!byName.has(name)) continue;
+    const r=pair(p.name,name);
+    if(!r||!['夫妻','妾室'].includes(r.type)) put(p.name,name,'亲属');
+  }
+  const f=byName.get(p.parents&&p.parents.father), m=byName.get(p.parents&&p.parents.mother);
+  if(f&&m&&f!==m){
+    const r=pair(f.name,m.name);
+    const separated=r&&(r.history||[]).some(h=>/和离|休妻|休夫|休了|被休|离异|分开|断了|丧偶/.test(h.text||''));
+    const exception=[f,m].some(n=>/和离|离异|丧偶|未婚生|非婚生|休妻|休夫/.test(String(n.notes||'')+' '+String(n.identity||'')));
+    const taken=[f,m].some(n=>edges.some(e=>(e.a===n.name||e.b===n.name)&&['夫妻','妾室'].includes(e.type)&&e!==r));
+    if(f.alive!==false&&m.alive!==false&&!separated&&!exception&&!taken&&(!r||['亲属','相识','好友','恋人'].includes(r.type))){
+      put(f.name,m.name,'夫妻','身世关系补全：两人为主角父母，开局已是夫妻');
+    }
+  }
+  s.originFamilyFix1=true;
+}
 // 每个 NPC 的履历：同一件事两个人都记，日期一致
 function lifeLog(n,text){ n.life=n.life||[]; n.life.push({day:num(S.elapsedDays),date:S.date||dateStr(),text}); while(n.life.length>30) n.life.shift(); }
 // 已婚：正室或妾室都算，不能再跟别人成亲
@@ -6604,7 +6646,7 @@ function unkOf(n,k){ return !!(n&&n.stub&&!n['stub'+k]); }
 // 名册里的一行：硬资料，没定的写「未定」
 function npcCard(n){
   const u=k=>unkOf(n,k);
-  return `${n.name}｜${u('G')?'性别未定':(n.gender||'性别未定')}｜${u('A')?'年龄未定':num(n.age)+'岁'}｜${u('R')?'境界未定':realmText(n.realm)}｜${plain(n.faction)||'无门派'}｜${identityNote(n)||'—'}｜${plain(n.relation)||'相识'}${persArr(n.personality).length?'｜'+persArr(n.personality).slice(0,3).join('、'):''}`;
+  return `${n.name}｜${u('G')?'性别未定':(n.gender||'性别未定')}｜${u('A')?'年龄未定':num(n.age)+'岁'}｜${u('R')?'境界未定':realmText(n.realm)}｜${plain(n.faction)||'无门派'}｜${identityNote(n)||'—'}｜${plain(n.relation)||'相识'}${spouseOf(n.name)?'｜配偶：'+spouseOf(n.name):''}${persArr(n.personality).length?'｜'+persArr(n.personality).slice(0,3).join('、'):''}`;
 }
 // 引擎替模型补出来的人，还缺哪几样（出场时让模型一次补齐，补了就定死）
 function needFill(n){
@@ -8319,6 +8361,7 @@ function applyInit(d, opts){
   S.months = (opts&&opts.startMonth!=null)?opts.startMonth:0;S.elapsedDays=Math.round(S.months*30);
   for(const n of S.npcs)n.lastMetDay=S.elapsedDays;
   S.date = dateStr();
+  repairOriginFamily(S);
   S.turn = 1;
   syncSect();
   lastDeltas={};
