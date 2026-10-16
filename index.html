@@ -3852,6 +3852,10 @@ function managementBlock(){
   if(convo||S.convoState)return '请先结束当前面谈';
   return '';
 }
+function refreshManagementActions(){
+  const blocked=!!managementBlock();
+  document.querySelectorAll('[data-abandon-quest],[data-end-love],[data-end-relation],#discExpel').forEach(b=>b.disabled=blocked);
+}
 function mentorshipRel(text){return /^(?:我的|主角的)?(?:亲传|记名|入室|嫡传)?(?:徒弟|徒儿|弟子|师父|师尊|师傅|恩师)(?:$|[，,（(])/.test(plain(text));}
 function relationshipExitKind(relation){
   if(['夫妻','妾室','恋人'].includes(relKindOf(relation)))return 'romance';
@@ -6394,7 +6398,7 @@ function pickWorldEvent(action){
 
 
 /* ================= 系统提示词 ================= */
-const QUEST_RULES = `心愿规则：quests是有限、可完成的阶段目标，最多同时5条。每条completion固定最终要求，objectives将其拆成1至8个必要条件，id固定且不重复，不在途中追加门槛。每项格式{id:"o1",text:"具体验收条件",kind:"类型",target:"准确名称",value:数值}。kind可选：realm境界、faction宗门、item持有数量、art功法熟练(入门value=1)、manual玉简已参透、skill技艺等级、money持有钱数、attribute属性值、relationship关系(另填relation)、story剧情成果。名称使用面板记录；有实际状态可核对的用对应类型，只有叙事事实用story。复合目标逐项拆开；给药救人不能只列拿到药。学习的入门、参透玉简、熟练门槛分别按原要求选型，不能凭空加难度。
+const QUEST_RULES = `心愿规则：quests是有限、可完成的阶段目标，最多同时5条。每条completion固定最终要求，objectives将其拆成1至8个必要条件，id固定且不重复，不在途中追加门槛。每项格式{id:"o1",text:"具体验收条件",kind:"类型",target:"准确名称",value:数值}。kind可选：realm境界、faction宗门、item持有数量、art功法熟练(入门value=1)、manual玉简已参透、skill技艺等级、money持有钱数、attribute属性值、relationship关系(另填relation)、artUse实战使用功法、duelWin赢得斗法、duelWinArt使用功法并赢得同一场斗法、story剧情成果。战斗条件只由引擎记录结算：artUse和duelWinArt的target填准确功法名，可选opponent限定对手；duelWin的target填对手准确姓名，不限对手填*；value是使用次数或获胜场数（1至100）。学会、熟练与实际使用是不同条件；只使用不要求获胜，要求命中、无伤、最后一击等额外限制须单列story条件，不得删掉。名称使用面板记录；有实际状态可核对的用对应类型，只有叙事事实用story。复合目标逐项拆开；给药救人不能只列拿到药。学习的入门、参透玉简、熟练门槛分别按原要求选型，不能凭空加难度。
 心愿结算：引擎在实际变更入账后核对状态条件，全部条件达成即完成并奖励一次，不依赖status。每回检查所有进行中心愿；尚无条件清单的旧档，先在questUpdates里填plan:{completion:"原结愿条件逐字复制",objectives:[条件清单]}，保留已有要求与成果，只补一次。story成果用objectiveUpdates:[{id:"条件ID",progress:0至100的绝对完成百分比,status:"进行中或完成",evidence:"本回正文中的成果原句"}]；最终成果填100或完成，阶段线索不得冒充终点。复合条件可在不同回合分别完成，已满足的条件不重做。不得把回忆、计划、失败或无关内容报成果。旧档之前的已记成果确已满足某条件时，本回明确确认事实再引用，避免玩家重复跑。面谈在effects.questProgress中使用同一plan和objectiveUpdates协议；状态条件不由模型宣称完成。仅永久无法达成时填status="失败"与正文原因reason，一次行动失败不终止心愿。新心愿用newQuests添加。已放弃的心愿保留历史，不再推进、补计划、领奖、催办或换标题重建；只能由玩家主动放弃，不由模型代替玩家决定。进行中心愿尚缺条件要给出一个当前可执行的推进选项，避免反复只发线索不收尾。`;
 const WORLD_RULES = `你是一个修仙文字游戏引擎。世界是一片架空的修真大陆：有宗门、修仙世家、散修、魔道，也有凡人王朝和市井；修士修炼、炼丹、炼器、画符、布阵、驯养灵兽、闯秘境、逛坊市、斗法、结道侣、收弟子，也为灵石、资源和寿元算计。
 铁律：
@@ -7802,7 +7806,71 @@ function questArtHint(t,st){
   return '功法进展：'+g.targets.map(x=>{const level=questArtLevel(st.player,x.key);return x.name+' '+(level>0?(x.level>1?'熟练'+level+'/'+x.level:'已习得（熟练'+level+'）'):'尚未习得');}).join('；');
 }
 // 条件契约在创建时固定。旧档在下一次叙事时补全；不从任意路径读数据，不执行模型表达式。
-const QUEST_KINDS=['story','realm','faction','item','art','manual','skill','money','attribute','relationship'];
+const QUEST_COMBAT_KINDS=['artUse','duelWin','duelWinArt'];
+const QUEST_KINDS=['story','realm','faction','item','art','manual','skill','money','attribute','relationship',...QUEST_COMBAT_KINDS];
+function questCombatRows(t){return Array.isArray(t.combatEvidence)?t.combatEvidence.filter(r=>r&&typeof r==='object'&&typeof r.opponent==='string'&&typeof r.art==='string'):[];}
+// 心愿自己的战斗账：只收接取以后真实发生的战斗，不从模型正文或角色技能表推断出手。
+function questCombatCount(o,t){
+  const rows=questCombatRows(t);
+  return rows.reduce((sum,r)=>{
+    if(o.kind==='duelWin')return sum+(!r.art&&r.win===true&&(o.target==='*'||r.opponent===o.target)?Math.max(0,num(r.count)):0);
+    if(o.opponent&&r.opponent!==o.opponent||questArtKey(r.art)!==questArtKey(o.target))return sum;
+    return sum+Math.max(0,o.kind==='duelWinArt'?(r.win===true?num(r.battles):0):num(r.uses));
+  },0);
+}
+function recordQuestCombat(d,st){
+  if(!d||!d.opp||!d.over||!['win','oppYield','lose','yield','escape','oppEscape','draw'].includes(d.result))return;
+  if(d.questCombatSeq&&d.questCombatSeq<=num(st.questCombatSeq))return;
+  // 序号随战斗快照保存；重试、读档及宗门战共用同一笔，不重新计数。
+  if(!d.questCombatSeq)d.questCombatSeq=st.questCombatSeq=num(st.questCombatSeq)+1;
+  st.questCombatSeq=Math.max(num(st.questCombatSeq),d.questCombatSeq);
+  const win=['win','oppYield'].includes(d.result),opponent=d.opp.name;
+  for(const t of st.quests||[]){
+    if(t.status!=='进行中'||num(t.lastCombatSeq)>=d.questCombatSeq)continue;
+    t.lastCombatSeq=d.questCombatSeq;
+    const rows=t.combatEvidence=questCombatRows(t);
+    const add=(art,uses)=>{let row=rows.find(r=>r.art===art&&r.opponent===opponent&&r.win===win);
+      if(!row){row={art,opponent,win,count:0,battles:0,uses:0};rows.push(row);}
+      row.count++;row.battles++;row.uses+=uses;
+    };
+    add('',0);
+    for(const [art,n] of Object.entries(d.artUse||{}))if(num(n)>0)add(art,Math.floor(num(n)));
+  }
+  syncQuestState(st);
+}
+// 旧条件仅在整句能无歧义对应引擎事件时升级；复合/额外要求留给条件清单，不能提前结愿。
+function questCombatGoal(text,st,t){
+  let s=plain(text).replace(/[《》「」【】。！!\s]/g,'').replace(/^(?:主角|自己|你)/,'');
+  if(/最后一击|仅用|只用|不受伤|无伤|连续|不同|命中|伤害|杀死|杀掉|斩杀|不使用|未使用|不要|不能|不得/.test(s))return null;
+  const number=x=>/^\d+$/.test(x)?+x:({'一':1,'两':2,'二':2,'三':3,'四':4,'五':5,'六':6,'七':7,'八':8,'九':9,'十':10}[x]||0);
+  let opponent='';
+  s=s.replace(/^在(?:一次|一场)?(?:实战|斗法|切磋|战斗|对战)(?:中|时)[，,]?/,'');
+  const versus=s.match(/^(?:在)?(?:与|和|同)(.+?)(?:斗法|切磋|交手|对战|战斗)(?:中|时)[，,]?/);
+  if(versus){opponent=versus[1];s=s.slice(versus[0].length);}
+  s=s.replace(/^(?:成功|亲自|至少)/,'');
+  const evidence=questCombatRows(t),opponents=new Set((st.npcs||[]).map(n=>n.name).concat(evidence.map(r=>r.opponent)));
+  const foe=name=>/^(?:任意)?(?:一名|一个)?(?:对手|敌人)$/.test(name)?'*':opponents.has(name)?name:null;
+  const arts=(st.player.arts||[]).map(a=>a.name).concat(evidence.map(r=>r.art).filter(Boolean));
+  const art=name=>arts.find(n=>questArtKey(n)===questArtKey(name.replace(/^功法/,'')));
+  let m=s.match(/^(?:击败|战胜|打败|胜过|赢过)(.+?)(?:([一二两三四五六七八九十0-9]+)次)?$/);
+  if(m&&!opponent){const target=foe(m[1]),value=m[2]?number(m[2]):1;return target&&value>0&&value<=100?{kind:'duelWin',target,value}:null;}
+  m=s.match(/^(?:使用|施展|施出|运起|运用|使出|催动|用)(.+?)(?:并且|并)?(?:击败|战胜|打败|胜过|赢过)(.+)$/);
+  if(m){const target=art(m[1]),enemy=foe(m[2]);return target&&enemy&&(!opponent||opponent===enemy)?{kind:'duelWinArt',target,opponent:enemy==='*'?'':enemy,value:1}:null;}
+  m=s.match(/^(?:使用|施展|施出|运起|运用|使出|催动|用)(?:([一二两三四五六七八九十0-9]+)次)?(.+?)(?:至少)?(?:([一二两三四五六七八九十0-9]+)次)?$/);
+  if(!m||m[1]&&m[3])return null;
+  const target=art(m[2]),value=m[1]||m[3]?number(m[1]||m[3]):1;
+  return target&&value>0&&value<=100&&(!opponent||opponents.has(opponent))?{kind:'artUse',target,opponent,value}:null;
+}
+function upgradeQuestCombat(t,st){
+  if(questHasObjectives(t)){
+    for(const o of t.objectives)if(['story','art'].includes(o.kind)&&!o.done){
+      const goal=questCombatGoal(o.text,st,t);if(goal)Object.assign(o,goal,{progress:0});
+    }
+  }else{
+    const goal=questCombatGoal(questCondition(t),st,t);
+    if(goal)t.objectives=[Object.assign({id:'combat1',text:questCondition(t),progress:0},goal)];
+  }
+}
 function questObjectives(raw){
   if(!Array.isArray(raw)||!raw.length||raw.length>8)return [];
   const ids=new Set(),out=[];
@@ -7813,17 +7881,20 @@ function questObjectives(raw){
     if(x.kind!=='story'&&x.kind!=='money'&&(!target||target.length>80))return [];
     if(['art','skill','attribute'].includes(x.kind)&&(!Number.isFinite(value)||value<1||value>100))return [];
     if(['money','item'].includes(x.kind)&&(!Number.isFinite(value)||value<1||value>1e9))return [];
+    if(QUEST_COMBAT_KINDS.includes(x.kind)&&(!Number.isInteger(value)||value<1||value>100||plain(x.opponent).length>80))return [];
     if(x.kind==='attribute'&&!['体魄','神识','心性','谈吐','悟性','声望','凶名'].includes(target))return [];
     if(x.kind==='realm'&&!XIAN.majors.some(m=>target.startsWith(m)))return [];
     if(x.kind==='relationship'&&!plain(x.relation))return [];
     ids.add(id);out.push({id,text,kind:x.kind,target,value:Number.isFinite(value)?value:1,relation:plain(x.relation),progress:0});
+    if(QUEST_COMBAT_KINDS.includes(x.kind))out[out.length-1].opponent=plain(x.opponent);
   }
   return out;
 }
 function initQuest(q){return {title:plain(q.title),desc:plain(q.desc),completion:plain(q.completion),objectives:questObjectives(q.objectives),progress:0,status:'进行中'};}
 function questHasObjectives(t){return questObjectives(t.objectives).length>0;}
-function questObjectiveValue(o,st){
+function questObjectiveValue(o,st,t){
   const p=st.player||{},n=(st.npcs||[]).find(n=>n.name===o.target);
+  if(QUEST_COMBAT_KINDS.includes(o.kind))return Math.min(1,questCombatCount(o,t||{})/o.value);
   switch(o.kind){
     case 'realm':return p.realm&&realmIndex(p.realm)>=realmIndex(parseRealm(o.target))?1:0;
     case 'faction':return plain(p.faction)===o.target?1:0;
@@ -7840,8 +7911,8 @@ function questObjectiveValue(o,st){
 function syncQuestObjectives(t,st){
   for(const o of t.objectives){
     if(o.kind==='story')continue;
-    const fraction=questObjectiveValue(o,st);o.progress=Math.floor(fraction*100);
-    if(fraction>=1){o.done=true;o.proof='实际状态已满足';}
+    const fraction=questObjectiveValue(o,st,t);o.progress=Math.floor(fraction*100);
+    if(fraction>=1){o.done=true;o.proof=QUEST_COMBAT_KINDS.includes(o.kind)?'斗法引擎已核对实际出手与结果':'实际状态已满足';}
     if(o.done)o.progress=100; // 达成记录不会因交出物品、花掉积蓄或换宗而丢失。
   }
   const pct=Math.floor(t.objectives.reduce((n,o)=>n+(o.done?100:Math.min(99,num(o.progress))),0)/t.objectives.length);
@@ -7850,7 +7921,7 @@ function syncQuestObjectives(t,st){
 }
 function questObjectiveHint(t,st){
   if(!questHasObjectives(t))return questArtHint(t,st);
-  return t.objectives.map(o=>(o.done?'✓ ':'○ ')+o.text+(o.done?'':'（'+(o.kind==='story'?num(o.progress):Math.floor(questObjectiveValue(o,st)*100))+'%）')).join('；');
+  return t.objectives.map(o=>(o.done?'✓ ':'○ ')+o.text+(o.done?'':'（'+(o.kind==='story'?num(o.progress):Math.floor(questObjectiveValue(o,st,t)*100))+'%）')).join('；');
 }
 function abandonedQuestMatch(st,q){
   const title=plain(q&&q.title),goal=plain(q&&q.completion);
@@ -7888,7 +7959,7 @@ function renderQuests(){
   $('wQuests').querySelectorAll('[data-abandon-quest]').forEach(b=>{const q=qs[Number(b.dataset.abandonQuest)];b.onclick=()=>requestAbandonQuest(q);});
 }
 
-function questContext(t){if(t.status==='已放弃')return `- ${t.title}（已放弃）：原约定${questCondition(t)}；既有成果保留，不再推进、补计划、领奖或换标题重建。`;return `- ${t.title}（${t.status}，进度${num(t.progress)}%）：${plain(t.desc)}；结愿条件：${questCondition(t)}；已记成果：${(t.milestones||[]).slice(-8).join('；')||'无'}；条件清单：${questHasObjectives(t)?JSON.stringify(t.objectives.map(o=>({id:o.id,text:o.text,kind:o.kind,target:o.target,value:o.value,relation:o.relation,progress:o.progress,done:!!o.done,proof:o.proof}))):'待补全：本次questUpdates填写plan，把原结愿条件拆为有限条件，不提高要求'}；实际进展：${questObjectiveHint(t,S)||'按条件逐项核对'}`;}
+function questContext(t){if(t.status==='已放弃')return `- ${t.title}（已放弃）：原约定${questCondition(t)}；既有成果保留，不再推进、补计划、领奖或换标题重建。`;return `- ${t.title}（${t.status}，进度${num(t.progress)}%）：${plain(t.desc)}；结愿条件：${questCondition(t)}；已记成果：${(t.milestones||[]).slice(-8).join('；')||'无'}；条件清单：${questHasObjectives(t)?JSON.stringify(t.objectives.map(o=>({id:o.id,text:o.text,kind:o.kind,target:o.target,value:o.value,relation:o.relation,opponent:o.opponent,progress:o.progress,done:!!o.done,proof:o.proof}))):'待补全：本次questUpdates填写plan，把原结愿条件拆为有限条件，不提高要求'}；实际进展：${questObjectiveHint(t,S)||'按条件逐项核对'}`;}
 // 有条件ID的剧情成果直接核对正文引用，不再要求某几个汉字或成功动词命中。
 function questQuotedEvidence(evidence,text){
   const key=questEvidenceKey(evidence),source=String(evidence||'').trim();
@@ -8000,6 +8071,7 @@ function syncQuestState(st,legacy,updates){
   const done=[];
   for(const t of st.quests||[]){
     if(t.status!=='进行中')continue;
+    upgradeQuestCombat(t,st);
     const before=num(t.progress);if(questHasObjectives(t))syncQuestObjectives(t,st);else syncQuestArts(t,st);
     if(legacy&&!t.completionVersion&&num(t.progress)>=100&&!questGoal(t))t.completionProof='旧档已记录100%';
     t.completionVersion=1;
@@ -8017,6 +8089,7 @@ function settleQuestUpdate(q,st,text,action){
   if(!questHasObjectives(target)&&q.plan&&q.plan.completion===questCondition(target)){
     const objectives=questObjectives(q.plan.objectives);if(objectives.length)target.objectives=objectives;
   }
+  upgradeQuestCombat(target,st);
   if(questHasObjectives(target)){
     const before=num(target.progress);settleQuestObjectives(q,target,st,text);completeQuest(target,st);
     if(target.status==='完成'||num(target.progress)>before)questNotice(target,before,st);
@@ -10163,6 +10236,7 @@ function settleVendetta(kind){
 }
 function endDuel(kind){
   duel.over=true; duel.result=kind;
+  recordQuestCombat(duel,S);
   settleVendetta(kind);
   trainFromDuel(kind==='win'||kind==='oppYield');
   if((kind==='win'||kind==='oppYield')&&!duel.friendly&&relicHas(S.player,'devour')){ const g=Math.round(lingliNeed(S.player.realm)*0.03); addLingli(S.player,g); S.player['凶名']=clamp(num(S.player['凶名'])+1); news(`那道符纹从${duel.opp.name}身上吞来一股灵力`); }
@@ -10246,6 +10320,7 @@ function duelDeath(txt){
 function finalizeDuelHp(){ S.player.hp=clamp(duel.pHp,0,hpMaxOf(S.player));
   if(S.descent&&curPlane()==='下界'&&!duel.friendly&&!duel.xianTax&&S.player.hp>0){ duel.xianTax=1; S.player.hp=Math.max(1,S.player.hp-10); ledger('在下界全力出手，被界力反噬，气血 −10'); if(S.player.hp<30) S.descent.forced=true; } S.player.status=S.player.status.filter(t=>t!=='重伤'); if(S.player.hp<30&&S.player.hp>0) S.player.status.unshift('重伤'); }
 async function afterDuel(){
+  recordQuestCombat(duel,S); // 接续旧版已打完、尚未续写的战斗。
   finalizeDuelHp();
   if(S.player.hp<=0) S.player.hp=1;
   renderPanel(); checkAchievements();
@@ -10522,6 +10597,7 @@ function settleWar(leaderWon){
 }
 // 主将阵打完，接着把这一仗交给模型写
 async function afterWarDuel(){
+  recordQuestCombat(duel,S);
   finalizeDuelHp();
   if(S.player.hp<=0) S.player.hp=1;
   const dl=duel;
@@ -11088,14 +11164,14 @@ function endConvo(){
     checkAchievements(); renderPanel(); saveGame();
     // 谈完不能就这么算了：补一段余波，把话里的东西落进正文，并给出承接的新选项
     const aftermath={name:n.name, summary:convo.summary||'', gains:gains.slice(0,6)};
-    convo=null; saveGame();
+    convo=null; saveGame();refreshManagementActions();
     if(!S.over&&!busy){
       runTurn(`与${aftermath.name}谈过之后`,
         {fate:10,check:null,worldEvent:null,duel:false,months:0,convo:aftermath},{});
     }
     return;
   }
-  convo=null; saveGame();
+  convo=null; saveGame();refreshManagementActions();
 }
 $('convoSend').onclick=()=>convoSend($('convoText').value);
 $('convoText').addEventListener('keydown',e=>{ if(e.key==='Enter') convoSend($('convoText').value); });
@@ -12339,6 +12415,7 @@ function setBusy(b,msg){
   for(const id of ['btnNew','btnImport','cfgFreedom','cfgMem','cfgProse'])if($(id))$(id).disabled=b;
   if($('cancelTurn'))$('cancelTurn').hidden=!b||!activeTurnAbort;
   document.querySelectorAll('.opt').forEach(x=>x.disabled=b);
+  if(S&&S.player)refreshManagementActions();
 }
 const BACKGROUNDS=[
  ['随机','听天由命，一切随缘'],['宗门出身','父母是宗门修士，自小在山门里长大'],['修仙世家','族里有筑基老祖，规矩多，资源也多'],['没落世家','祖上出过金丹，如今只剩一座空宅'],
@@ -13292,6 +13369,11 @@ async function runTurn(action, judge, extra){
   const storedExtra=previous&&previous.extra;
   if(storedExtra)extra=storedExtra;
   if(previous&&previous.judge)judge=previous.judge;
+  const finishedCombat=extra.duelData||extra.warData&&extra.warData.duel;
+  if(finishedCombat){
+    recordQuestCombat(finishedCombat,owner);
+    if(previous&&previous.forecast)recordQuestCombat(finishedCombat,previous.forecast.state);
+  }
   let committed=false;
   const controller=typeof AbortController!=='undefined'?new AbortController():null;
   activeTurnAbort=controller;
@@ -13372,7 +13454,7 @@ async function runTurn(action, judge, extra){
     retry.className='opt'; retry.innerHTML='<span class="num">⟳</span>重试：'+esc(action);
     retry.onclick=()=>{ retry.remove(); const chs=document.querySelectorAll('#story .chapter'); if(chs.length) chs[chs.length-1].remove(); runTurn(action,judge,extra); };
     $('choices').appendChild(retry);
-    if(S.lastOptions&&S.lastOptions.length&&!extra.duelData){ const back=document.createElement('button'); back.className='opt'; back.textContent='↩ 换个行动'; back.onclick=()=>{S.pending=null;saveGame();renderOptions(S.lastOptions);}; $('choices').appendChild(back); }
+    if(S.lastOptions&&S.lastOptions.length&&!extra.duelData){ const back=document.createElement('button'); back.className='opt'; back.textContent='↩ 换个行动'; back.onclick=()=>{S.pending=null;saveGame();renderOptions(S.lastOptions);refreshManagementActions();}; $('choices').appendChild(back); }
   }
   if(request===turnRequest){activeTurnAbort=null;setBusy(false);}
 }
