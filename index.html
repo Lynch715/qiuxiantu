@@ -1813,7 +1813,7 @@ function planeNpcs(pl){ return pl===curPlane()?(S.npcs||[]):((S.planes&&S.planes
 // 把一个 NPC 挪到另一界（飞升上来、被接引）
 function moveNpcToPlane(n,pl){
   if(!n) return;
-  for(const k of Object.keys(S.planes||{}).concat([curPlane()])){ const arr=planeNpcs(k); const i=arr.indexOf(n); if(i>=0) arr.splice(i,1); }
+  for(const k of Object.keys(S.planes||{}).concat([curPlane()])){ const arr=planeNpcs(k); const i=arr.indexOf(n); if(i>=0){ arr.splice(i,1); forgetSocialNpcs(arr); } }
   if(pl===curPlane()) S.npcs.push(n);
   else{ S.planes=S.planes||{}; if(!S.planes[pl]) S.planes[pl]=planeFresh(); S.planes[pl].npcs.push(n); }
 }
@@ -1849,7 +1849,7 @@ function migrateAscended(){
   const ups=planeNpcs('下界').filter(n=>n&&n.alive!==false&&n.realm&&typeof n.realm==='object'&&isXianRealm(n.realm));
   for(const n of ups){
     n.ascender=true; n.ascendedAt=num(S.months); lifeLog(n,'冲过大乘后期，飞升而去');
-    if(!S.planes&&curPlane()==='下界'){ const i=S.npcs.indexOf(n); if(i>=0) S.npcs.splice(i,1); S.xianLimbo=(S.xianLimbo||[]).concat([n]); news(`${n.name}渡过最后一关，飞升而去`); continue; }
+    if(!S.planes&&curPlane()==='下界'){ const i=S.npcs.indexOf(n); if(i>=0){ S.npcs.splice(i,1); forgetSocialNpcs(S.npcs); } S.xianLimbo=(S.xianLimbo||[]).concat([n]); news(`${n.name}渡过最后一关，飞升而去`); continue; }
     if(curPlane()==='下界') news(`${n.name}渡过最后一关，飞升而去`); else (S.planes.下界.mail=S.planes.下界.mail||[]).push(`${n.name}渡过最后一关，飞升而去`);
     moveNpcToPlane(n,'仙界'); xianArrive(n);
   }
@@ -2223,6 +2223,9 @@ function agingTick(){
 }
 // 推进 n 个月：扣开销、长年岁、判饥寒
 function advanceTime(n){
+  return withSocialIndexes(()=>advanceTimeCore(n));
+}
+function advanceTimeCore(n){
   const days=Math.max(0,Math.min(Math.max(360,closeMaxMonths()*30),Math.round(num(n)*30)));
   if(S.elapsedDays==null||Math.floor(num(S.elapsedDays)/30)!==num(S.months)) S.elapsedDays=Math.round(num(S.months)*30);
   const p=S.player; let cost=0,starve=0,ticks=0,totalPay=0;S.sectPay=0;S.lingliLast=0;S.dutyLast=0;
@@ -3299,7 +3302,7 @@ function foeNpc(f){
   if(S.scene){ S.scene.present=asArr(S.scene.present); if(!S.scene.present.includes(n.name)) S.scene.present.push(n.name); }
   return n;
 }
-function dropFoe(f){ if(!f) return; if(f.temp){ const i=(S.npcs||[]).findIndex(n=>n&&n.name===f.name&&(n.beast||plain(n.relation)==='萍水相逢')); if(i>=0) S.npcs.splice(i,1); } if(S.scene) S.scene.present=asArr(S.scene.present).filter(x=>x!==f.name); }   // 临时的出了秘境就撤；高人留在人脉里
+function dropFoe(f){ if(!f) return; if(f.temp){ const i=(S.npcs||[]).findIndex(n=>n&&n.name===f.name&&(n.beast||plain(n.relation)==='萍水相逢')); if(i>=0){ S.npcs.splice(i,1); forgetSocialNpcs(S.npcs); } } if(S.scene) S.scene.present=asArr(S.scene.present).filter(x=>x!==f.name); }   // 临时的出了秘境就撤；高人留在人脉里
 /* 10-09：秘境里的致敬物先「发现」：禁制护着、妖兽守着、或者有人在抢。玩家自己去拿才见分晓，失手这一局就没了 */
 const SPOT_NEED={small:75,mid:85,large:92};
 const SPOT_BEASTS=['青鳞蟒','赤瞳狼王','铁背玄龟','三尾灵狐','金线蟾','白骨鹫','火纹蜥','墨鳞蛟'];
@@ -3353,7 +3356,7 @@ function realmJudge(judge,action){
 }
 // 回合提交时（事务内）把秘境的结果落账
 function findNpcExact(nm){ return (S.npcs||[]).find(n=>n&&n.name===nm)||null; }
-function dropSpotBeast(sp){ if(!sp||!sp.opp) return; const i=(S.npcs||[]).findIndex(n=>n&&n.name===sp.opp&&n.beast); if(i>=0) S.npcs.splice(i,1); if(S.scene) S.scene.present=asArr(S.scene.present).filter(x=>x!==sp.opp); }
+function dropSpotBeast(sp){ if(!sp||!sp.opp) return; const i=(S.npcs||[]).findIndex(n=>n&&n.name===sp.opp&&n.beast); if(i>=0){ S.npcs.splice(i,1); forgetSocialNpcs(S.npcs); } if(S.scene) S.scene.present=asArr(S.scene.present).filter(x=>x!==sp.opp); }
 function applyRealm(judge){
   const p=S.player; if(!judge||!p) return;
   if(judge.realm){
@@ -3584,9 +3587,50 @@ function mainArt(p){ let best=null,bm=0; for(const a of (p&&p.arts)||[]){ const 
    人与人之间的关系只存一份（S.rels），两边的面板都从这里读，不会出现一边有记录一边没有。
    主角与 NPC 的关系仍在 n.relation（那本来就只有一份）。 */
 const REL_TYPES=['相识','好友','仇人','恋人','夫妻','同门','亲属','师徒'];
+// 索引只活在一次同步计算里，不进存档。保留数组原顺序、重复项的首项和全部历史。
+// 两界与预演副本按各自数组取索引；出生、增边或换表后按长度/引用重建。
+let socialIndexes=null;
+function withSocialIndexes(fn){
+  if(socialIndexes) return fn();
+  socialIndexes={rels:new WeakMap(),npcs:new WeakMap()};
+  try{ return fn(); }finally{socialIndexes=null;}
+}
+function forgetSocialNpcs(rows){ if(socialIndexes) socialIndexes.npcs.delete(rows); }
+function socialRelIndex(){
+  if(!socialIndexes) return null;
+  const rows=rels(); let idx=socialIndexes.rels.get(rows);
+  if(!idx||idx.length!==rows.length){
+    idx={length:rows.length,pairs:new Map(),people:new Map()};
+    for(const r of rows){
+      if(!idx.pairs.has(r.k)) idx.pairs.set(r.k,r);
+      for(const name of new Set([r.a,r.b])){
+        if(!idx.people.has(name)) idx.people.set(name,[]);
+        idx.people.get(name).push(r);
+      }
+    }
+    socialIndexes.rels.set(rows,idx);
+  }
+  return idx;
+}
+function socialNpcIndex(){
+  if(!socialIndexes) return null;
+  const rows=S.npcs||[]; let idx=socialIndexes.npcs.get(rows);
+  if(!idx||idx.length!==rows.length){
+    idx={length:rows.length,names:new Map(),children:new Map(),fuzzy:new Map()};
+    for(const n of rows){
+      if(!idx.names.has(n.name)) idx.names.set(n.name,n);
+      for(const name of new Set(parentsOf(n))){
+        if(!idx.children.has(name)) idx.children.set(name,[]);
+        idx.children.get(name).push(n.name);
+      }
+    }
+    socialIndexes.npcs.set(rows,idx);
+  }
+  return idx;
+}
 function relKey(a,b){ return a<b?a+'|'+b:b+'|'+a; }
 function rels(){ if(!S.rels) S.rels=[]; return S.rels; }
-function relOf(a,b){ const k=relKey(a,b); return rels().find(r=>r.k===k)||null; }
+function relOf(a,b){ const k=relKey(a,b),idx=socialRelIndex(); return (idx?idx.pairs.get(k):rels().find(r=>r.k===k))||null; }
 function relSet(a,b,type,text){
   if(!a||!b||a===b) return null;
   let r=relOf(a,b);
@@ -3596,7 +3640,7 @@ function relSet(a,b,type,text){
   if(text){ r.history.push({day,date,text}); while(r.history.length>12) r.history.shift(); }
   return r;
 }
-function relsOfName(name){ return rels().filter(r=>r.a===name||r.b===name); }
+function relsOfName(name){ const idx=socialRelIndex(); return idx?(idx.people.get(name)||[]).slice():rels().filter(r=>r.a===name||r.b===name); }
 function relOther(r,name){ return r.a===name?r.b:r.a; }
 // 身世称谓先落成结构化父母与夫妻边；父母互为配偶，不是彼此的血亲。
 // 纯状态迁移：同样覆盖另一界与待提交预演，不借用当前全局 S。
@@ -3642,8 +3686,8 @@ function repairOriginFamily(s){
 // 每个 NPC 的履历：同一件事两个人都记，日期一致
 function lifeLog(n,text){ n.life=n.life||[]; n.life.push({day:num(S.elapsedDays),date:S.date||dateStr(),text}); while(n.life.length>30) n.life.shift(); }
 // 已婚：正室或妾室都算，不能再跟别人成亲
-function isMarried(name){ return rels().some(x=>(x.a===name||x.b===name)&&(x.type==='夫妻'||x.type==='妾室')); }
-function spouseOf(name){ const r=rels().find(x=>(x.a===name||x.b===name)&&x.type==='夫妻'); return r?relOther(r,name):null; }
+function isMarried(name){ return relsOfName(name).some(x=>x.type==='夫妻'||x.type==='妾室'); }
+function spouseOf(name){ const r=relsOfName(name).find(x=>x.type==='夫妻'); return r?relOther(r,name):null; }
 // 婚恋面板：全从边表推出来——恋爱对象、婚姻、婚外情
 function loveSheet(name){
   const mine=relsOfName(name);
@@ -3704,7 +3748,8 @@ function isKin(a,b){
   for(const x of pa){ const rr=relOf(x,b.name); if(rr&&['夫妻','妾室'].includes(rr.type)) return true; }
   for(const x of pb){ const rr=relOf(x,a.name); if(rr&&['夫妻','妾室'].includes(rr.type)) return true; }
   // 姻亲：一方是另一方配偶的父母
-  const kidsOf=x=>S.npcs.filter(n=>parentsOf(n).includes(x)).map(n=>n.name);
+  const idx=socialNpcIndex();
+  const kidsOf=x=>idx?(idx.children.get(x)||[]):S.npcs.filter(n=>parentsOf(n).includes(x)).map(n=>n.name);
   for(const k of kidsOf(a.name)){ const rr=relOf(k,b.name); if(rr&&['夫妻','妾室'].includes(rr.type)) return true; }
   for(const k of kidsOf(b.name)){ const rr=relOf(k,a.name); if(rr&&['夫妻','妾室'].includes(rr.type)) return true; }
   // 祖孙
@@ -3787,6 +3832,9 @@ function npcGiftMonth(q){
   }
 }
 function npcMonth(){
+  return withSocialIndexes(()=>npcMonthCore());
+}
+function npcMonthCore(){
   if(!S||!S.npcs) return;
   const q=S.npcLifeQ=S.npcLifeQ||[];
   for(const n of S.npcs) if(npcKnown(n)) npcCultivateMonth(n,q);
@@ -4032,6 +4080,9 @@ function childBirth(f){
   return out;
 }
 function familyMonth(q){
+  return withSocialIndexes(()=>familyMonthCore(q));
+}
+function familyMonthCore(q){
   const day=num(S.elapsedDays);
   // 生产
   for(const o of (S._bg?[]:[S.player]).concat(S.npcs)){
@@ -6814,6 +6865,9 @@ function sectRosterLine(){
   return `【师门名册（以此为准，不要另造师父、同门；新认识的同门写进newNpcs）】${S.sect.name}；师父：${sh.length?sh.map(n=>`${n.name}（${realmText(n.realm)}）`).join('、'):'尚未拜师'}；同门：${tm.length?tm.map(n=>`${n.name}（${n.relation||'同门'}，${realmText(n.realm)}）`).join('、'):'人脉里还没有'}\n`;
 }
 function stateBlocks(action){
+  return withSocialIndexes(()=>stateBlocksCore(action));
+}
+function stateBlocksCore(action){
   worldState();
   const p=S.player;
   const M=MEM();
@@ -8385,6 +8439,9 @@ const GENERIC_NAME_RE=/^(?:(?:.{0,3}(?:袍|衣|裳|笠|面|疤|须)|陌生|神�
    opt.lenient：第三份还过不了时用，矛盾处一律以引擎为准改掉后收下。 */
 function toNum(v){ if(typeof v==='number') return Number.isFinite(v)?v:null; if(typeof v==='string'){ const m=v.replace(/[,，\s]/g,'').match(/^[+＋]?(-?\d+(?:\.\d+)?)/); if(m) return Number(m[1]); const n=v.match(/^[-－−]\s*(\d+(?:\.\d+)?)/); if(n) return -Number(n[1]); } return null; }
 function validateTurn(d,action,judge,state,opt){
+  return withSocialIndexes(()=>validateTurnCore(d,action,judge,state,opt));
+}
+function validateTurnCore(d,action,judge,state,opt){
   /* 10-08：和引擎对不上的地方一律以引擎为准就地改掉，不再退回重写（重写太伤体验）。
      只有缺正文、不是对象这种没法收的才抛错。fixNotes 会显示在起居注里，让玩家知道引擎改了什么。 */
   const fixNotes=d&&typeof d==='object'?(d.fixNotes=[]):[];
@@ -8604,6 +8661,9 @@ function validateTurn(d,action,judge,state,opt){
 const REALM_TXT='(?:太乙金仙|大罗金仙|地仙|天仙|真仙|玄仙|金仙|炼气|练气|筑基|金丹|结丹|元婴|化神|合体|渡劫|大乘)(?:[一二三四五六七八九十0-9]+[阶层重]|初期|中期|后期|大圆满|圆满)?';
 function cnAge(n){ n=Math.round(num(n)); if(n<=0||n>=1000) return String(n); const D='零一二三四五六七八九'; const b=Math.floor(n/100), t=Math.floor(n%100/10), u=n%10; let s=''; if(b) s+=D[b]+'百'; if(t){ s+=(b||t>1?D[t]:'')+'十'; } else if(b&&u) s+='零'; if(u) s+=D[u]; return s; }
 function auditRespect(text,st,speaker){
+  return withSocialIndexes(()=>auditRespectCore(text,st,speaker));
+}
+function auditRespectCore(text,st,speaker){
   const owner=S; S=st;
   try{
     let changed=false;const corrected=new Set();
@@ -8735,6 +8795,9 @@ function forecastTurn(state,judge,action){
   }finally{S=owner;}
 }
 function settleTurnOnce(state,d,action,judge,id,forecast){
+  return withSocialIndexes(()=>settleTurnOnceCore(state,d,action,judge,id,forecast));
+}
+function settleTurnOnceCore(state,d,action,judge,id,forecast){
   if((state.committedTurns||[]).includes(id))return state;
   const owner=S,oldDeltas=lastDeltas,oldCarry=carryDeltas;
   const staged=JSON.parse(JSON.stringify(forecast?forecast.state:state));S=staged;turnTransaction=true;
@@ -8818,6 +8881,12 @@ function ageUnresolved(){
 function findNpc(name){
   if(!name) return null;
   name=String(name).trim();
+  const idx=socialNpcIndex();
+  if(idx){
+    const exact=idx.names.get(name); if(exact) return exact;
+    if(!idx.fuzzy.has(name)) idx.fuzzy.set(name,S.npcs.find(x=>x.name&&(name.includes(x.name)||x.name.includes(name)))||null);
+    return idx.fuzzy.get(name);
+  }
   return S.npcs.find(x=>x.name===name)||S.npcs.find(x=>x.name&&(name.includes(x.name)||x.name.includes(name)))||null;
 }
 
@@ -13124,7 +13193,7 @@ function dutyDone(d,ok,extra){
 // 逾期不办：功绩 −20，记一次怠慢；三年内怠慢两回贬一级，仙吏革职
 function dutyMissed(){
   const c=S.court, d=c.duty; c.duty=null; const m=num(S.months);
-  if(d&&d.type==='缉拿'){ const i=S.npcs.findIndex(n=>n&&n.name===d.target&&n.courtTarget===d.id); if(i>=0) S.npcs.splice(i,1); }
+  if(d&&d.type==='缉拿'){ const i=S.npcs.findIndex(n=>n&&n.name===d.target&&n.courtTarget===d.id); if(i>=0){ S.npcs.splice(i,1); forgetSocialNpcs(S.npcs); } }
   addMerit(-20,`${c.name}的差事逾期没办（${d?d.text:''}）`);
   c.slack=(c.slack||[]).filter(x=>m-x<36).concat([m]);
   news(`${c.name}责${S.player.name}办差不力`);
