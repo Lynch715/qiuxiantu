@@ -34,13 +34,13 @@ async function main(){
   async function test(name,fn){await fn();passed++;console.log('✓ '+name);}
   const {BASE,UP}=require('./xjv2-env.cjs');
   const setup=file=>{const e=engine(file);e.run(BASE);e.run(UP);return e;};
-  await test('提示词压缩边界保留；建设功能仅接入列明的十个原有函数',()=>{
-    const a=setup(baseline),b=setup(current),promptChanges=['familyBlock','stateBlocksCore','turnPrompt','questContext'],constructionHooks=['advanceTime','advanceTimeCore','cultivateMonth','npcCultivateMonth','clanMonth','studyRoll','applyTurn','openClose','cultHtml','renderPanel'],allowed=new Set([...promptChanges,...constructionHooks]),changed=[];
+  await test('提示词压缩边界保留；建设及主动生育只接入明确列出的函数',()=>{
+    const a=setup(baseline),b=setup(current),promptChanges=['familyBlock','stateBlocksCore','turnPrompt','questContext'],constructionHooks=['advanceTime','advanceTimeCore','cultivateMonth','npcCultivateMonth','clanMonth','studyRoll','applyTurn','openClose','cultHtml','renderPanel'],familyHooks=['refreshManagementActions','familyMonthCore','renderFamily','judgeBlock','validateTurnCore','forecastTurn','makeJudge','act','runTurn'],allowed=new Set([...promptChanges,...constructionHooks,...familyHooks]),changed=[];
     for(const [,name]of fs.readFileSync(baseline,'utf8').matchAll(/^(?:async )?function (\w+)\(/gm)){
       let old,now;try{old=a.run(name+'.toString()');now=b.run(name+'.toString()');}catch{continue;}
       if(old!==now){changed.push(name);assert(allowed.has(name),'unexpected change: '+name);}
     }
-    assert.deepEqual(changed.filter(n=>promptChanges.includes(n)).sort(),promptChanges.slice().sort());assert.deepEqual(changed.filter(n=>!promptChanges.includes(n)).sort(),constructionHooks.filter(n=>n!=='renderPanel').sort());results.push({changedExistingFunctions:changed});
+    assert.deepEqual(changed.filter(n=>promptChanges.includes(n)).sort(),promptChanges.slice().sort());assert.deepEqual(changed.filter(n=>!promptChanges.includes(n)).sort(),[...constructionHooks.filter(n=>n!=='renderPanel'),...familyHooks].sort());results.push({changedExistingFunctions:changed});
   });
   await test('三种自由度的世界规则、选项协议、风格与谈话抬头逐字一致',()=>{
     for(const freedom of ['free','mid','strict']){const a=setup(baseline),b=setup(current);for(const e of [a,b])e.run(`S.freedom=${JSON.stringify(freedom)};`);
@@ -81,7 +81,7 @@ async function main(){
   });
   if(process.env.REAL_SAVE){
     const saveBytes=fs.readFileSync(process.env.REAL_SAVE),save=JSON.parse(saveBytes),originalHash=hash(saveBytes);
-    const real=(file,seed=31)=>{const e=engine(file,seed);e.load(clone(save));return e;};
+    const real=(file,seed=31)=>{const e=engine(file,seed);if(file===baseline)require('./player-family-policy.cjs')(e);e.load(clone(save));return e;};
     await test('第964回存档：69人物谱逐字段、92子女逐字还原，全部20心愿仍在',()=>{
       const a=real(baseline),b=real(current),old=a.run("stateBlocks('静坐')"),now=b.run("stateBlocks('静坐')");
       assert.deepEqual(unpack(profile(now)),unpack(profile(old)).map(o=>({...o,secretKnown:o.secretKnown||false})));assert(!profile(now).includes("\"columns\""));assert(unpack(profile(now)).every(row=>Object.hasOwn(row,"secretKnown")));assert(now.includes("不得借回忆、听说或推断写成已知"));assert.equal(familyRoundTrip(b.run('familyBlock()')),a.run('familyBlock()'));

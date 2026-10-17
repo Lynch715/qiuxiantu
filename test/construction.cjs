@@ -10,7 +10,7 @@ const results=[];let passed=0;
 const clone=x=>JSON.parse(JSON.stringify(x)),hash=x=>crypto.createHash('sha256').update(x).digest('hex');
 const near=(a,b)=>assert(Math.abs(a-b)<1e-7,`${a} != ${b}`);
 function test(name,fn){const t=performance.now();fn();passed++;console.log('✓ '+name);results.push({name,ms:Math.round(performance.now()-t)});}
-function setup(plane='下界',file=current){const e=env(file,31);e.run(BASE);if(plane==='仙界')e.run(UP);e.run(`S.player.money=1e8;S.player.age=30;S.player.lifeBonus=1e6;S.player.cultMode='闭关';S.player.lingli=0;`);return e;}
+function setup(plane='下界',file=current){const e=env(file,31);if(file===baseline)require('./player-family-policy.cjs')(e);e.run(BASE);if(plane==='仙界')e.run(UP);e.run(`S.player.money=1e8;S.player.age=30;S.player.lifeBonus=1e6;S.player.cultMode='闭关';S.player.lingli=0;`);return e;}
 function install(e,levels=[5,5,5,5]){
   e.run(`constructionStart('home',{site:'sect'});var home=constructionRealm(curPlane()).home,rec=constructionRealm(curPlane()).sects[0];home.project=null;home.level=${levels[0]};rec.levels={array:${levels[1]},library:${levels[2]},arena:${levels[3]}};S.scene.location=home.location;S.estates.rev++;`);
 }
@@ -94,12 +94,12 @@ test('演武场熟练额外小数累计，不每次向上取整，场外不生�
 test('存读档恢复月中分段、暂停和工程，不丢历史物品且不重复付款',()=>{
  const e=setup();install(e,[4,4,4,4]);e.run(`advanceTime(.5);constructionStart('home',{site:'sect'});constructionPause('home');var exported=JSON.stringify(S);S=JSON.parse(exported);migrate(S);`);assert(e.run('constructionRealm(curPlane()).home.project.paused'));assert.equal(e.run('S.estates.history[0].event'),'开工');assert(e.run(`S.player.items&&S.npcs.length>0`));
 });
-if(fs.existsSync(baseline))for(const pl of ['下界','仙界'])test(pl+'：零级未建设的一年完整预演状态及下一随机数与发布版相同',()=>{
+if(fs.existsSync(baseline))for(const pl of ['下界','仙界'])test(pl+'：零级未建设：统一主动生育规则后一年预演/RNG与发布版相同',()=>{
  const a=setup(pl,baseline),b=setup(pl,current),expr=`JSON.stringify(forecastTurn(S,{months:12,cult:'闭关',fate:10},'闭关一年'))`;assert.equal(b.run(expr),a.run(expr));assert.equal(b.run('Math.random()'),a.run('Math.random()'));assert(!b.run('!!S.estates'));
 });
 if(process.env.REAL_SAVE){
  const bytes=fs.readFileSync(process.env.REAL_SAVE),save=JSON.parse(bytes),beforeHash=hash(bytes);
- const real=(file=current,seed=31)=>{const e=env(file,seed);e.run('v=>Object.assign(globalThis,v)')({privateSave:clone(save)});e.run('S=privateSave;saveGame=()=>{};toast=()=>{};migrate(S);');return e;};
+ const real=(file=current,seed=31)=>{const e=env(file,seed);if(file===baseline)require('./player-family-policy.cjs')(e);e.run('v=>Object.assign(globalThis,v)')({privateSave:clone(save)});e.run('S=privateSave;saveGame=()=>{};toast=()=>{};migrate(S);');return e;};
  for(const months of [12,3600])test('用户存档未建设：'+months+'个月完整预演/RNG与原发布版一致',()=>{
   const a=real(baseline),b=real(),expr=`JSON.stringify(forecastTurn(S,{months:${months},cult:'闭关',fate:10},'闭关'))`,ta=performance.now(),x=a.run(expr),beforeMs=performance.now()-ta,tb=performance.now(),y=b.run(expr),afterMs=performance.now()-tb;assert.equal(y,x);assert.equal(b.run('Math.random()'),a.run('Math.random()'));results.push({actualSave:true,months,beforeMs,afterMs,hash:hash(y),sameStateAndRandom:true});
  });

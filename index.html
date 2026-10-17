@@ -705,6 +705,44 @@ details.eggd.fate>summary{color:inherit;font-size:inherit}
 .clamp-hide{display:none!important}
 .clampbtn{display:block;width:100%;margin-top:6px;padding:5px 0;background:var(--panel);border:1px dashed var(--line);border-radius:3px;color:var(--ink-2);font-family:inherit;font-size:12.5px;cursor:pointer;letter-spacing:1px}
 .clampbtn:hover{border-color:var(--jade);color:var(--jade-ink)}
+/* 家室与近期管理入口：独立卡片、足够触控面积，长说明不挤进按钮。 */
+.panel-note{font-size:13px;line-height:1.8;color:var(--ink-soft);overflow-wrap:anywhere}
+.family-partners{display:grid;gap:12px;margin:10px 0 14px}
+.family-partner{padding:14px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.65)}
+.family-partner-head{display:flex;align-items:center;gap:10px}
+.family-partner-head .avatar{width:42px;height:42px;flex:none;display:flex;align-items:center;justify-content:center}
+.family-partner-name{min-width:0;flex:1}
+.family-partner-name .flink{border:0;background:transparent;color:var(--jade-ink);font:inherit;font-size:16px;cursor:pointer;text-align:left;overflow-wrap:anywhere}
+.family-role{display:inline-block;margin-left:8px;padding:1px 7px;border:1px solid var(--line);border-radius:12px;font-size:11px;color:var(--ink-soft);vertical-align:middle}
+.family-actions,.panel-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+.family-actions .mbtn,.panel-actions .mbtn{flex:1 1 110px}
+#fLove .mbtn,#pSect .mbtn,#xMask .mbtn,[data-abandon-quest],[data-end-relation],#discExpel{min-height:42px;min-width:0;padding:10px 14px;line-height:1.5;letter-spacing:1px;white-space:normal;overflow-wrap:anywhere}
+#fLove .mbtnrow{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;margin-top:16px}
+.family-planning-note{padding:12px 0 2px;border-top:1px dashed var(--line)}
+.partner-gone{opacity:.65}
+.family-pregnancy{padding:14px;margin:12px 0;border:1px solid var(--line);border-left:3px solid var(--jade);border-radius:7px;background:var(--panel-2);font-size:14px;line-height:1.8}
+.family-pregnancy strong{display:block;color:var(--jade-ink);font-weight:400}
+.panel-details{margin-top:14px;border-top:1px dashed var(--line);padding-top:12px;font-size:13px;line-height:1.8}
+.panel-details summary{color:var(--jade-ink);cursor:pointer;padding:3px 0}
+.construction-panel{display:grid;gap:16px;min-width:0}
+.build-card,.build-overview,.build-progress{padding:16px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.7);min-width:0}
+.build-card h4,.build-overview h4{font-size:16px;color:var(--jade-ink);font-weight:400;margin-bottom:7px;line-height:1.65;overflow-wrap:anywhere}
+.build-effect{font-size:14px;line-height:1.8;color:var(--ink-soft)}
+.build-next{display:flex;flex-wrap:wrap;gap:6px 16px;margin:12px 0;font-size:14px;line-height:1.7;color:var(--ink)}
+.build-card>.mbtn,.build-progress>.mbtn{width:100%;margin-top:12px}
+.build-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:12px 0}
+.build-stat{padding:11px;border-radius:7px;background:var(--panel-2);min-width:0}
+.build-stat small{display:block;font-size:12px;color:var(--ink-soft);line-height:1.65}
+.build-stat b{font-size:19px;font-weight:400;color:var(--jade-ink);line-height:1.8;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.build-details{font-size:13px;color:var(--ink-soft);line-height:1.85;overflow-wrap:anywhere}
+.build-select{display:block;font-size:14px;line-height:1.8;color:var(--ink-soft)}
+#xBody .build-select select{display:block;width:100%;max-width:100%;min-width:0;min-height:44px;margin-top:8px;padding:10px 12px;border:1px solid var(--line);border-radius:6px;background:#fff;color:var(--ink);font-family:inherit;font-size:14px}
+#xMask .sub{line-height:1.8;overflow-wrap:anywhere}
+#xMask .mbtnrow{gap:12px;margin-top:20px}
+#xMask .mbtnrow .mbtn{flex:1 1 120px}
+#pSect #btnHomeBuild,#pSect #btnSectBuild{flex:1 1 120px}
+@media(max-width:360px){.family-actions .mbtn{flex-basis:100%}.build-card,.build-overview,.build-progress{padding:13px}.build-stat{padding:9px}}
+
 </style>
 </head>
 <body>
@@ -2457,11 +2495,13 @@ function advanceTimeCore(n){
   const days=Math.max(0,Math.min(Math.max(360,closeMaxMonths()*30),Math.round(num(n)*30)));
   if(S.elapsedDays==null||Math.floor(num(S.elapsedDays)/30)!==num(S.months)) S.elapsedDays=Math.round(num(S.months)*30);
   const p=S.player; let constructionTrainSum=0; let cost=0,starve=0,ticks=0,totalPay=0;S.sectPay=0;S.lingliLast=0;S.dutyLast=0;
+  const births=playerBirthSchedule();
+  const deliverBirths=()=>{for(const birth of births.get(S.elapsedDays)||[])withPlane(birth.plane,()=>{if(birth.o.alive!==false&&birth.o.preg===birth.preg)deliverFamilyBirth(birth.o,S.npcLifeQ=S.npcLifeQ||[]);});};
   for(let i=0;i<days;i++){
     if(S.estates)constructionTrainSum+=constructionAccrueDay();
     S.elapsedDays++;
     if(S.estates)constructionComplete(S.elapsedDays);
-    if(S.elapsedDays%30) continue;
+    if(S.elapsedDays%30){deliverBirths();continue;}
     ticks++;
     const per=S.descent?0:(inXianjie()?xianUpkeepDue():upkeepPerMonth());
     if(p.money>=per){p.money-=per;cost+=per;}
@@ -2475,6 +2515,7 @@ function advanceTimeCore(n){
     familyMonth(S.npcLifeQ=S.npcLifeQ||[]);
     tickNpcs(1);S.sectPay=0;sectTick(1);totalPay+=num(S.sectPay);if(S.court) courtTick();clanTick(1);tickDebts();relicMonth();
     if(S.planes) bgPlanesMonth(Math.floor(S.months/12)>beforeY);
+    deliverBirths(); // 年岁、月度NPC演化完成后再登记新生儿，不在出生当天多长一岁。
     if(S.estates)constructionEndMonth();
   }
   S.sectPay=totalPay;S.upkeepLast=cost;
@@ -4134,6 +4175,7 @@ function managementBlock(){
 function refreshManagementActions(){
   const blocked=!!managementBlock();
   document.querySelectorAll('[data-abandon-quest],[data-end-love],[data-end-relation],#discExpel').forEach(b=>b.disabled=blocked);
+  document.querySelectorAll('[data-intimacy]').forEach(b=>b.disabled=blocked||!!intimacyReason(b.dataset.intimacy));
 }
 function mentorshipRel(text){return /^(?:我的|主角的)?(?:亲传|记名|入室|嫡传)?(?:徒弟|徒儿|弟子|师父|师尊|师傅|恩师)(?:$|[，,（(])/.test(plain(text));}
 function relationshipExitKind(relation){
@@ -4241,7 +4283,7 @@ function addressFor(child,adult){
 }
 
 /* ================= 怀孕与子嗣 =================
-   月怀孕概率 = 8% × 女方孕率 × 男方生育力 × 感情系数 × 境界系数。
+   NPC按月、主角仅主动同房时判定；概率仍用原有2%基础及个体/年龄/境界/感情系数。
    18 岁起才判定；产后 12 个月不判定；多胞胎 1%。只出结果，不写过程。 */
 const PREG_BASE=0.02;   // 规范初值 8%，50 年样本里一对夫妻生十几个，P5 下调到 2%
 function personByName(name){ if(S.player&&S.player.name===name) return S.player; return findNpc(name); }
@@ -4271,6 +4313,72 @@ function pregChance(r){
   const realmMul=Math.min(realmFertMul(f),realmFertMul(m));
   const ageMul=num(f.age)>=35&&realmFertMul(f)>=0.8?0.5:1;   // 凡人与炼气的女子三十五岁后减半
   return PREG_BASE*fertOf(f)*fertOf(m)*loveMul(a,b)*realmMul*ageMul*togetherMul(r,a,b);
+}
+// 玩家主动安排的一夜：资格只读核对；受孕只在预演副本判一次。
+function intimacyPlace(n){
+  const here=plain(S.scene&&S.scene.location),there=plain(n&&n.location);
+  if(!here||S.inRealm||/战场|禁地|秘境|途中|路上|赶路|云游/.test(here))return false;
+  if((S.scene.present||[]).includes(n.name))return true;
+  if(!there)return false;
+  if(here===there||here.startsWith(there+'·')||there.startsWith(here+'·'))return true;
+  const home=t=>{const parts=t.split('·'),i=parts.findIndex(x=>/洞府|居$|宅$|府邸|别院/.test(x));return i<0?'':parts.slice(0,i+1).join('·');};
+  return !!home(here)&&home(here)===home(there);
+}
+function intimacyReason(name){
+  if(!S||!S.player||S.over||S._bg)return '当前无法安排';
+  const p=S.player,n=findNpc(name),r=n&&relOf(p.name,n.name);
+  if(!n||n.alive===false||p.alive===false)return '对方已不在此界或已经故去';
+  if(num(p.age)<18||num(n.age)<18)return '双方须年满十八岁';
+  if(!r||!['夫妻','妾室','恋人'].includes(r.type)||isKin(p,n))return '须为已有伴侣，且无亲属关系';
+  if(S.duelState||S.war||S.pendingAscend||S.xianJiePending||S.descent&&S.descent.forced)return '请先处理眼前的战事或渡界';
+  if(num(p.hp)<30||n.hp!=null&&num(n.hp)<30)return '伤势未愈，先安心休养';
+  if(!intimacyPlace(n))return '须先与对方在同一处安顿下来';
+  const f=p.gender==='女'?p:n.gender==='女'?n:null;
+  if(f&&f.preg)return '已有身孕，先安心待产';
+  if(f&&f.lastBirthDay!=null&&num(S.elapsedDays)-num(f.lastBirthDay)<360)return '产后休养未满一年';
+  return '';
+}
+function resolveIntimacy(name){
+  const why=intimacyReason(name);if(why)throw new Error(why);
+  const p=S.player,n=findNpc(name),r=relOf(p.name,n.name),chance=pregChance(r),day=num(S.elapsedDays)+1;
+  const conceived=chance>0&&Math.random()<chance;
+  const f=p.gender==='女'?p:n,m=f===p?n:p;
+  if(conceived){f.preg={with:m.name,since:day,due:day+300,source:'player-intimacy'};lifeLog(f,`有孕（${m.name}的骨肉）`);ledger(`${f.name}有孕，是${m.name}的骨肉；满十个月后生产`);}
+  // 单独记录本次安排，不覆盖人物原有往来、婚史或物品说明。
+  S.intimacyLog=S.intimacyLog||[];S.intimacyLog.push({day,plane:curPlane(),with:n.name,conceived,due:conceived?day+300:null});
+  return {with:n.name,conceived,mother:conceived?f.name:null,due:conceived?day+300:null};
+}
+function playerBirthSchedule(){
+  const out=new Map(),me=playerName(),start=num(S.elapsedDays);
+  const add=(o,plane)=>{if(!o||o.alive===false||!o.preg||o.preg.source!=='player-intimacy'||!(o.name===me||o.preg.with===me))return;
+    const day=Math.max(start+1,num(o.preg.due));if(!out.has(day))out.set(day,[]);out.get(day).push({o,plane,preg:o.preg});};
+  add(S.player,curPlane());for(const pl of [curPlane(),...Object.keys(S.planes||{})])for(const o of planeNpcs(pl))add(o,pl);
+  return out;
+}
+function deliverFamilyBirth(o,q){
+  const oldDate=S.date,precise=o.preg&&o.preg.source==='player-intimacy';
+  if(precise){const day=num(S.elapsedDays)%30;S.date=dateOf(S.ganzhi||0,Math.floor(num(S.elapsedDays)/30))+' · '+(day<10?'上旬':day<20?'中旬':'下旬');}
+  try{const kids=childBirth(o),me=playerName();
+    for(const k of kids){const mine=k.parents.father===me||k.parents.mother===me,txt=`${o.name}生下了${k.gender==='男'?'儿子':'女儿'}${k.name}`;
+      if(mine){ledger(txt+`（${k.legit}）`);S.stats.kids=num(S.stats.kids)+1;}
+      lifeEvent(q,mine?10:closeness(o)*3,txt,[o.name,k.name]);}
+  }finally{if(precise)S.date=oldDate;}
+}
+function intimacyBlock(judge){
+  const result=judge&&judge.intimacyResult;
+  if(result)return `- 本回是与${result.with}彼此愿意的一夜相伴。只以灯影、交谈和次晨写一小段含蓄相处，亲密处镜头淡出，不描写性行为细节，再接回次晨剧情；全回只过一天，不跳十个月。受孕由引擎独立判定，天命、自由度和正文均不能改变：${result.conceived?result.mother+'本次受孕，须再过完整300天才能生产，今夜绝无婴儿出生':'本次未受孕，不可写怀孕或生产'}。\n`;
+  const me=playerName();
+  return relsOfName(me).some(r=>['夫妻','妾室','恋人'].includes(r.type))?'- 主角的受孕只由主动同房触发，普通日常、同修或长闭关不会自动受孕。已有孕期照原账到期生产；没有引擎出生事件，不得补写主角新生子女。\n':'';
+}
+function intimacyActionTarget(action){
+  const t=String(action||'');if(!/同房|共度良宵/.test(t)||/不要|不愿|不想|拒绝|不再|未曾|回忆|曾经|当年|昨夜|昨晚|如果|若能|想起/.test(t))return '';
+  const hits=relsOfName(playerName()).filter(r=>['夫妻','妾室','恋人'].includes(r.type)).map(r=>relOther(r,playerName())).filter(n=>t.includes(n));
+  return hits.length===1?hits[0]:'';
+}
+function requestIntimacy(name){
+  const blocked=managementBlock()||intimacyReason(name);if(blocked){toast(blocked);return;}
+  const action='今夜与'+name+'同房，相伴一夜，次晨再续眼前生活';
+  act(action,{type:'normal',days:1,intimacy:name});
 }
 const KID_M=['承','安','远','明','泽','骁','言','砚','川','衡','行','知','叙','朗','景'];
 const KID_F=['宁','瑶','清','婉','岚','若','柔','曦','念','绾','棠','芷','溪','音','禾'];
@@ -4318,14 +4426,9 @@ function familyMonthCore(q){
   // 生产
   for(const o of (S._bg?[]:[S.player]).concat(S.npcs)){
     if(!o||o.alive===false||!o.preg) continue;
+    if(o.preg.source==='player-intimacy')continue; // 新孕期由日历到期队列处理，旧孕期沿用月度结算。
     if(day>=num(o.preg.due)){
-      const kids=childBirth(o), me=playerName();
-      for(const k of kids){
-        const mine=k.parents.father===me||k.parents.mother===me;
-        const txt=`${o.name}生下了${k.gender==='男'?'儿子':'女儿'}${k.name}`;
-        if(mine){ ledger(txt+`（${k.legit}）`); S.stats.kids=num(S.stats.kids)+1; }
-        lifeEvent(q,mine?10:closeness(o)*3,txt,[o.name,k.name]);
-      }
+      deliverFamilyBirth(o,q);
     }
   }
   // 成了亲属或姻亲的旧恋情，当月就断
@@ -4337,6 +4440,7 @@ function familyMonthCore(q){
   // 受孕：只看夫妻、妾室、恋人三种边
   for(const r of rels()){
     if(!['夫妻','妾室','恋人'].includes(r.type)) continue;
+    if(r.a===playerName()||r.b===playerName())continue; // 主角只在主动同房的预演中受孕，闭关不补做。
     const pc=pregChance(r); if(!pc||Math.random()>=pc) continue;
     const a=personByName(r.a), b=personByName(r.b), f=a.gender==='女'?a:b, m=f===a?b:a;
     f.preg={with:m.name,since:day,due:day+300};
@@ -5340,22 +5444,33 @@ function cultHtml(p){
     <div style="display:flex;gap:8px;margin-top:8px"><button class="mbtn" id="btnClose" style="flex:1">闭关</button>${S.xianJiePending?`<button class="mbtn primary" id="btnBreak" style="flex:1">渡仙劫</button>`:`<button class="mbtn ${bn&&!cd?'primary':''}" id="btnBreak" style="flex:1" ${(bn||canForce(p))&&!cd?'':'disabled'}>${!bn&&canForce(p)?'强冲':'冲关'}</button>`}</div>`;
   return h;
 }
+function familyPartnerCards(){
+  const me=playerName(),seen=new Set(),entries=relsOfName(me).filter(r=>['夫妻','妾室','恋人'].includes(r.type)).map(r=>({r,n:findNpc(relOther(r,me))})).filter(x=>x.n&&!seen.has(x.n.name)&&seen.add(x.n.name));
+  if(!entries.length)return '<div class="empty">尚无伴侣</div>';
+  return '<div class="family-partners">'+entries.map(({n,r})=>{const why=intimacyReason(n.name),blocked=managementBlock()||why,role=r.type==='夫妻'?'正室':r.type;
+    const f=S.player.gender==='女'?S.player:n.gender==='女'?n:null;
+    const status=n.alive===false?'已经故去':f&&f.preg?'已有身孕 · 待产中':why||'相聚在此 · 同房耗时一天';
+    return `<article class="family-partner ${n.alive===false?'partner-gone':''}"><div class="family-partner-head">${avatarFace(n)}<div class="family-partner-name"><button class="flink" data-family-person="${esc(n.name)}">${esc(n.name)}</button><span class="family-role">${role}</span><div class="panel-note">${esc(status)}</div></div></div>${n.alive!==false?`<div class="family-actions"><button class="mbtn primary" data-intimacy="${esc(n.name)}" ${blocked?'disabled':''}>同房</button><button class="mbtn" data-family-person="${esc(n.name)}">查看人物</button></div>`:''}</article>`;
+  }).join('')+'</div><p class="panel-note family-planning-note">主动同房才判定受孕，成功后满十个月生产。沿用年龄、境界与个体生育率，高境界较难有子嗣；长闭关不会自动受孕。</p>';
+}
+
 function renderFamily(){
   const me=playerName(); if(!me||!$('fLove')) return;
   const L=loveSheet(me);
   const concub=relsOfName(me).filter(r=>r.type==='妾室');
   const face=name=>{ const n=findNpc(name); return n?`<span class="flink" data-n="${esc(name)}">${esc(name)}</span>${n.alive===false?'〔已故〕':''}`:esc(name); };
   const hist=relsOfName(me).filter(r=>r.history.some(h=>/成婚|结为夫妻|纳为|走到了一起|私情|断了|和离|解除婚姻|解除妾室|结束恋情|解除婚约/.test(h.text)));
-  let h=`<div class="nrow"><b>正室</b><span>${L.spouse?face(L.spouse)+'　'+esc((relOf(me,L.spouse)||{}).since||''):'无'}</span></div>`;
-  h+=`<div class="nrow"><b>妾室</b><span>${concub.length?concub.map(r=>face(relOther(r,me))+'（'+esc(r.since)+'）').join('、'):'无'}</span></div>`;
-  h+=`<div class="nrow"><b>恋人</b><span>${L.lovers.length?L.lovers.map(x=>face(x.with)).join('、')+(L.affair?'　<small style="color:#9B4A3C">有正室在，这是私情</small>':''):'无'}</span></div>`;
+  let h='';
   const preg=[S.player].concat(S.npcs).filter(o=>o&&o.alive!==false&&o.preg&&(o.name===me||o.preg.with===me));
-  if(preg.length) h+=`<div class="nrow"><b>有孕</b><span>${preg.map(o=>`${esc(o.name)}（约 ${Math.max(1,Math.ceil((num(o.preg.due)-num(S.elapsedDays))/30))} 个月后生产）`).join('、')}</span></div>`;
-  if(hist.length) h+=`<div class="idesc" style="margin-top:6px">${hist.flatMap(r=>r.history.filter(x=>/成婚|结为夫妻|纳为|走到了一起|私情|断了|和离|解除婚姻|解除妾室|结束恋情|解除婚约/.test(x.text)).map(x=>esc(x.date+'　'+x.text))).slice(-8).join('<br>')}</div>`;
+  if(preg.length)h+=preg.map(o=>`<div class="family-pregnancy"><strong>${esc(o.name)} · 已有身孕</strong>距预产期尚有 ${Math.max(0,num(o.preg.due)-num(S.elapsedDays))} 天，约 ${Math.max(0,Math.ceil((num(o.preg.due)-num(S.elapsedDays))/30))} 个月。<div class="panel-note">孕期按实际游戏时间推进，闭关也只结算这次已记录的孕期。</div></div>`).join('');
+  h+=familyPartnerCards();
+  if(hist.length) h+=`<details class="panel-details"><summary>婚恋往事</summary>${hist.flatMap(r=>r.history.filter(x=>/成婚|结为夫妻|纳为|走到了一起|私情|断了|和离|解除婚姻|解除妾室|结束恋情|解除婚约/.test(x.text)).map(x=>esc(x.date+'　'+x.text))).slice(-8).join('<br>')}</details>`;
   if(num(S.player.age)<18) h+='<div class="note">不满十八，还不能婚嫁。</div>';
   const exits=S.npcs.flatMap(n=>relationActions(n).filter(a=>a.kind==='romance').map(a=>({n,a})));
   if(exits.length)h+='<div class="mbtnrow">'+exits.map(({n,a})=>`<button class="mbtn" data-end-love="${esc(n.name)}" ${managementBlock()?'disabled':''}>${esc(n.name)} · ${esc(a.label)}</button>`).join('')+'</div>';
   $('fLove').innerHTML=h;
+  $('fLove').querySelectorAll('[data-intimacy]').forEach(b=>b.onclick=()=>requestIntimacy(b.dataset.intimacy));
+  $('fLove').querySelectorAll('[data-family-person]').forEach(b=>b.onclick=()=>{const n=findNpc(b.dataset.familyPerson);if(n)showNpc(n);});
   $('fLove').querySelectorAll('[data-end-love]').forEach(b=>b.onclick=()=>requestEndRelation(b.dataset.endLove,'romance'));
   const kids=S.npcs.filter(n=>n.parents&&(n.parents.father===me||n.parents.mother===me));
   const head=L.spouse?findNpc(L.spouse):null;
@@ -7282,7 +7397,9 @@ ${(S.facts||[]).filter(f=>[action||'',...asArr(S.scene&&S.scene.unresolved),...a
 
 function judgeBlock(judge){
   const f=fateInfo(judge.fate);
+  const intimacyResult=judge.intimacyResult||S.pending&&S.pending.forecast&&S.pending.forecast.time.intimacyResult;
   let s=judge.convo?`- 天命骰：无（谈话余波不掷骰）\n`:`- 天命骰：${judge.fate}（${f.label}）——${fdm().freeAct?(judge.fate>=15?f.desc:'本局言出法随：这点背运只落在旁枝琐事上，玩家写下的事照样办成'):f.desc}\n`;
+  s+=intimacyBlock(Object.assign({},judge,{intimacyResult}));
   if(judge.pauseFocus)s+='- 玩家已明确放弃/拒绝当前事项；只写退出与相关人物反应，不许继续催他接案。用worldUpdates将相应事件搁置，scene.unresolved移除这些事项：'+judge.pauseFocus.join('；')+'\n';
   if(judge.recap) s+='- 本回是玩家对上一回（或刚过去那段时间）的补述、总述：时间不推进；上一回已经结算过的修为、灵石、物品、贡献、好感不再结算一次；补述里新出现的结果（新神通、新物品、新消息）照常写进结算。\n';
   // 重复只在玩家当前行动内处理
@@ -8799,6 +8916,14 @@ function toNum(v){ if(typeof v==='number') return Number.isFinite(v)?v:null; if(
 function validateTurn(d,action,judge,state,opt){
   return withSocialIndexes(()=>validateTurnCore(d,action,judge,state,opt));
 }
+function guardPlayerNewborns(d,judge,state){
+  const me=state.player.name,known=new Set((state.npcs||[]).map(n=>n.name));
+  const keep=n=>{if(!n||known.has(plain(n.name)))return true;
+    const mine=n.parents&&(n.parents.father===me||n.parents.mother===me)||/^(?:儿子|女儿|子嗣|亲生儿子|亲生女儿)$/.test(plain(n.relation));
+    const newborn=toNum(n.age)===0||/新生|襁褓|刚出生/.test(String(n.identity||'')+' '+String(n.appearance||''));
+    if(mine&&(judge.intimacy||newborn)){d.fixNotes=d.fixNotes||[];d.fixNotes.push('新生子嗣须由孕期引擎到期登记，未收下模型新增的'+plain(n.name));return false;}return true;};
+  d.newNpcs=d.newNpcs.filter(keep);d.npcUpdates=d.npcUpdates.filter(keep);
+}
 function validateTurnCore(d,action,judge,state,opt){
   /* 10-08：和引擎对不上的地方一律以引擎为准就地改掉，不再退回重写（重写太伤体验）。
      只有缺正文、不是对象这种没法收的才抛错。fixNotes 会显示在起居注里，让玩家知道引擎改了什么。 */
@@ -8831,6 +8956,7 @@ function validateTurnCore(d,action,judge,state,opt){
   if(d.newWorldEvents.length>1) d.newWorldEvents=d.newWorldEvents.slice(0,1);
   for(const k of ['npcUpdates','questUpdates','newQuests','rankingUpdates','rankingAdd','factionUpdates','newVendettas','taughtNpc','worldUpdates','newWorldEvents','options','newNpcs'])
     d[k]=d[k].filter(x=>x&&typeof x==='object'&&!Array.isArray(x));
+  guardPlayerNewborns(d,judge,state);
   const names=new Set((state.npcs||[]).map(n=>n.name));
   // 仙界 X3：另一界的人这回不能出场。好感、新人、仇家、在场、斗法、面谈里写到了，一律拿掉
   const elsewhere=new Set(); for(const k in (state.planes||{})) for(const n of ((state.planes[k]&&state.planes[k].npcs)||[])) if(n&&n.name&&!names.has(n.name)) elsewhere.add(n.name);
@@ -9146,9 +9272,11 @@ function forecastTurn(state,judge,action){
   try{
     worldState();
     if(staged.player) staged.player.cultMode=judge.cult||'日常';
+    const intimacy=judge.intimacy?resolveIntimacy(judge.intimacy):null;
     if(judge&&judge.courtDuty&&staged.court&&staged.court.duty&&staged.court.duty.id===judge.courtDuty) staged.court.duty.taken=true;
-    const time=advanceTime(judge.months==null?1:judge.months);
+    const time=advanceTime(judge.intimacy?1/30:judge.months==null?1:judge.months);
     recordWorldTurn({newWorldEvents:[],worldUpdates:[],npcEvents:[],rumors:[]},action,judge);
+    if(intimacy)time.intimacyResult=intimacy;
     return {state:staged,time};
   }finally{S=owner;}
 }
@@ -11839,28 +11967,30 @@ function openConstruction(mode){
   const t=constructionSect(),r=constructionRealm(curPlane()),h=r&&r.home,b=constructionSectRecord(t);
   if(mode!=='home'&&!t){toast('需要先加入本界宗门');return;}
   const owner=mode==='home'?h:b,frame=constructionFrame(curPlane());
-  let body='<div class="note">只收一次建设费，不另收维护费，不消耗背包物品。每级价格为本次费用，需逐级修建；工期按游戏时间推进。</div>';
+  let body='<div class="construction-panel"><p class="panel-note">一次支付建设费，无额外维护费；不消耗背包物品。逐级修建，随游戏时间推进。</p>';
   if(mode==='home'){
-    body+=`<div class="idesc" style="margin:10px 0">${h?esc(h.location):'每界一处养成洞府，首次开工选定地点。首版不支持迁址。'}</div>`;
-    if(!h)body+=`<label>洞府选址 <select id="buildHomeSite"><option value="current">当前安全地点</option>${t?`<option value="sect">${esc(t.name)}驻地内（可共享宗门聚灵阵）</option>`:''}</select></label>`;
-    const base=monthlyLingli(S.player,{mode:'闭关',gongfa:gongfaMult(S.player)*(num(S.player.cultMul)||1),aura:auraOf(),partner:partnerMul(S.player)});
-    body+=`<div class="note" style="margin-top:10px">按当前地点：原有闭关每月约 ${Math.round(base*100)/100}，洞府 +${Math.round(num(frame.home)*100)}%、宗门聚灵阵 +${Math.round(num(frame.array)*100)}%；封顶后设施额外 ${Math.round(frame.player*100)}%，合计约 ${Math.round(base*(1+frame.player)*100)/100}。洞府与同地宗门阵法相加，最多额外50%。${h&&!constructionHomeHere(h)?'目前不在可使用的洞府内，洞府加成未生效。':''}</div>`;
-  }else body+=`<div class="idesc" style="margin:10px 0">${esc(t.name)} · ${esc(b&&b.location||t.site)} · 势力 ${num(t.f.power)}<br>${t.leader?'可选宗门公账或个人出资':'个人赞建，设施归宗门；不授予宗主权限或贡献'}。门人培养最多额外60%，主角不重复领取门人培养加成。</div>`;
-  if(owner&&owner.project)body+=`<div class="note" style="margin:10px 0">${esc(constructionStatus(owner))}<br>升级期间原等级继续生效；开工后不退款。<button class="mbtn" id="buildPause" style="margin-top:7px">${owner.project.paused?'恢复工程':'暂停工程'}</button></div>`;
-  const kinds=mode==='home'?['home']:['array','library','arena'];
-  for(const kind of kinds){
+    body+=`<section class="build-overview"><h4>${h?esc(h.location):'开辟一处养成洞府'}</h4>`;
+    if(!h)body+=`<label class="build-select">选择洞府地点<select id="buildHomeSite"><option value="current">当前安全地点</option>${t?`<option value="sect">${esc(t.name)}驻地内（可共享聚灵阵）</option>`:''}</select></label><p class="panel-note">每界一处，首次开工选定；本版不支持迁址。</p>`;
+    const base=monthlyLingli(S.player,{mode:'闭关',gongfa:gongfaMult(S.player)*(num(S.player.cultMul)||1),aura:auraOf(),partner:partnerMul(S.player)}),fmt=v=>Math.round(v*100)/100;
+    body+=`<div class="build-stats"><div class="build-stat"><small>原有闭关 · 每月</small><b>${fmt(base)}</b></div><div class="build-stat"><small>当前生效 · 每月</small><b>${fmt(base*(1+frame.player))}</b></div></div><div class="build-details">洞府 +${Math.round(num(frame.home)*100)}%　聚灵阵 +${Math.round(num(frame.array)*100)}%<br>设施合计额外 ${Math.round(frame.player*100)}%，上限50%。${h&&!constructionHomeHere(h)?'<br>目前未在洞府内，洞府加成未生效。':''}</div></section>`;
+  }else body+=`<section class="build-overview"><h4>${esc(t.name)}</h4><div class="build-details">${esc(b&&b.location||t.site)} · 势力 ${num(t.f.power)}</div><p class="panel-note">${t.leader?'可选现有宗门公账或个人出资。':'个人赞建，设施归宗门，不授予宗主权限或贡献。'}门人培养额外加成最多60%，主角不重复领取。</p></section>`;
+  if(owner&&owner.project)body+=`<section class="build-progress"><div class="build-effect">${esc(constructionStatus(owner))}</div><p class="panel-note">升级期间原等级继续生效；开工后不退款。</p><button class="mbtn" id="buildPause">${owner.project.paused?'恢复工程':'暂停工程'}</button></section>`;
+  for(const kind of mode==='home'?['home']:['array','library','arena']){
     const lv=kind==='home'?num(h&&h.level):num(b&&b.levels[kind]);
-    body+=`<div class="artrow"><b>${BUILD_NAMES[kind]} · ${lv}级</b><div class="idesc">${constructionEffectText(kind,lv)}</div>`;
-    if(lv<5)body+=`<div class="idesc">下一级：${BUILD_COST[curPlane()][kind][lv]} ${moneyUnit()} · 工期 ${durationText(BUILD_MONTHS[curPlane()][kind][lv])}<br>${constructionEffectText(kind,lv+1)}</div><button class="mbtn" data-build="${kind}" style="margin-top:7px" ${owner&&owner.project?'disabled':''}>查看升级与开工</button>`;
-    else body+='<div class="idesc">已达五级</div>';
-    body+='</div>';
+    body+=`<section class="build-card"><h4>${BUILD_NAMES[kind]} <span class="family-role">${lv}级</span></h4><div class="build-effect">${constructionEffectText(kind,lv)}</div>`;
+    if(lv<5)body+=`<div class="build-next"><span>下一级 ${BUILD_COST[curPlane()][kind][lv]} ${moneyUnit()}</span><span>工期 ${durationText(BUILD_MONTHS[curPlane()][kind][lv])}</span></div><div class="panel-note">完工后：${constructionEffectText(kind,lv+1)}</div><button class="mbtn" data-build="${kind}" ${owner&&owner.project?'disabled':''}>查看升级与开工</button>`;
+    else body+='<div class="panel-note">已达五级</div>';
+    body+='</section>';
   }
-  if(mode==='home'&&h)body+=`<button class="mbtn" id="buildGoHome" ${constructionHomeHere(h)?'disabled':''}>返回洞府</button>`;
-  if(mode!=='home'&&b)body+=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="mbtn" id="buildGoLibrary">前往藏经阁</button><button class="mbtn" id="buildGoArena">前往演武场</button></div>`;
-  if(mode!=='home'&&b&&S.player.arts&&S.player.arts.length)body+=`<div style="margin-top:10px"><label>演练已学功法 <select id="buildTrainArt">${S.player.arts.map((a,i)=>`<option value="${i}">${esc(a.name)} · 熟练${num(a.level)}</option>`).join('')}</select></label><button class="mbtn" id="buildTrain" style="margin-top:7px" ${frame.train?'':'disabled'}>在演武场修炼一个月</button><div class="note">需先到演武场；从行囊选择已持有的功法玉简，可在藏经阁参悟。</div></div>`;
-  body+='<div class="note" style="margin-top:10px">前往设施是正常行动，不会通过查看面板瞬移。人界设施不加速仙元；离山、退宗和不合资格时不生效。离界后工程继续；门人沿用原有演化规则。</div>';
-  if(owner&&S.estates){const logs=S.estates.history.filter(x=>x.owner===owner.id);if(logs.length)body+=`<details style="margin-top:10px"><summary>建设记录（${logs.length}条）</summary>${logs.map(x=>`<div class="idesc">${esc(dateOf(S.ganzhi,Math.floor(x.day/30)))} · ${BUILD_NAMES[x.kind]||''}${esc(x.event)}${x.level?'，'+x.level+'级':''}${x.project?'，费用'+x.project.cost+' '+moneyUnit()+'（个人'+x.project.personal+'，公账'+x.project.public+'）':''}</div>`).join('')}</details>`;}
-  xModal(mode==='home'?'洞府建设':t.leader?'宗门建设':'个人赞建',curPlane()+' · 当前余额 '+S.player.money+' '+moneyUnit(),body,[{text:'关闭'}]);
+  if(mode==='home'&&h)body+=`<div class="panel-actions"><button class="mbtn" id="buildGoHome" ${constructionHomeHere(h)?'disabled':''}>返回洞府</button></div>`;
+  if(mode!=='home'&&b){
+    body+='<div class="panel-actions"><button class="mbtn" id="buildGoLibrary">前往藏经阁</button><button class="mbtn" id="buildGoArena">前往演武场</button></div>';
+    if(S.player.arts&&S.player.arts.length)body+=`<section class="build-card"><h4>演练已学功法</h4><label class="build-select">选择功法<select id="buildTrainArt">${S.player.arts.map((a,i)=>`<option value="${i}">${esc(a.name)} · 熟练${num(a.level)}</option>`).join('')}</select></label><button class="mbtn" id="buildTrain" ${frame.train?'':'disabled'}>在演武场修炼一个月</button><p class="panel-note">需先到演武场；藏经阁参悟请从行囊选择已有功法玉简。</p></section>`;
+  }
+  body+='<details class="panel-details"><summary>设施使用范围</summary><p>前往设施是正常行动。人界设施不加速仙元；离山、退宗或不合资格时不生效。离界后工程继续，门人沿用原有演化规则。</p></details>';
+  if(owner&&S.estates){const logs=S.estates.history.filter(x=>x.owner===owner.id);if(logs.length)body+=`<details class="panel-details"><summary>建设记录（${logs.length}条）</summary>${logs.map(x=>`<div class="build-details">${esc(dateOf(S.ganzhi,Math.floor(x.day/30)))} · ${BUILD_NAMES[x.kind]||''}${esc(x.event)}${x.level?'，'+x.level+'级':''}${x.project?'，费用'+x.project.cost+' '+moneyUnit()+'（个人'+x.project.personal+'，公账'+x.project.public+'）':''}</div>`).join('')}</details>`;}
+  body+='</div>';
+  xModal(mode==='home'?'洞府建设':t.leader?'宗门建设':'个人赞建',curPlane()+' · 余额 '+S.player.money+' '+moneyUnit(),body,[{text:'关闭'}]);
   document.querySelectorAll('#xBody button[data-build]').forEach(btn=>btn.onclick=()=>{const site=$('buildHomeSite');openConstructionConfirm(btn.dataset.build,{site:site?site.value:'current'});});
   if($('buildPause'))$('buildPause').onclick=()=>{const result=constructionPause(owner.project.kind);toast(result.ok?(result.paused?'工程已暂停':'工程已恢复'):result.why);if(result.ok)constructionRefresh();openConstruction(mode);};
   const travel=(place)=>{if(S.inRealm){toast('先离开秘境');return;}$('xMask').classList.remove('on');act('返回'+place+'，在此安顿下来',{type:'normal',months:1/30,text:'前往设施'});};
@@ -11875,12 +12005,11 @@ function openConstructionConfirm(kind,opts){
   if(!opts.source)opts.source=kind!=='home'&&t&&t.leader&&(t.c||t.f).treasury!=null?'treasury':'personal';
   const q=constructionQuote(kind,opts),r=constructionRealm(curPlane()),b=kind==='home'?r&&r.home:constructionSectRecord(t),lv=b?(kind==='home'?num(b.level):num(b.levels[kind])):0;
   const cost=BUILD_COST[curPlane()][kind][lv],months=BUILD_MONTHS[curPlane()][kind][lv];
-  let body=`<div class="note">${BUILD_NAMES[kind]} ${lv} → ${lv+1}级<br>本次费用 ${cost} ${moneyUnit()} · 工期 ${durationText(months)}<br>${constructionEffectText(kind,lv+1)}</div>`;
-  if(kind!=='home'&&t&&t.leader){
-    const bank=t.c||t.f;
-    body+=`<label style="display:block;margin-top:10px">付款来源 <select id="buildFunding"><option value="personal" ${opts.source==='personal'?'selected':''}>个人出资</option>${bank.treasury!=null?`<option value="treasury" ${opts.source==='treasury'?'selected':''}>仅公账（现有${num(bank.treasury)}）</option><option value="mixed" ${opts.source==='mixed'?'selected':''}>公账优先，个人明确补足</option>`:''}</select></label>`;
+  let body=`<div class="construction-panel"><section class="build-overview"><h4>${BUILD_NAMES[kind]} ${lv} → ${lv+1}级</h4><div class="build-stats"><div class="build-stat"><small>本次费用 · ${moneyUnit()}</small><b>${cost}</b></div><div class="build-stat"><small>修建时间</small><b>${durationText(months)}</b></div></div><div class="build-effect">${constructionEffectText(kind,lv+1)}</div></section>`;
+  if(kind!=='home'&&t&&t.leader){const bank=t.c||t.f;
+    body+=`<label class="build-select">付款来源<select id="buildFunding"><option value="personal" ${opts.source==='personal'?'selected':''}>个人出资</option>${bank.treasury!=null?`<option value="treasury" ${opts.source==='treasury'?'selected':''}>仅公账（现有${num(bank.treasury)}）</option><option value="mixed" ${opts.source==='mixed'?'selected':''}>公账优先，个人明确补足</option>`:''}</select></label>`;
   }
-  body+=`<div class="idesc" style="margin-top:10px">${q.ok?'地点：'+esc(q.location)+'<br>个人支付 '+q.personalAmount+'，公账支付 '+q.publicAmount:esc(q.why)}</div><div class="note" style="margin-top:10px">确认后立即扣本次工费，管理操作不推进时间。实际经过游戏时间才施工；旧等级继续生效，完工后按实际使用时段计算新加成。开工后不支持取消退款，可暂停、恢复。${kind==='home'&&!b?'本界仅此一处养成洞府，首版不支持迁址。':''}</div>`;
+  body+=`<div class="build-details">${q.ok?'地点：'+esc(q.location)+'<br>个人支付 '+q.personalAmount+'，公账支付 '+q.publicAmount:esc(q.why)}</div><p class="panel-note">确认后立即扣款，管理操作不推进时间。工程按实际游戏时间修建，旧级加成持续生效；完工后按使用时段计算新加成。开工后不退款，可暂停、恢复。${kind==='home'&&!b?'每界一处洞府，本版不支持迁址。':''}</p></div>`;
   xModal('确认开工',BUILD_NAMES[kind]+' · '+curPlane(),body,[{text:'返回',fn:()=>openConstruction(kind==='home'?'home':'sect')},{text:'支付并开工',primary:true,disabled:!q.ok,fn:()=>{
     if(S!==ownerState||busy){toast('状态已变化，请重新打开建设面板');return;}
     const result=constructionStart(kind,opts,q);toast(result.ok?'工程已开工，随游戏时间推进':result.why);if(result.ok)constructionRefresh();openConstruction(kind==='home'?'home':'sect');
@@ -13161,6 +13290,7 @@ function makeJudge(opt,action){
   if(stuck>=0.5){ judge.stuck=Math.round(stuck*100); judge.nudge=pickNudge(); }
   if(fateDire(judge.fate)&&(S.player.eggFx||{}).direBoon) judge.boon=S.player.eggFx.direBoon;   // 苏铭、李火旺：大凶反成机缘
   else if(fateDire(judge.fate)&&fdm().doom>0) judge.doom=makeDoom();
+  if(opt&&opt.intimacy){judge.intimacy=opt.intimacy;judge.months=1/30;judge.cult='日常';judge.worldEvent=null;}
   if(opt&&opt.debtId) judge.debtId=opt.debtId;
   if(opt&&opt.reunion) judge.reunion=opt.reunion;
   if(opt&&opt.courtMission){ judge.courtMission=opt.courtMission; judge.missionTarget=opt.duel.opponent; }
@@ -13343,6 +13473,8 @@ async function act(action, opt){
   if(S.pendingAscend){ toast('接引之光已经落下：先做临行安排，或者直接飞升'); renderOptions([]); return; }
   if(S.descent&&S.descent.forced){ toast('界力催逼，留不住了'); renderOptions([]); return; }
   if(S.xianJiePending){ toast('仙劫临身，先渡劫'); renderOptions([]); return; }
+  if(!opt){const target=intimacyActionTarget(action);if(target)opt={type:'normal',days:1,intimacy:target};}
+  if(opt&&opt.intimacy){const why=managementBlock()||intimacyReason(opt.intimacy);if(why){toast(why);return;}}
   if(!opt) opt=matchCourtAction(action);
   if(opt&&opt.descend){ await descendFlow(); return; }
   if(opt&&opt.returnUp){ await returnFlow(); return; }
@@ -13891,7 +14023,7 @@ async function runTurn(action, judge, extra){
     owner.pending=pending;saveGame();
     S=pending.forecast.state;
     let prompt,itemContext;
-    try{itemContext=makeItemContext(S,action);prompt=extra.warData?warAftermathPrompt(action,judge,extra.warData,itemContext):extra.duelData?duelAftermathPrompt(action,judge,extra.duelData,itemContext):turnPrompt(action,judge,itemContext);}
+    try{itemContext=makeItemContext(S,action);const promptJudge=pending.forecast.time.intimacyResult?Object.assign({},judge,{intimacyResult:pending.forecast.time.intimacyResult}):judge;prompt=extra.warData?warAftermathPrompt(action,judge,extra.warData,itemContext):extra.duelData?duelAftermathPrompt(action,judge,extra.duelData,itemContext):turnPrompt(action,promptJudge,itemContext);}
     finally{S=owner;}
     const consumedNews=(pending.forecast.state.engineNews||[]).slice();
     const noLen=fdm().freeAct&&/\d\s*字|字数|篇幅|长一点|短一点|写长|写短|详细|详写|简短/.test(parenReqs(action).join(' '));
