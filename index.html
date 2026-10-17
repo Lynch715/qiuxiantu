@@ -4366,7 +4366,7 @@ function deliverFamilyBirth(o,q){
 }
 function intimacyBlock(judge){
   const result=judge&&judge.intimacyResult;
-  if(result)return `- 本回是与${result.with}彼此愿意的一夜相伴。只以灯影、交谈和次晨写一小段含蓄相处，亲密处镜头淡出，不描写性行为细节，再接回次晨剧情；全回只过一天，不跳十个月。受孕由引擎独立判定，天命、自由度和正文均不能改变：${result.conceived?result.mother+'本次受孕，须再过完整300天才能生产，今夜绝无婴儿出生':'本次未受孕，不可写怀孕或生产'}。\n`;
+  if(result)return `- 本回是与${result.with}两位成年伴侣彼此愿意的一夜相伴。感情表达可以直白：结合两人的性格与过往，写出具体对白、拥抱或亲吻，以及双方的回应和心绪，让相处有来有往、有关系进展；不要只用灯影、熄灯和次晨一笔带过。不描写性行为、私密部位或露骨细节，之后自然衔接次晨剧情；全回只过一天，不跳十个月。受孕由引擎独立判定，天命、自由度和正文均不能改变：${result.conceived?result.mother+'本次受孕，须再过完整300天才能生产，今夜绝无婴儿出生':'本次未受孕，不可写怀孕或生产'}。\n`;
   const me=playerName();
   return relsOfName(me).some(r=>['夫妻','妾室','恋人'].includes(r.type))?'- 主角的受孕只由主动同房触发，普通日常、同修或长闭关不会自动受孕。已有孕期照原账到期生产；没有引擎出生事件，不得补写主角新生子女。\n':'';
 }
