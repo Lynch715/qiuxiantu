@@ -34,13 +34,13 @@ async function main(){
   async function test(name,fn){await fn();passed++;console.log('✓ '+name);}
   const {BASE,UP}=require('./xjv2-env.cjs');
   const setup=file=>{const e=engine(file);e.run(BASE);e.run(UP);return e;};
-  await test('只允许四个提示词函数改变，所有现有结算/演化/读取函数保持原样',()=>{
-    const a=setup(baseline),b=setup(current),allowed=new Set(['familyBlock','stateBlocksCore','turnPrompt','questContext']),changed=[];
+  await test('提示词压缩边界保留；建设功能仅接入列明的十个原有函数',()=>{
+    const a=setup(baseline),b=setup(current),promptChanges=['familyBlock','stateBlocksCore','turnPrompt','questContext'],constructionHooks=['advanceTime','advanceTimeCore','cultivateMonth','npcCultivateMonth','clanMonth','studyRoll','applyTurn','openClose','cultHtml','renderPanel'],allowed=new Set([...promptChanges,...constructionHooks]),changed=[];
     for(const [,name]of fs.readFileSync(baseline,'utf8').matchAll(/^(?:async )?function (\w+)\(/gm)){
       let old,now;try{old=a.run(name+'.toString()');now=b.run(name+'.toString()');}catch{continue;}
       if(old!==now){changed.push(name);assert(allowed.has(name),'unexpected change: '+name);}
     }
-    assert.equal(changed.length,4);results.push({changedExistingFunctions:changed});
+    assert.deepEqual(changed.filter(n=>promptChanges.includes(n)).sort(),promptChanges.slice().sort());assert.deepEqual(changed.filter(n=>!promptChanges.includes(n)).sort(),constructionHooks.filter(n=>n!=='renderPanel').sort());results.push({changedExistingFunctions:changed});
   });
   await test('三种自由度的世界规则、选项协议、风格与谈话抬头逐字一致',()=>{
     for(const freedom of ['free','mid','strict']){const a=setup(baseline),b=setup(current);for(const e of [a,b])e.run(`S.freedom=${JSON.stringify(freedom)};`);

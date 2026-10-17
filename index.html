@@ -2222,15 +2222,239 @@ function agingTick(){
   if(r>=0.78&&Math.random()<(r-0.76)*0.6*ag) S.oldAgeDeath=true;
 }
 // 推进 n 个月：扣开销、长年岁、判饥寒
+/* ================= 洞府与宗门建设 =================
+   可选子系统：未建设的旧档不分配字段、不消费随机数。时间和收益只在预演副本推进。
+   estates 跨界保存；不加入 PLANE_KEYS，避免换界时复制工程和付款记录。 */
+const BUILD_NAMES={home:'洞府',array:'聚灵阵',library:'藏经阁',arena:'演武场'};
+const BUILD_COST={
+  '下界':{home:[120,600,2400,9600,36000],array:[600,2400,9600,38400,153600],library:[400,1600,6400,25600,102400],arena:[300,1200,4800,19200,76800]},
+  '仙界':{home:[3,15,60,240,960],array:[12,60,300,1500,7500],library:[8,40,200,1000,5000],arena:[6,30,150,750,3750]}
+};
+const BUILD_MONTHS={
+  '下界':{home:[1,3,6,12,24],array:[3,6,12,24,48],library:[2,4,8,16,32],arena:[1,3,6,12,24]},
+  '仙界':{home:[3,12,36,120,360],array:[6,18,60,180,600],library:[6,12,36,120,360],arena:[3,12,36,120,360]}
+};
+const BUILD_EFFECT={home:[0,.08,.14,.20,.25,.30],array:[0,.05,.10,.15,.20,.25],library:[0,.03,.06,.09,.12,.15],arena:[0,.05,.10,.15,.20,.25]};
+let constructionContext=null;
+function constructionRealm(pl,create){
+  if(!S||!BUILD_COST[pl])return null;
+  if(!S.estates){if(!create)return null;S.estates={v:1,seq:0,rev:0,realms:{},history:[],receipts:{},pending:{}};}
+  const e=S.estates;if(e.v!==1)return null;
+  if(!e.realms[pl]&&create)e.realms[pl]={home:null,sects:[]};
+  return e.realms[pl]||null;
+}
+function constructionPacket(pl){return pl===curPlane()?S:S.planes&&S.planes[pl];}
+function constructionFaction(pl,r){
+  const b=constructionPacket(pl);return b&&((b.world&&b.world.factions)||[]).find(f=>f.buildKey===r.id);
+}
+function constructionSect(){
+  if(!S||!S.player)return null;
+  const name=S.clan&&S.clan.name||S.sect&&S.sect.name;
+  if(!name||S.player.faction!==name)return null;
+  const f=((S.world&&S.world.factions)||[]).find(f=>f.name===name);if(!f)return null;
+  const c=S.clan&&S.clan.name===name?S.clan:null;
+  return {f,c,name,leader:!!c||factionLedByPlayer(f),site:c&&plain(c.base)||name+'山门'};
+}
+function constructionSectRecord(t,pl){
+  const r=constructionRealm(pl||curPlane());return r&&t&&r.sects.find(x=>x.id===t.f.buildKey)||null;
+}
+function constructionMember(r,b){
+  const f=constructionFaction(curPlane(),r);return !!f&&b&&b.faction===f.name;
+}
+function constructionSafePlace(location){return !!location&&!/战场|禁地|秘境|途中|路上|赶路|云游/.test(location);}
+function constructionQuote(kind,opts){
+  opts=opts||{};const pl=curPlane(),r=constructionRealm(pl),t=constructionSect();
+  const fail=why=>({ok:false,why});
+  if(!BUILD_NAMES[kind]||!BUILD_COST[pl]||!S||!S.player)return fail('当前无法建设');
+  if(S.estates&&S.estates.v!==1)return fail('建设存档版本较新，请使用对应版本');
+  if(S.pending||S.over||S.duelState||S.war)return fail('先完成当前推演或战斗，再安排建设');
+  if(kind!=='home'&&!t)return fail('需要先加入本界宗门');
+  const owner=kind==='home'?r&&r.home:constructionSectRecord(t,pl);
+  const level=owner?(kind==='home'?num(owner.level):num(owner.levels[kind])):0;
+  if(level>=5)return fail('已达五级');
+  if(owner&&owner.project)return fail('已有在建或暂停的工程，请先完成');
+  const target=level+1;
+  if(kind==='home'){
+    const need=(pl==='仙界'?[8,9,10,11,12]:[0,1,2,3,4])[level];
+    if(majorOf(S.player)<need)return fail('当前境界不足以升级这一级洞府');
+  }else if(num(t.f.power)<[0,25,40,60,80][level])return fail('宗门势力不足，需达到'+[0,25,40,60,80][level]);
+  let location=owner&&owner.location,sectKey=owner&&owner.sectKey||null;
+  if(!owner){
+    if(kind==='home'){
+      if(S.inRealm)return fail('先离开秘境，再选定长期洞府');
+      if(opts.site==='sect'){
+        if(!t)return fail('当前没有可使用的宗门驻地');
+        location=(constructionSectRecord(t,pl)||{}).location||t.site;
+        location+='·'+S.player.name+'洞府';sectKey=t.f.buildKey||'new-sect';
+      }else{
+        const loc=plain(S.scene&&S.scene.location);
+        if(!constructionSafePlace(loc))return fail('请先到安全、可长期使用的地点');
+        location=/洞府/.test(loc)?loc:loc+'·'+S.player.name+'洞府';
+      }
+    }else location=constructionSectRecord(t,pl)&&constructionSectRecord(t,pl).location||t.site;
+  }
+  const cost=BUILD_COST[pl][kind][level],months=BUILD_MONTHS[pl][kind][level];
+  const source=opts.source||((kind!=='home'&&t&&t.leader&&(t.c||t.f).treasury!=null)?'treasury':'personal');
+  let publicAmount=0,personalAmount=cost;
+  if(source!=='personal'){
+    if(kind==='home'||!t||!t.leader)return fail('没有动用宗门公账的权限');
+    const bank=t.c||t.f;if(bank.treasury==null)return fail('该宗门没有可用公账，可选择个人出资');
+    publicAmount=Math.min(cost,Math.max(0,Math.floor(num(bank.treasury))));personalAmount=cost-publicAmount;
+    if(personalAmount&&source!=='mixed')return fail('公账不足；可明确选择个人补足');
+    if(!['treasury','mixed'].includes(source))return fail('付款来源不正确');
+  }
+  if(num(S.player.money)<personalAmount)return fail('本界'+moneyUnit()+'不足');
+  const q={ok:true,kind,pl,target,level,cost,months,days:months*30,source,publicAmount,personalAmount,location,sectKey,ownerId:owner&&owner.id||null,sectName:t&&t.name||''};
+  q.token=JSON.stringify([pl,kind,target,location,sectKey,source,publicAmount,personalAmount,num(S.elapsedDays),num(S.estates&&S.estates.rev)]);
+  return q;
+}
+function constructionEnsureSect(t,pl){
+  const r=constructionRealm(pl,true);let b=constructionSectRecord(t,pl);if(b)return b;
+  b={id:'estate-'+(++S.estates.seq),name:t.name,location:t.site,levels:{array:0,library:0,arena:0},project:null};
+  t.f.buildKey=b.id;r.sects.push(b);return b;
+}
+function constructionStart(kind,opts,expected){
+  if(expected&&S.estates&&S.estates.receipts[expected.token])return {ok:true,repeated:true,id:S.estates.receipts[expected.token]};
+  const q=constructionQuote(kind,opts);if(!q.ok)return q;
+  if(expected&&q.token!==expected.token)return {ok:false,why:'报价或状态已变化，请重新确认'};
+  const r=constructionRealm(q.pl,true),t=constructionSect();let owner;
+  if(kind==='home'){
+    if(!r.home){
+      let sectKey=null;if(q.sectKey){sectKey=constructionEnsureSect(t,q.pl).id;}
+      r.home={id:'estate-'+(++S.estates.seq),location:q.location,sectKey,level:0,project:null};
+    }
+    owner=r.home;
+  }else owner=constructionEnsureSect(t,q.pl);
+  if(q.publicAmount){const bank=t.c||t.f;bank.treasury=num(bank.treasury)-q.publicAmount;}
+  S.player.money=num(S.player.money)-q.personalAmount;
+  const p={id:'work-'+(++S.estates.seq),kind,from:q.level,to:q.target,start:num(S.elapsedDays),end:num(S.elapsedDays)+q.days,days:q.days,paused:false,cost:q.cost,personal:q.personalAmount,public:q.publicAmount,source:q.source,token:q.token};
+  owner.project=p;S.estates.receipts[q.token]=p.id;S.estates.rev++;
+  S.estates.history.push({day:num(S.elapsedDays),pl:q.pl,owner:owner.id,kind,event:'开工',project:JSON.parse(JSON.stringify(p))});
+  return {ok:true,id:p.id,cost:q.cost};
+}
+function constructionPause(kind){
+  if(!S||S.pending||S.over)return {ok:false,why:'当前无法安排工程'};
+  const r=constructionRealm(curPlane()),t=constructionSect(),owner=kind==='home'?r&&r.home:constructionSectRecord(t);
+  if(!owner||!owner.project)return {ok:false,why:'没有在建工程'};
+  const p=owner.project;
+  if(kind!=='home'&&(!t||(!t.leader&&p.personal!==p.cost)))return {ok:false,why:'无权调整此工程'};
+  if(!p.paused){p.remaining=Math.max(0,p.end-num(S.elapsedDays));p.paused=true;}
+  else{p.end=num(S.elapsedDays)+p.remaining;p.paused=false;delete p.remaining;}
+  S.estates.rev++;S.estates.history.push({day:num(S.elapsedDays),pl:curPlane(),owner:owner.id,kind,event:p.paused?'暂停':'恢复',id:p.id});
+  return {ok:true,paused:p.paused};
+}
+function constructionComplete(day){
+  const e=S.estates;if(!e||e.v!==1)return;
+  const ctx=constructionContext;if(ctx&&ctx.emptyState===S&&ctx.emptyRev===e.rev)return;
+  let active=false;
+  for(const [pl,r] of Object.entries(e.realms))for(const o of [r.home,...r.sects].filter(Boolean)){
+    const p=o.project;if(!p||p.paused)continue;
+    if(o.levels&&!constructionFaction(pl,o)){
+      p.remaining=Math.max(0,p.end-day);p.paused=true;e.rev++;e.history.push({day,pl,owner:o.id,kind:p.kind,event:'宗门不在，工程暂停',id:p.id});continue;
+    }
+    if(day<p.end){active=true;continue;}
+    if(o.levels)o.levels[p.kind]=p.to;else o.level=p.to;
+    e.history.push({day:p.end,pl,owner:o.id,kind:p.kind,event:'完工',level:p.to,id:p.id});o.project=null;e.rev++;
+    const text=BUILD_NAMES[p.kind]+'升至'+p.to+'级（'+o.location+'），从完工后实际使用时生效';
+    if(pl===curPlane())news(text);else{const b=constructionPacket(pl);if(b)b.mail=(b.mail||[]).concat(text).slice(-40);}
+  }
+  if(ctx&&!active){ctx.emptyState=S;ctx.emptyRev=e.rev;}
+}
+function constructionCompatible(o,pl){return !!o&&o.alive!==false&&o.realm&&o.realm.major>=0&&(pl==='仙界'?o.realm.major>=8:o.realm.major<8);}
+function constructionHere(loc,site){return constructionSafePlace(loc)&&samePlace(loc,site,S);}
+function constructionHomeHere(h){
+  const loc=plain(S.scene&&S.scene.location);if(!h||S.inRealm||!(loc===h.location||loc.startsWith(h.location+'·')))return false;
+  if(h.sectKey){const f=constructionFaction(curPlane(),{id:h.sectKey});if(!f||S.player.faction!==f.name)return false;}
+  return true;
+}
+function constructionFrame(pl){
+  const r=constructionRealm(pl),b=constructionPacket(pl),out={player:0,train:0,npc:{},disc:{}};
+  if(!r||!b)return out;
+  const current=pl===curPlane(),home=current&&constructionCompatible(S.player,pl)&&constructionHomeHere(r.home)?BUILD_EFFECT.home[num(r.home.level)]:0;
+  let playerArray=0;
+  const linked=new Map(),npcByName=new Map((b.npcs||[]).map(n=>[n.name,n]));for(const d of b.clan&&b.clan.disciples||[])if(d.alive&&d.npcName)linked.set(d.npcName,d);
+  for(const rec of r.sects){
+    const f=constructionFaction(pl,rec);if(!f)continue;
+    const A=BUILD_EFFECT.array[num(rec.levels.array)]||0,C=BUILD_EFFECT.library[num(rec.levels.library)]||0,Y=BUILD_EFFECT.arena[num(rec.levels.arena)]||0;
+    if(current&&constructionCompatible(S.player,pl)&&S.player.faction===f.name&&!S.inRealm&&constructionHere(plain(S.scene&&S.scene.location),rec.location)){
+      playerArray=A;if(plain(S.scene.location)===rec.location+'·演武场')out.train=Y;
+    }
+    for(const n of b.npcs||[]){
+      if(!constructionCompatible(n,pl)||n.faction!==f.name)continue;
+      const d=linked.get(n.name);if(d&&d.job==='云游')continue;
+      if(n.location&&!constructionHere(n.location,rec.location))continue;
+      const training=d?d.job==='修炼':!!n.location&&constructionHere(n.location,rec.location)&&/修炼|闭关|练功|修行/.test(String(n.activity||'')+' '+String(n.mood||''));
+      out.npc[n.entityId||n.name]=Math.min(.60,A+C+(training?Y:0));
+    }
+    if(b.clan&&b.clan.name===f.name)for(const d of b.clan.disciples||[]){
+      if(!d.alive||d.job==='云游')continue;
+      const known=d.npcName&&npcByName.get(d.npcName);if(known&&known.realm&&known.realm.major>=0)continue;
+      if(d.location&&!constructionHere(d.location,rec.location))continue;
+      if(pl==='仙界'&&d.realm&&d.realm.major<8)continue;
+      out.disc[d.id]=Math.min(.60,A+C+(d.job==='修炼'?Y:0));
+    }
+  }
+  out.home=home;out.array=playerArray;out.player=Math.min(.50,home+playerArray);return out;
+}
+function constructionAccrueDay(){
+  const e=S.estates;if(!e||e.v!==1)return 0;
+  const ctx=constructionContext||(constructionContext={});
+  const cacheKey=curPlane()+'|'+Math.floor(num(S.elapsedDays)/30)+'|'+e.rev;
+  if(ctx.state!==S||ctx.key!==cacheKey){
+    ctx.state=S;ctx.key=cacheKey;ctx.frames={};ctx.rates=null;
+    for(const pl of Object.keys(e.realms)){const data=constructionFrame(pl);ctx.frames[pl]={data,key:JSON.stringify(data),span:null};}
+  }
+  const month=Math.floor(num(S.elapsedDays)/30);e.pending=e.pending||{};
+  for(const [pl,frame] of Object.entries(ctx.frames)){
+    const bucket=e.pending[pl]||(e.pending[pl]={month,spans:[]});
+    if(bucket.month!==month){bucket.month=month;bucket.spans=[];}
+    if(!frame.span){const last=bucket.spans[bucket.spans.length-1];if(last&&JSON.stringify(last.data)===frame.key)frame.span=last;else{frame.span={days:0,data:frame.data};bucket.spans.push(frame.span);}}
+    frame.span.days++;
+  }
+  return ctx.frames[curPlane()]&&ctx.frames[curPlane()].data.train||0;
+}
+function constructionMonthRate(o,discId){
+  if(!S.estates)return 0;
+  const pl=curPlane(),b=S.estates.pending&&S.estates.pending[pl],month=Math.floor((num(S.elapsedDays)-1)/30);
+  if(!b||b.month!==month||num(S.elapsedDays)%30)return discId?(constructionFrame(pl).disc[discId]||0):o===S.player?constructionFrame(pl).player:(constructionFrame(pl).npc[o.entityId||o.name]||0);
+  const ctx=constructionContext||(constructionContext={});
+  ctx.rates=ctx.rates||{};let sum=ctx.rates[pl];
+  if(!sum){sum={player:0,npc:{},disc:{}};for(const sp of b.spans){sum.player+=sp.data.player*sp.days/30;for(const k of ['npc','disc'])for(const [id,v] of Object.entries(sp.data[k]))sum[k][id]=(sum[k][id]||0)+v*sp.days/30;}ctx.rates[pl]=sum;}
+  // 新人物可能在两次日常行动之间才由原有连续性机制补上 entityId。
+  // 各时段只记一种标识；将旧姓名段与新ID段合并，不能丢掉前半月收益。
+  return discId?sum.disc[discId]||0:o===S.player?sum.player:(sum.npc[o.entityId||o.name]||0)+(o.entityId&&o.entityId!==o.name?(sum.npc[o.name]||0):0);
+}
+function constructionEndMonth(){if(!S.estates||S.estates.v!==1)return;S.estates.pending={};if(constructionContext){constructionContext.key=null;constructionContext.rates=null;}}
+function constructionStudyBonus(m){
+  if(!S.estates||m.recipe||!constructionCompatible(S.player,curPlane()))return 0;
+  const t=constructionSect(),r=constructionSectRecord(t);if(!r||S.inRealm)return 0;
+  return plain(S.scene&&S.scene.location)===r.location+'·藏经阁'?num(r.levels.library):0;
+}
+function constructionTrainDelta(a,base,rate){
+  if(!rate||base<=0||num(a.level)>=100)return base;
+  const e=S.estates;e.artRemainders=e.artRemainders||{};const key=curPlane()+'|'+a.name+'|'+a.style;
+  const raw=(e.artRemainders[key]||0)+base*Math.min(.25,rate),extra=Math.floor(raw+1e-9);
+  e.artRemainders[key]=Math.max(0,raw-extra);return base+extra;
+}
+function constructionBlock(){
+  if(!S.estates)return '';
+  const t=constructionSect(),r=constructionRealm(curPlane()),b=constructionSectRecord(t),f=constructionFrame(curPlane());
+  if(!r)return '';
+  const projects=[r.home&&r.home.project,b&&b.project].filter(Boolean).map(p=>BUILD_NAMES[p.kind]+p.to+'级'+(p.paused?'暂停':'尚需'+Math.max(0,Math.ceil((p.end-num(S.elapsedDays))/30))+'月')).join('；');
+  return '【建设】自有洞府'+num(r.home&&r.home.level)+'级，本门公共阵/阁/场'+(b?[b.levels.array,b.levels.library,b.levels.arena].join('/'):'0/0/0')+'级；当前修炼额外'+Math.round(f.player*100)+'%。'+(projects||'无在建工程')+'。公共设施归宗门，非主角私产；原有住所历史不改。地点、资格和工期由引擎核算；工程款已付，不得免工期、改等级、补发修为或重复扣费。\n';
+}
+
 function advanceTime(n){
-  return withSocialIndexes(()=>advanceTimeCore(n));
+  const before=constructionContext;constructionContext=null;try{return withSocialIndexes(()=>advanceTimeCore(n));}finally{constructionContext=before;}
 }
 function advanceTimeCore(n){
   const days=Math.max(0,Math.min(Math.max(360,closeMaxMonths()*30),Math.round(num(n)*30)));
   if(S.elapsedDays==null||Math.floor(num(S.elapsedDays)/30)!==num(S.months)) S.elapsedDays=Math.round(num(S.months)*30);
-  const p=S.player; let cost=0,starve=0,ticks=0,totalPay=0;S.sectPay=0;S.lingliLast=0;S.dutyLast=0;
+  const p=S.player; let constructionTrainSum=0; let cost=0,starve=0,ticks=0,totalPay=0;S.sectPay=0;S.lingliLast=0;S.dutyLast=0;
   for(let i=0;i<days;i++){
+    if(S.estates)constructionTrainSum+=constructionAccrueDay();
     S.elapsedDays++;
+    if(S.estates)constructionComplete(S.elapsedDays);
     if(S.elapsedDays%30) continue;
     ticks++;
     const per=S.descent?0:(inXianjie()?xianUpkeepDue():upkeepPerMonth());
@@ -2245,6 +2469,7 @@ function advanceTimeCore(n){
     familyMonth(S.npcLifeQ=S.npcLifeQ||[]);
     tickNpcs(1);S.sectPay=0;sectTick(1);totalPay+=num(S.sectPay);if(S.court) courtTick();clanTick(1);tickDebts();relicMonth();
     if(S.planes) bgPlanesMonth(Math.floor(S.months/12)>beforeY);
+    if(S.estates)constructionEndMonth();
   }
   S.sectPay=totalPay;S.upkeepLast=cost;
   if(ticks){S.starveMonths=starve;S.destitute=starve>0;}
@@ -2252,7 +2477,7 @@ function advanceTimeCore(n){
   const healedNow=days?tickAilments(days/30):[];
   if(healedNow.length){S.healedLast=(S.healedLast||[]).concat(healedNow);for(const h of healedNow)ledger(`${h}已愈`);}
   rebuildStatus();S.date=dateStr();tickWorldThreads();flushNpcLife();eggKinCheck();if(S.planes) bgPlanesFlush();migrateAscended();
-  return {cost,starve,months:days/30,days};
+  return Object.assign({cost,starve,months:days/30,days},constructionTrainSum?{constructionTraining:constructionTrainSum/Math.max(1,days)}:{});
 }
 function durationText(months){
   const days=Math.round(num(months)*30);
@@ -3056,7 +3281,7 @@ function cultivateMonth(){
   if(p.breakCD>0) p.breakCD--;
   const mode=p.hp<30?'重伤':(p.cultMode||'日常');
   prepMonth(p,mode);                                   // 瓶颈上闭关算压境、化神关前游历算问道
-  const g=monthlyLingli(p,{mode,gongfa:gongfaMult(p)*(num(p.cultMul)||1),aura:auraOf(),partner:mode==='闭关'?partnerMul(p):1});
+  const g=(1+constructionMonthRate(p))*monthlyLingli(p,{mode,gongfa:gongfaMult(p)*(num(p.cultMul)||1),aura:auraOf(),partner:mode==='闭关'?partnerMul(p):1});
   const before=num(p.lingli); addLingli(p,g);
   const got=num(p.lingli)-before;
   if(got>0) S.lingliLast=num(S.lingliLast)+got;
@@ -3715,7 +3940,7 @@ function npcCultivateMonth(n,q){
   n.wx=n.wx||{'悟性':rnd(30,80),'心性':rnd(30,80)};
   if(n.lingli==null) n.lingli=rnd(0,Math.floor(lingliNeed(n.realm)*0.8));
   if(num(n.breakCD)>0){ n.breakCD--; return; }
-  if(!atBottleneck(n)){ addLingli(n,monthlyLingli(n,{mode:'闭关'})*0.7*(num(n.unstableUntil)>num(S.months)?0.7:1)); return; }
+  if(!atBottleneck(n)){ addLingli(n,monthlyLingli(n,{mode:'闭关'})*(1+constructionMonthRate(n))*0.7*(num(n.unstableUntil)>num(S.months)?0.7:1)); return; }
   // NPC 灵力一满，熬上几个月就冲
   if(Math.random()>0.25) return;
   const from=realmText(n.realm);
@@ -5084,7 +5309,7 @@ const CLOSE_STEPS=[[1,'一个月'],[3,'三个月'],[6,'半年'],[12,'一年'],[3
 function openClose(){
   if(busy||!S||S.over) return;
   const p=S.player, max=closeMaxMonths(p);
-  const per=monthlyLingli(p,{mode:'闭关',gongfa:gongfaMult(p)*(num(p.cultMul)||1),aura:auraOf(),partner:partnerMul(p)});
+  const per=monthlyLingli(p,{mode:'闭关',gongfa:gongfaMult(p)*(num(p.cultMul)||1),aura:auraOf(),partner:partnerMul(p)})*(1+(S.estates?constructionFrame(curPlane()).player:0));
   const need=lingliNeed(p.realm)-num(p.lingli);
   const fill=per>0?Math.ceil(need/per):0;
   const body=atBottleneck(p)?`<div class="note">灵力已满，闭关也攒不进去了。该冲关了。</div>`:
@@ -5095,7 +5320,7 @@ function openClose(){
 }
 function cultHtml(p){
   const need=lingliNeed(p.realm), ll=Math.floor(num(p.lingli));
-  const per=monthlyLingli(p,{mode:'闭关',gongfa:gongfaMult(p)*(num(p.cultMul)||1),aura:auraOf(),partner:partnerMul(p)});
+  const per=monthlyLingli(p,{mode:'闭关',gongfa:gongfaMult(p)*(num(p.cultMul)||1),aura:auraOf(),partner:partnerMul(p)})*(1+(S.estates?constructionFrame(curPlane()).player:0));
   const yearPct=need?Math.round(per*12/need*100):0;
   const left=per>0?Math.ceil((need-ll)/per):0;
   const bn=atBottleneck(p), cd=num(p.breakCD);
@@ -5609,6 +5834,7 @@ function clanMonth(){
              : d.job==='授艺' ? num(d.talent)*0.10
              : num(d.talent)*0.06;
     rate=(rate+tb*0.5)*g*(num(d.hurt)>0?0.3:1);
+    if(S.estates)rate*=1+constructionMonthRate(null,d.id);
     const cap=discCap(d);
     if(num(d['武功'])<cap){
       // 越接近自己的极限，长得越慢——最后那几分功夫是最难的
@@ -6194,7 +6420,7 @@ function studyRoll(m){
   if(p.hp<30) val-=10;
   if(S.destitute) val-=Math.round(5*fdm().starve);
   if((p.status||[]).includes('走火入魔')) val-=10;
-  const roll=d20(), dc=Math.max(20,m.need+diff().dc+fdm().studyDC+tagAdd(p,'studyDC')-(relicLearned(p,'primer')?5:0)), total=val+rollMod(roll);   // 悟性通玄 −10、孤僻 −5
+  const roll=d20(), dc=Math.max(20,m.need+diff().dc+fdm().studyDC+tagAdd(p,'studyDC')-(relicLearned(p,'primer')?5:0)-constructionStudyBonus(m)), total=val+rollMod(roll);   // 悟性通玄 −10、孤僻 −5
   const crit=roll===20?'大成功':(roll===1&&fdm().studyHurt>=0.5?'走火入魔':'');
   const success=roll===20?true:(roll===1?false:total>=dc);
   return {val,roll,mod:rollMod(roll),dc,total,success,crit};
@@ -7042,7 +7268,7 @@ ${debtBlock()}【标签】${(p.tags||[]).map(t=>t+'：'+(XTAGS[t]?XTAGS[t].desc:
 【终身旧伤（治不好，此后剧情须一直体现，不可写成痊愈）】${(S.scars||[]).length?S.scars.map(x=>x.name+'（'+x.text+'）').join('；'):'无'}
 【眼下的伤病（会自己好，引擎在倒计时，不必反复提，好了引擎会销）】${(S.ailments||[]).length?S.ailments.map(a=>`${a.name}${a.desc?'（'+a.desc+'）':''}——还需将养约${Math.max(1,Math.ceil(num(a.months)))}个月`).join('；'):'无'}
 【盯着主角的仇家】${(S.vendettas||[]).filter(v=>v.heat>0).length?S.vendettas.filter(v=>v.heat>0).map(v=>`${v.name}（${v.reason}，${vStateText(v)}）`).join('；'):'无'}——雇凶人选与雇佣关系由引擎裁定，不能自行让主角的配偶、血亲、姻亲、师徒或好友收钱来杀主角，也不能凭同门或邪道身份虚构亲友背叛。仇家要打上门来由引擎裁定，你不可自作主张写他突然出现动手；上面写「尚在远处」「不敢露面」的人，这一回合就不会到。
-${realmStatusLine()}${wushuaiBlock()}【刚做过的事（已经到手的结果不要再领一遍；连续修炼、调查可以接着做，写新的阶段）】
+${constructionBlock()}${realmStatusLine()}${wushuaiBlock()}【刚做过的事（已经到手的结果不要再领一遍；连续修炼、调查可以接着做，写新的阶段）】
 ${(S.history||[]).slice(-3).map(h=>`第${h.turn}回：${h.action}`).join('；')||'（无）'}
 【和这回有关的旧事（引擎记的账，全部为真）】
 ${(S.facts||[]).filter(f=>[action||'',...asArr(S.scene&&S.scene.unresolved),...asArr(S.scene&&S.scene.present)].some(t=>shareRun(f.text,t,3))).slice(-16).map(f=>'第'+f.turn+'回 '+f.text).join('\n')||'（无）'}`;
@@ -9511,6 +9737,7 @@ function applyTurn(d, action, judge){
     if(failed){ refused.push('功法熟练+'+dv); continue; }
     dv=Math.min(dv, 4*months*(fateTier(fate)==='great'?2:1));
     dv=Math.max(1,Math.round(dv*artGrowMul(p,a)));      // 悟性通玄、根骨奇佳、剑心通明
+    if(S.estates&&/演武场/.test(action)&&/演练|练习|修炼|练功/.test(action))dv=constructionTrainDelta(a,dv,num(judge.timeAdvance&&judge.timeAdvance.constructionTraining));
     a.level=clamp(num(a.level)+dv);
     lastDeltas['功法·'+a.name]=dv;
   }
@@ -11582,6 +11809,79 @@ function eggArtInfo(a){
   return null;
 }
 function renderGqKey(){ const k=$('gqKey'); if(!k||!S||!S.player) return; if(!isXianRealm(S.player.realm)){ if(k.dataset.x){ k.innerHTML=k.dataset.low; delete k.dataset.x; } return; } if(k.dataset.x) return; k.dataset.low=k.innerHTML; k.dataset.x=1; k.innerHTML='品阶　'+XGRADE_TIERS.map((t,i)=>`<span class="gq${14+i*3}">${t}</span>`).join(' · ')+'，同一档颜色越深越好；下界黄玄地天仍有强弱，天阶上品仅够入门，略逊于灵宝下品'; }
+function constructionStatus(o){
+  const p=o&&o.project;if(!p)return '暂无在建工程';
+  return BUILD_NAMES[p.kind]+' → '+p.to+'级 · '+(p.paused?'已暂停，剩余 '+durationText(num(p.remaining)/30):'尚需 '+durationText(Math.max(0,p.end-num(S.elapsedDays))/30));
+}
+function constructionRefresh(){saveGame();renderPanel();}
+function renderConstructionEntries(){
+  const el=$('pSect');if(!el||!S||!S.player)return;
+  const t=constructionSect(),r=constructionRealm(curPlane()),h=r&&r.home;
+  el.insertAdjacentHTML('beforeend',`<div style="border-top:1px solid var(--line);margin-top:12px;padding-top:10px"><div class="idesc">洞府 ${h?num(h.level)+'级 · '+esc(h.location):'尚未整备'}${h&&h.project?'<br>'+esc(constructionStatus(h)):''}</div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:7px"><button class="mbtn" id="btnHomeBuild">洞府建设</button>${t?`<button class="mbtn" id="btnSectBuild">${t.leader?'宗门建设':'个人赞建'}</button>`:''}</div></div>`);
+  $('btnHomeBuild').onclick=()=>openConstruction('home');
+  if($('btnSectBuild'))$('btnSectBuild').onclick=()=>openConstruction('sect');
+}
+function constructionEffectText(kind,level){
+  if(!level)return '尚无新增加成';
+  if(kind==='home')return '洞府修炼 +'+Math.round(BUILD_EFFECT.home[level]*100)+'%';
+  if(kind==='library')return '门人培养 +'+Math.round(BUILD_EFFECT.library[level]*100)+'% · 功法玉简参悟难度 −'+level;
+  if(kind==='arena')return '在山修炼门人培养、主角演武熟练增长 +'+Math.round(BUILD_EFFECT.arena[level]*100)+'%';
+  return '在山本门修炼与培养 +'+Math.round(BUILD_EFFECT.array[level]*100)+'%';
+}
+function openConstruction(mode){
+  if(busy||!S||!S.player||S.pending)return;
+  const t=constructionSect(),r=constructionRealm(curPlane()),h=r&&r.home,b=constructionSectRecord(t);
+  if(mode!=='home'&&!t){toast('需要先加入本界宗门');return;}
+  const owner=mode==='home'?h:b,frame=constructionFrame(curPlane());
+  let body='<div class="note">只收一次建设费，不另收维护费，不消耗背包物品。每级价格为本次费用，需逐级修建；工期按游戏时间推进。</div>';
+  if(mode==='home'){
+    body+=`<div class="idesc" style="margin:10px 0">${h?esc(h.location):'每界一处养成洞府，首次开工选定地点。首版不支持迁址。'}</div>`;
+    if(!h)body+=`<label>洞府选址 <select id="buildHomeSite"><option value="current">当前安全地点</option>${t?`<option value="sect">${esc(t.name)}驻地内（可共享宗门聚灵阵）</option>`:''}</select></label>`;
+    const base=monthlyLingli(S.player,{mode:'闭关',gongfa:gongfaMult(S.player)*(num(S.player.cultMul)||1),aura:auraOf(),partner:partnerMul(S.player)});
+    body+=`<div class="note" style="margin-top:10px">按当前地点：原有闭关每月约 ${Math.round(base*100)/100}，洞府 +${Math.round(num(frame.home)*100)}%、宗门聚灵阵 +${Math.round(num(frame.array)*100)}%；封顶后设施额外 ${Math.round(frame.player*100)}%，合计约 ${Math.round(base*(1+frame.player)*100)/100}。洞府与同地宗门阵法相加，最多额外50%。${h&&!constructionHomeHere(h)?'目前不在可使用的洞府内，洞府加成未生效。':''}</div>`;
+  }else body+=`<div class="idesc" style="margin:10px 0">${esc(t.name)} · ${esc(b&&b.location||t.site)} · 势力 ${num(t.f.power)}<br>${t.leader?'可选宗门公账或个人出资':'个人赞建，设施归宗门；不授予宗主权限或贡献'}。门人培养最多额外60%，主角不重复领取门人培养加成。</div>`;
+  if(owner&&owner.project)body+=`<div class="note" style="margin:10px 0">${esc(constructionStatus(owner))}<br>升级期间原等级继续生效；开工后不退款。<button class="mbtn" id="buildPause" style="margin-top:7px">${owner.project.paused?'恢复工程':'暂停工程'}</button></div>`;
+  const kinds=mode==='home'?['home']:['array','library','arena'];
+  for(const kind of kinds){
+    const lv=kind==='home'?num(h&&h.level):num(b&&b.levels[kind]);
+    body+=`<div class="artrow"><b>${BUILD_NAMES[kind]} · ${lv}级</b><div class="idesc">${constructionEffectText(kind,lv)}</div>`;
+    if(lv<5)body+=`<div class="idesc">下一级：${BUILD_COST[curPlane()][kind][lv]} ${moneyUnit()} · 工期 ${durationText(BUILD_MONTHS[curPlane()][kind][lv])}<br>${constructionEffectText(kind,lv+1)}</div><button class="mbtn" data-build="${kind}" style="margin-top:7px" ${owner&&owner.project?'disabled':''}>查看升级与开工</button>`;
+    else body+='<div class="idesc">已达五级</div>';
+    body+='</div>';
+  }
+  if(mode==='home'&&h)body+=`<button class="mbtn" id="buildGoHome" ${constructionHomeHere(h)?'disabled':''}>返回洞府</button>`;
+  if(mode!=='home'&&b)body+=`<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button class="mbtn" id="buildGoLibrary">前往藏经阁</button><button class="mbtn" id="buildGoArena">前往演武场</button></div>`;
+  if(mode!=='home'&&b&&S.player.arts&&S.player.arts.length)body+=`<div style="margin-top:10px"><label>演练已学功法 <select id="buildTrainArt">${S.player.arts.map((a,i)=>`<option value="${i}">${esc(a.name)} · 熟练${num(a.level)}</option>`).join('')}</select></label><button class="mbtn" id="buildTrain" style="margin-top:7px" ${frame.train?'':'disabled'}>在演武场修炼一个月</button><div class="note">需先到演武场；从行囊选择已持有的功法玉简，可在藏经阁参悟。</div></div>`;
+  body+='<div class="note" style="margin-top:10px">前往设施是正常行动，不会通过查看面板瞬移。人界设施不加速仙元；离山、退宗和不合资格时不生效。离界后工程继续；门人沿用原有演化规则。</div>';
+  if(owner&&S.estates){const logs=S.estates.history.filter(x=>x.owner===owner.id);if(logs.length)body+=`<details style="margin-top:10px"><summary>建设记录（${logs.length}条）</summary>${logs.map(x=>`<div class="idesc">${esc(dateOf(S.ganzhi,Math.floor(x.day/30)))} · ${BUILD_NAMES[x.kind]||''}${esc(x.event)}${x.level?'，'+x.level+'级':''}${x.project?'，费用'+x.project.cost+' '+moneyUnit()+'（个人'+x.project.personal+'，公账'+x.project.public+'）':''}</div>`).join('')}</details>`;}
+  xModal(mode==='home'?'洞府建设':t.leader?'宗门建设':'个人赞建',curPlane()+' · 当前余额 '+S.player.money+' '+moneyUnit(),body,[{text:'关闭'}]);
+  document.querySelectorAll('#xBody button[data-build]').forEach(btn=>btn.onclick=()=>{const site=$('buildHomeSite');openConstructionConfirm(btn.dataset.build,{site:site?site.value:'current'});});
+  if($('buildPause'))$('buildPause').onclick=()=>{const result=constructionPause(owner.project.kind);toast(result.ok?(result.paused?'工程已暂停':'工程已恢复'):result.why);if(result.ok)constructionRefresh();openConstruction(mode);};
+  const travel=(place)=>{if(S.inRealm){toast('先离开秘境');return;}$('xMask').classList.remove('on');act('返回'+place+'，在此安顿下来',{type:'normal',months:1/30,text:'前往设施'});};
+  if($('buildGoHome'))$('buildGoHome').onclick=()=>travel(h.location);
+  if($('buildGoLibrary'))$('buildGoLibrary').onclick=()=>travel(b.location+'·藏经阁');
+  if($('buildGoArena'))$('buildGoArena').onclick=()=>travel(b.location+'·演武场');
+  if($('buildTrain'))$('buildTrain').onclick=()=>{const art=S.player.arts[Number($('buildTrainArt').value)];if(!art)return;$('xMask').classList.remove('on');act('在'+b.location+'·演武场修炼《'+art.name+'》一个月，演练已学功法',{type:'rest',months:1,text:'修炼已学功法'});};
+}
+function openConstructionConfirm(kind,opts){
+  if(busy||S.pending)return;opts=Object.assign({},opts||{});
+  const ownerState=S,t=constructionSect();
+  if(!opts.source)opts.source=kind!=='home'&&t&&t.leader&&(t.c||t.f).treasury!=null?'treasury':'personal';
+  const q=constructionQuote(kind,opts),r=constructionRealm(curPlane()),b=kind==='home'?r&&r.home:constructionSectRecord(t),lv=b?(kind==='home'?num(b.level):num(b.levels[kind])):0;
+  const cost=BUILD_COST[curPlane()][kind][lv],months=BUILD_MONTHS[curPlane()][kind][lv];
+  let body=`<div class="note">${BUILD_NAMES[kind]} ${lv} → ${lv+1}级<br>本次费用 ${cost} ${moneyUnit()} · 工期 ${durationText(months)}<br>${constructionEffectText(kind,lv+1)}</div>`;
+  if(kind!=='home'&&t&&t.leader){
+    const bank=t.c||t.f;
+    body+=`<label style="display:block;margin-top:10px">付款来源 <select id="buildFunding"><option value="personal" ${opts.source==='personal'?'selected':''}>个人出资</option>${bank.treasury!=null?`<option value="treasury" ${opts.source==='treasury'?'selected':''}>仅公账（现有${num(bank.treasury)}）</option><option value="mixed" ${opts.source==='mixed'?'selected':''}>公账优先，个人明确补足</option>`:''}</select></label>`;
+  }
+  body+=`<div class="idesc" style="margin-top:10px">${q.ok?'地点：'+esc(q.location)+'<br>个人支付 '+q.personalAmount+'，公账支付 '+q.publicAmount:esc(q.why)}</div><div class="note" style="margin-top:10px">确认后立即扣本次工费，管理操作不推进时间。实际经过游戏时间才施工；旧等级继续生效，完工后按实际使用时段计算新加成。开工后不支持取消退款，可暂停、恢复。${kind==='home'&&!b?'本界仅此一处养成洞府，首版不支持迁址。':''}</div>`;
+  xModal('确认开工',BUILD_NAMES[kind]+' · '+curPlane(),body,[{text:'返回',fn:()=>openConstruction(kind==='home'?'home':'sect')},{text:'支付并开工',primary:true,disabled:!q.ok,fn:()=>{
+    if(S!==ownerState||busy){toast('状态已变化，请重新打开建设面板');return;}
+    const result=constructionStart(kind,opts,q);toast(result.ok?'工程已开工，随游戏时间推进':result.why);if(result.ok)constructionRefresh();openConstruction(kind==='home'?'home':'sect');
+  }}]);
+  if($('buildFunding'))$('buildFunding').onchange=()=>openConstructionConfirm(kind,Object.assign({},opts,{source:$('buildFunding').value}));
+}
+
 function renderPanel(){
   renderGqKey();
   if(!S||!S.player) return;
@@ -11653,6 +11953,7 @@ function renderPanel(){
     const fb=$('btnFound'); if(fb) fb.onclick=openFound;
     const sb=$('btnSectShop'); if(sb) sb.onclick=openShop;
   }
+  renderConstructionEntries();
   if(inXianjie()){ $('pSect').insertAdjacentHTML('beforeend',courtHtml());
     const cj=$('btnCourtJoin'); if(cj) cj.onclick=()=>{ setDrawer&&setDrawer(false); courtJoinFlow(); };
     const cs=$('btnCourtShop'); if(cs) cs.onclick=openCourtShop; const cq=$('btnCourtQuit'); if(cq) cq.onclick=confirmResign; }
