@@ -59,6 +59,10 @@ test('升级中旧级继续生效，暂停/恢复不二次收费，完成消息�
 test('先逐段封顶再按天数加权，月中离山所得25%不是27.5%',()=>{
  const e=setup();install(e);const g=originalRate(e);assert.equal(e.run('constructionFrame(curPlane()).player'),.5);e.run(`advanceTime(.5);S.scene.location='远方山谷';advanceTime(.5);`);near(e.run('S.player.lingli'),g*1.25);
 });
+test('设施地点不沿用三字前缀：同名仙域、宗门外与远处不算在山',()=>{
+ const e=setup();assert(!e.run(`constructionHere('紫霄仙域·接引城','紫霄仙庭山门')`));assert(!e.run(`constructionHere('青云宗山门外·坊市','青云宗山门')`));assert(!e.run(`constructionHere('青云宗山门途中','青云宗山门')`));assert(e.run(`constructionHere('紫霄仙域·紫霄仙庭·正院','紫霄仙庭山门')`));assert(e.run(`constructionHere('青云宗山门·演武场','青云宗山门')`));
+ install(e);e.run(`S.scene.location='青云宗山门外·坊市';`);assert.equal(e.run('constructionFrame(curPlane()).player'),0);
+});
 test('两界独立保存工程，离界仍完工；仙人不能借人界设施加速仙元',()=>{
  const e=setup();e.run(`constructionStart('home',{site:'sect'});`);const id=e.run('constructionRealm(curPlane()).home.id');e.run(UP);e.run(`advanceTime(2);`);assert.equal(e.run(`constructionRealm('下界').home.level`),1);assert.equal(e.run(`constructionRealm('下界').home.id`),id);assert.equal(e.run(`constructionRealm('仙界')`),null);
  e.run(`switchPlane('下界');S.scene.location=constructionRealm(curPlane()).home.location;`);assert.equal(e.run('constructionFrame(curPlane()).player'),0);

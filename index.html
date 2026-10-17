@@ -2361,7 +2361,13 @@ function constructionComplete(day){
   if(ctx&&!active){ctx.emptyState=S;ctx.emptyRev=e.rev;}
 }
 function constructionCompatible(o,pl){return !!o&&o.alive!==false&&o.realm&&o.realm.major>=0&&(pl==='仙界'?o.realm.major>=8:o.realm.major<8);}
-function constructionHere(loc,site){return constructionSafePlace(loc)&&samePlace(loc,site,S);}
+function constructionHere(loc,site){
+  const a=plain(loc).replace(/\s/g,''),b=plain(site).replace(/\s/g,'');
+  if(!a||!b||!constructionSafePlace(a))return false;
+  // 设施须在明确驻地内；旧 samePlace 的三字前缀会把“紫霄仙域”和“紫霄仙庭”误当同地。
+  const sites=[b];if(b.endsWith('山门'))sites.push(b.slice(0,-2));
+  return sites.some(x=>x&&(a===x||a.startsWith(x+'·')||a.endsWith('·'+x)||a.includes('·'+x+'·')));
+}
 function constructionHomeHere(h){
   const loc=plain(S.scene&&S.scene.location);if(!h||S.inRealm||!(loc===h.location||loc.startsWith(h.location+'·')))return false;
   if(h.sectKey){const f=constructionFaction(curPlane(),{id:h.sectKey});if(!f||S.player.faction!==f.name)return false;}
