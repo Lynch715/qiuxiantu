@@ -67,6 +67,9 @@ test('两界独立保存工程，离界仍完工；仙人不能借人界设施�
  const e=setup();e.run(`constructionStart('home',{site:'sect'});`);const id=e.run('constructionRealm(curPlane()).home.id');e.run(UP);e.run(`advanceTime(2);`);assert.equal(e.run(`constructionRealm('下界').home.level`),1);assert.equal(e.run(`constructionRealm('下界').home.id`),id);assert.equal(e.run(`constructionRealm('仙界')`),null);
  e.run(`switchPlane('下界');S.scene.location=constructionRealm(curPlane()).home.location;`);assert.equal(e.run('constructionFrame(curPlane()).player'),0);
 });
+test('离界工程完工只追加消息，不截掉原有信件与工程历史',()=>{
+ const e=setup();e.run(`constructionStart('home',{site:'sect'});`);e.run(UP);e.run(`var packet=constructionPacket('下界');packet.mail=Array.from({length:45},(_,i)=>'旧信'+i);var oldMail=JSON.stringify(packet.mail);S.elapsedDays+=30;constructionComplete(S.elapsedDays);`);assert.equal(e.run('packet.mail.length'),46);assert.equal(e.run('JSON.stringify(packet.mail.slice(0,45))'),e.run('oldMail'));assert.equal(e.run(`S.estates.history.filter(x=>x.event==='完工').length`),1);
+});
 test('聚灵阵与藏经阁作用于真实NPC，演武仅修炼岗位，同人两本账不重复',()=>{
  const e=setup();install(e);e.run(`S.npcs=[normNpc({name:'门人甲',realm:'筑基初期',age:30,faction:S.sect.name,location:'青云宗山门',lingli:0})];var n=S.npcs[0];n.lingli=0;n.tags=[];n.breakCD=0;S.clan={name:S.sect.name,disciples:[{id:'d1',name:n.name,npcName:n.name,alive:true,job:'修炼',武功:n.武功,talent:5,prog:0}],treasury:1000};`);
  assert.equal(e.run(`constructionFrame(curPlane()).npc[n.entityId||n.name]`),.6);assert.equal(e.run(`constructionFrame(curPlane()).disc.d1||0`),0);

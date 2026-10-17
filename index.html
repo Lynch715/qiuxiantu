@@ -2356,7 +2356,7 @@ function constructionComplete(day){
     if(o.levels)o.levels[p.kind]=p.to;else o.level=p.to;
     e.history.push({day:p.end,pl,owner:o.id,kind:p.kind,event:'完工',level:p.to,id:p.id});o.project=null;e.rev++;
     const text=BUILD_NAMES[p.kind]+'升至'+p.to+'级（'+o.location+'），从完工后实际使用时生效';
-    if(pl===curPlane())news(text);else{const b=constructionPacket(pl);if(b)b.mail=(b.mail||[]).concat(text).slice(-40);}
+    if(pl===curPlane())news(text);else{const b=constructionPacket(pl);if(b)b.mail=(b.mail||[]).concat(text);}
   }
   if(ctx&&!active){ctx.emptyState=S;ctx.emptyRev=e.rev;}
 }
