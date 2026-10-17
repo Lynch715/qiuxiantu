@@ -1362,7 +1362,7 @@ function migrate(s){
   if(!s.relFix1){
     for(const n of (s.npcs||[])){ if(!n) continue;
       const r=decreeHits(s,n.name).map(e=>e.f.relation).filter(Boolean).pop();
-      if(r&&r!==n.relation&&!/恋人|道侣|妻|夫|妾|未婚|正室|仇|宿敌/.test(n.relation||'')) n.relation=r; }
+      if(r&&r!==n.relation&&!['夫妻','妾室','恋人','师徒'].includes(playerRelType(n.relation))&&!/仇|宿敌/.test(n.relation||'')) n.relation=r; }
     s.relFix1=true;
   }
   if(!s.origRel){ s.origRel={}; for(const n of (s.npcs||[])) if(n&&n.name) s.origRel[n.name]=n.relation||''; }
@@ -4125,50 +4125,75 @@ function flushNpcLife(){
 /* ================= 婚恋：主角那一头 =================
    主角也是边表里的一个人：正室（夫妻）一位，妾室不限，恋人、私情都记在边上。 */
 function playerName(){ return S&&S.player&&S.player.name; }
+function relationshipHead(text){return String(text||'').trim().replace(/^(?:我的|主角的)/,'').split(/[，,；;、（(]/)[0].trim();}
+function relationshipEnded(text){return /^(?:前|原|已解除的?|已断绝的?)(?:妻|夫|妾|侧室|偏房|恋人|情人|道侣|未婚|师父|师尊|师傅|恩师|授业恩师|徒弟|徒儿|弟子|亲传|记名|入室|嫡传|关门|大弟子)|和离|休了|被休|旧情/.test(relationshipHead(text));}
+function mentorshipRole(text){
+  const t=relationshipHead(text);if(relationshipEnded(t))return '';
+  if(/^(?:亲传|记名|入室|嫡传|关门|授业|启蒙)?(?:师父|师尊|师傅|恩师)$/.test(t))return '师父';
+  return /^(?:亲传|记名|入室|嫡传|关门|大|首席)?(?:徒弟|徒儿|弟子)$|^首徒$/.test(t)?'徒弟':'';
+}
+function playerRelType(text){return relKindOf(text)||(mentorshipRole(text)?'师徒':'');}
 function relKindOf(text){
   const t=String(text||'');
-  if(/前妻|前夫|和离|休了|被休|旧情/.test(t)) return '相识';
+  if(relationshipEnded(t)) return '相识';
   if(/小爹/.test(t)) return ''; // 含混称谓不推断为婚恋；正式身份另外记
+  if(/未婚|婚约|指腹为婚/.test(t)) return '恋人'; // 婚约先于「妻」识别，不冒充成婚
   if(/妾|姨娘|侧室|偏房|侍妾/.test(t)) return '妾室';
   if(/^(?:我的|主角的)?(?:正室|正夫)(?:$|[，,；;、（(\s])/.test(t)||/妻|夫君|丈夫|夫人|娘子|相公|道侣/.test(t)) return '夫妻';
   if(/恋人|情人|心上人|相好|意中人|未婚/.test(t)) return '恋人';
   return '';
 }
-// 旧版漏认「正室」时，人物称谓已经入账而夫妻边缺失。只补明确别名，
-// 不从正文猜婚事，不覆盖既有婚配、亲属边、解除记录或另一位正室。
+// 纯状态修复：信任已经保存的明确当前称谓，不从回忆推断新关系。
+// 不改人物、记忆、旧历史或时间；已有正式关系和解除凭据优先。
 function repairPlayerSpouseAliases(s){
-  const p=s&&s.player;if(!p||!p.name||num(p.age)<18)return;
+  const p=s&&s.player;if(!p||!p.name)return;
   const rows=(s.npcs||[]).concat(Object.entries(s.planes||{}).filter(([pl])=>pl!==(s.plane||'下界')).flatMap(([,bag])=>bag.npcs||[]),s.xianLimbo||[]);
   const edges=s.rels||[],mine=edges.filter(r=>r.a===p.name||r.b===p.name);
   const byName=new Map(mine.map(r=>[r.a===p.name?r.b:r.a,r]));
-  const candidates=rows.filter(n=>n&&num(n.age)>=18&&/^(?:我的|主角的)?(?:正室|正妻|正夫)$/.test(String(n.relation||'').trim()));
+  const people=new Map();for(const n of rows)if(n&&n.name&&!people.has(n.name))people.set(n.name,n);
+  const candidates=[...people.values()].map(n=>({n,type:playerRelType(n.relation)})).filter(({n,type})=>
+    type==='师徒'||/^(?:正室|正妻|正夫|妻子|丈夫|夫君|夫人|娘子|相公|道侣|妾室|侍妾|侧室|偏房|小妾|男妾|恋人|情人|未婚妻|未婚夫)$/.test(relationshipHead(n.relation))&&['夫妻','妾室','恋人'].includes(type));
   if(!candidates.length)return;
-  const eligible=candidates.filter(n=>{
+  const eligible=candidates.filter(({n,type})=>{
     const r=byName.get(n.name),orig=(s.origRel||{})[n.name]||Object.values(s.planes||{}).map(b=>(b.origRel||{})[n.name]).find(Boolean)||'';
     if(n.name===p.name||bloodRel(n.relation)||bloodRel(orig)||parentsOf(p).includes(n.name)||parentsOf(n).includes(p.name)||parentsOf(p).some(x=>parentsOf(n).includes(x)))return false;
-    if(n.relationshipExits&&n.relationshipExits.romance)return false;
-    if(r&&(['夫妻','妾室','亲属','师徒'].includes(r.type)||(r.history||[]).some(h=>/和离|休妻|休夫|休了|被休|离异|解除婚姻|解除妾室|结束恋情|解除婚约|玩家更正|断了|分开/.test(h.text||''))))return false;
-    return !edges.some(e=>(e.a===n.name||e.b===n.name)&&e.a!==p.name&&e.b!==p.name&&['夫妻','妾室'].includes(e.type));
+    if((type==='夫妻'||type==='妾室')&&(num(p.age)<18||num(n.age)<18))return false;
+    if(n.relationshipExits&&n.relationshipExits[type==='师徒'?'mentorship':'romance'])return false;
+    if(r&&(['夫妻','妾室','恋人','亲属','师徒'].includes(r.type)||(r.history||[]).some(h=>/和离|休妻|休夫|休了|被休|离异|解除(?:了)?婚姻|解除(?:了)?妾室|结束(?:了)?恋情|解除(?:了)?婚约|解除(?:了)?师徒|断绝(?:了)?师徒|师徒关系.{0,4}(?:解除|断绝)|逐出师门|玩家更正|断了|分开/.test(h.text||''))))return false;
+    return !['夫妻','妾室'].includes(type)||!edges.some(e=>(e.a===n.name||e.b===n.name)&&e.a!==p.name&&e.b!==p.name&&['夫妻','妾室'].includes(e.type));
   });
   // 多个互相冲突的旧称谓无法确定先后，不替玩家重排妻妾身份。
-  if(mine.some(r=>r.type==='夫妻')||eligible.length!==1)return;
-  const n=eligible[0],day=num(s.elapsedDays),date=s.date||'',text=`存档关系补全：${p.name}与${n.name}已为夫妻（原称谓：${n.relation}）`;
-  let r=byName.get(n.name);
-  if(!r){r={k:relKey(p.name,n.name),a:p.name,b:n.name,type:'夫妻',since:date,day,history:[]};(s.rels=s.rels||[]).push(r);}
-  else r.type='夫妻';
-  r.history=r.history||[];r.history.push({day,date,text});
+  const spouses=eligible.filter(x=>x.type==='夫妻'),day=num(s.elapsedDays),date=s.date||'';
+  for(const {n,type} of eligible){
+    if(type==='夫妻'&&(mine.some(r=>r.type==='夫妻')||spouses.length!==1))continue;
+    let r=byName.get(n.name);
+    if(!r){r={k:relKey(p.name,n.name),a:p.name,b:n.name,type,since:date,day,history:[]};(s.rels=s.rels||[]).push(r);byName.set(n.name,r);}
+    else r.type=type;
+    r.history=r.history||[];r.history.push({day,date,text:`存档关系补全：${p.name}与${n.name}的正式关系为${type}（原称谓：${n.relation}）`});
+  }
 }
+function playerRelRecord(n,type,text){const r=relSet(playerName(),n.name,type);if(text){r.history=r.history||[];r.history.push({day:num(S.elapsedDays),date:S.date||dateStr(),text});}return r;}
+function relationshipLife(n,text){n.life=n.life||[];n.life.push({day:num(S.elapsedDays),date:S.date||dateStr(),text});}
 // 剧情或对话把「与主角关系」改了之后，同步到边表；不满 18 岁不许婚嫁
 function syncPlayerRel(n,before){
   const me=playerName(); if(!me||!n) return '';
   const kind=relKindOf(n.relation), was=relKindOf(before);
+  const r=relOf(me,n.name),role=mentorshipRole(n.relation);
   if(!kind){
     if(/小爹/.test(n.relation||'')) return '';
-    const r=relOf(me,n.name),kin=/义父|义母|干爹|干娘|义兄|义姐|义弟|义妹/.test(n.relation||'')||bloodRel(n.relation);
-    if(kin) relSet(me,n.name,'亲属',`${n.name}与主角的正式关系为${n.relation}`);
-    else if(mentorshipRel(n.relation)){ relSet(me,n.name,'师徒',`${n.name}与主角的正式关系为${n.relation}`);clearRelationshipExit(n,'mentorship'); }
-    else if(r&&['夫妻','妾室','恋人'].includes(r.type)&&was) relSet(me,n.name,'相识',`与${n.name}断了`);
+    const kin=/义父|义母|干爹|干娘|义兄|义姐|义弟|义妹/.test(n.relation||'')||bloodRel(n.relation);
+    if(kin){if(!r||r.type!=='亲属')playerRelRecord(n,'亲属',`${n.name}与主角的正式关系为${n.relation}`);}
+    else if(role){
+      if(r&&r.type==='师徒'&&mentorshipRole(before)===role)return '';
+      playerRelRecord(n,'师徒',`${n.name}与主角的正式关系为${n.relation}`);clearRelationshipExit(n,'mentorship');
+    }
+    else if(r&&['夫妻','妾室','恋人','师徒'].includes(r.type)){
+      const mentor=r.type==='师徒';recordRelationshipExit(n,mentor?'mentorship':'romance',mentor?'解除师徒关系':r.type==='夫妻'?'解除婚姻':r.type==='妾室'?'解除妾室关系':'结束恋情',true,{from:before,source:'剧情确认'});
+    }
     return '';
+  }
+  if(kind==='相识'&&r&&['夫妻','妾室','恋人','师徒'].includes(r.type)){
+    const mentor=r.type==='师徒';recordRelationshipExit(n,mentor?'mentorship':'romance',mentor?'解除师徒关系':r.type==='夫妻'?'解除婚姻':r.type==='妾室'?'解除妾室关系':'结束恋情',true,{from:before,source:'剧情确认'});return '';
   }
   if(kind===was&&relOf(me,n.name)&&relOf(me,n.name).type===kind) return '';
   if((kind==='夫妻'||kind==='妾室')&&(num(S.player.age)<18||num(n.age)<18)){
@@ -4183,8 +4208,8 @@ function syncPlayerRel(n,before){
   const word={夫妻:'结为夫妻',妾室:'纳为'+(n.gender==='男'?'小爹':'妾室'),恋人:'走到了一起',相识:'断了'}[k];
   // 有正室又起了新恋情：边上记一笔私情
   const affair=k==='恋人'&&sp&&sp!==n.name;
-  relSet(me,n.name,k,`${me}与${n.name}${affair?'有了私情':word}`);
-  lifeLog(n,`与${me}${affair?'有了私情':word}`);
+  playerRelRecord(n,k,`${me}与${n.name}${affair?'有了私情':word}`);
+  relationshipLife(n,`与${me}${affair?'有了私情':word}`);
   if(k==='夫妻'||k==='妾室'){ n.relation=k==='夫妻'?(n.gender==='女'?'妻子':'丈夫'):'妾室'; n.address=k==='妾室'&&n.gender==='男'?'小爹':n.relation; ledger(`与${n.name}${word}`); }
   if(affair) ledger(`背着${sp}与${n.name}有了私情`);
   return '';
@@ -4202,7 +4227,7 @@ function refreshManagementActions(){
   document.querySelectorAll('[data-abandon-quest],[data-end-love],[data-end-relation],#discExpel').forEach(b=>b.disabled=blocked);
   document.querySelectorAll('[data-intimacy]').forEach(b=>b.disabled=blocked||!!intimacyReason(b.dataset.intimacy));
 }
-function mentorshipRel(text){return /^(?:我的|主角的)?(?:亲传|记名|入室|嫡传)?(?:徒弟|徒儿|弟子|师父|师尊|师傅|恩师)(?:$|[，,（(])/.test(plain(text));}
+function mentorshipRel(text){return !!mentorshipRole(text);}
 function relationshipExitKind(relation){
   if(['夫妻','妾室','恋人'].includes(relKindOf(relation)))return 'romance';
   return mentorshipRel(relation)?'mentorship':'';
@@ -4217,7 +4242,7 @@ function relationActions(n){
   }
   const member=clanDisciples().find(d=>(d.npcName||d.name)===n.name);
   if(member)out.push({kind:'clan',label:'逐出门墙'});
-  else if(!blood&&((r&&r.type==='师徒')||mentorshipRel(n.relation)))out.push({kind:'mentorship',label:/师父|师尊|师傅|恩师/.test(n.relation)?'解除师徒关系':'逐出师门'});
+  else if(!blood&&((r&&r.type==='师徒')||mentorshipRel(n.relation)))out.push({kind:'mentorship',label:mentorshipRole(n.relation)==='师父'?'解除师徒关系':'逐出师门'});
   return out;
 }
 function relationRestoreRequested(n,relation,ctx){
@@ -4225,22 +4250,22 @@ function relationRestoreRequested(n,relation,ctx){
   const action=String(ctx&&ctx.act||'');
   if(!(action.includes(n.name)||ctx&&ctx.actorName===n.name))return false;
   if(/不想|不愿|不要|不再|不肯|拒绝|别再|放弃|未曾|没有/.test(action))return false;
-  return kind==='romance'?/复合|复婚|重新成亲|重新成婚|再娶|再嫁|结为道侣|结为夫妻|求婚|成亲|成婚|纳.{0,8}妾|与.{0,8}相恋/.test(action):/重新收|重入|重新拜|拜师|拜.{0,6}为师|收.{0,8}(?:为徒|徒弟|为弟子|门下)/.test(action);
+  return kind==='romance'?/复合|复婚|重新成亲|重新成婚|再娶|再嫁|结为道侣|结为夫妻|求婚|成亲|成婚|订婚|订下婚约|重订婚约|纳.{0,8}妾|与.{0,8}相恋/.test(action):/重新收|重入|重新拜|拜师|拜.{0,6}为师|收.{0,8}(?:为徒|徒弟|为弟子|门下)/.test(action);
 }
-function recordRelationshipExit(n,kind,label,detach){
-  const from=n.relation,me=playerName(),text=kind==='clan'?`${n.name}${label}（${me}决定）`:label==='逐出师门'?`${me}将${n.name}逐出师门，师徒关系已解除`:`${me}主动与${n.name}${label}`;
+function recordRelationshipExit(n,kind,label,detach,opt){
+  const from=opt&&opt.from||n.relation,me=playerName(),text=opt&&opt.source?`${me}与${n.name}已${label}`:kind==='clan'?`${n.name}${label}（${me}决定）`:label==='逐出师门'?`${me}将${n.name}逐出师门，师徒关系已解除`:`${me}主动与${n.name}${label}`;
   n.relationshipExits=n.relationshipExits||{};
   n.relationshipExits[kind]={from,label,turn:S.turn,day:num(S.elapsedDays),date:S.date};
   if(detach){
     n.relation='故人';delete n.address;
-    const edge=relOf(me,n.name);if(!edge||edge.type!=='亲属')relSet(me,n.name,'相识',text);
+    const edge=relOf(me,n.name);if(!edge||edge.type!=='亲属')playerRelRecord(n,'相识',text);
     // 最新的玩家决定覆盖旧称谓定论，原记录和生身父母资料仍保留。
     decreeRecord(S,n.name+'（故人）',S.months,false);decreeSync(S,n);
   }
   if(kind==='romance'){n['爱恋值']=null;if(/指腹为婚|未婚/.test(n.bond||''))delete n.bond;}
-  n.memory=(n.memory||[]).concat(text).slice(-MEM().npcMem);
-  lifeLog(n,text);
-  commitFactUpdates({factUpdates:[{subject:n.name,key:kind==='romance'?'与主角的婚恋约定':kind==='clan'?'主角门下资格':'与主角的师徒约定',value:label+'；当前关系为'+n.relation,reason:'玩家主动决定'}]},S);
+  n.memory=(n.memory||[]).concat(text);
+  relationshipLife(n,text);
+  commitFactUpdates({factUpdates:[{subject:n.name,key:kind==='romance'?'与主角的婚恋约定':kind==='clan'?'主角门下资格':'与主角的师徒约定',value:label+'；当前关系为'+n.relation,reason:opt&&opt.source||'玩家主动决定'}]},S);
   news(text);
 }
 function clearRelationshipExit(n,kind){
@@ -4258,7 +4283,7 @@ function endPlayerRelation(name,kind){
     if(!expelDisciple(d))return {ok:false,why:'此人已经不在门下'};
   }else{
     recordRelationshipExit(n,kind,option.label,true);
-    if(kind==='mentorship'&&/^(?:亲传|记名|入室|嫡传)?(?:弟子|徒弟|徒儿)$/.test(n.identity||''))n.identity='修士';
+    if(kind==='mentorship'&&mentorshipRole(n.identity)==='徒弟')n.identity='修士';
   }
   return {ok:true,name:n.name,label:option.label};
 }
@@ -5472,7 +5497,7 @@ function cultHtml(p){
 function familyPartnerCards(){
   const me=playerName(),seen=new Set(),entries=relsOfName(me).filter(r=>['夫妻','妾室','恋人'].includes(r.type)).map(r=>({r,n:findNpc(relOther(r,me))})).filter(x=>x.n&&!seen.has(x.n.name)&&seen.add(x.n.name));
   if(!entries.length)return '<div class="empty">尚无伴侣</div>';
-  return '<div class="family-partners">'+entries.map(({n,r})=>{const why=intimacyReason(n.name),blocked=managementBlock()||why,role=r.type==='夫妻'?'正室':r.type;
+  return '<div class="family-partners">'+entries.map(({n,r})=>{const why=intimacyReason(n.name),blocked=managementBlock()||why,role=r.type==='夫妻'?'正室':r.type==='恋人'&&/未婚|婚约|指腹为婚/.test(n.relation||'')?'婚约':r.type;
     const f=S.player.gender==='女'?S.player:n.gender==='女'?n:null;
     const status=n.alive===false?'已经故去':f&&f.preg?'已有身孕 · 待产中':why||'相聚在此 · 同房耗时一天';
     return `<article class="family-partner ${n.alive===false?'partner-gone':''}"><div class="family-partner-head">${avatarFace(n)}<div class="family-partner-name"><button class="flink" data-family-person="${esc(n.name)}">${esc(n.name)}</button><span class="family-role">${role}</span><div class="panel-note">${esc(status)}</div></div></div>${n.alive!==false?`<div class="family-actions"><button class="mbtn primary" data-intimacy="${esc(n.name)}" ${blocked?'disabled':''}>同房</button><button class="mbtn" data-family-person="${esc(n.name)}">查看人物</button></div>`:''}</article>`;
@@ -7257,7 +7282,7 @@ function decreeText(n){
 // 师门名册：师父、同门以此为准，模型不许另造
 function sectRosterLine(){
   const alive=S.npcs.filter(n=>n.alive&&!n.beast);
-  const sh=alive.filter(n=>/^(?:师父|师尊|师傅|恩师)$/.test(plain(n.relation)));
+  const sh=alive.filter(n=>mentorshipRole(n.relation)==='师父'&&!(n.relationshipExits&&n.relationshipExits.mentorship));
   if(!S.sect) return `【师门】主角尚无师门${sh.length?`；师父：${sh.map(n=>n.name).join('、')}`:'，也没有师父'}。玩家没自己去拜师入门，就不要替他安排；拜访、做客、受邀都不算入门。\n`;
   const tm=alive.filter(n=>!sh.includes(n)&&n.faction===S.sect.name).slice(-14);
   return `【师门名册（以此为准，不要另造师父、同门；新认识的同门写进newNpcs）】${S.sect.name}；师父：${sh.length?sh.map(n=>`${n.name}（${realmText(n.realm)}）`).join('、'):'尚未拜师'}；同门：${tm.length?tm.map(n=>`${n.name}（${n.relation||'同门'}，${realmText(n.realm)}）`).join('、'):'人脉里还没有'}\n`;
@@ -8140,16 +8165,27 @@ function turnIncomeCap(p,judge){
   return Math.round((fateTier(judge?judge.fate:10)==='great'?rcap*5:rcap)*Math.max(0.5,Math.min(months,6))*fdm().money*(fdm().freeAct?5:1));
 }
 function isAcknowledgement(line){return /^(?:好的?|好吧|嗯|是的|知道了|明白了|遵命|遵旨|多谢[^，。]*|谢谢[^，。]*|收到|行|没问题|听[^，。]*的)(?:[，,。！!\s]*(?:我记住了|我明白了|明天我一定准时到|明日准时到|我一定准时到|长老|前辈))*[。！!\s]*$/.test(String(line||'').trim());}
+function relationshipEventText(text){
+  return String(text||'').split(/[。！？\n；;，,]/).filter(t=>!/回忆|想起|当年|曾经|昔日|如果|假如|若能|打算|准备|计划|将来|日后|以后|来年|明年|今后|没有|并未|未曾|未能|不愿|不想|不要|拒绝|不能|不肯|暂不|尚未|不会|不再(?:拜师|收.{0,6}(?:为徒|为弟子)|成亲|成婚|订婚|相恋)/.test(t)).join('。');
+}
 function relationEventEvidence(n,relation,ctx){
   const kind=relKindOf(relation),raw=String(relation||'');
   if(/小爹/.test(raw))return false;
-  if(!kind&&!/义父|义母|干爹|干娘|义兄|义姐|义弟|义妹/.test(raw))return true;
   const all=String(ctx.act||'')+'\n'+String(ctx.txt||'');
-  const text=ctx.actorName===n.name?all:nameCtx(n.name,all,(S.npcs||[]).map(x=>x.name));
+  const scoped=ctx.actorName===n.name?all:nameCtx(n.name,all,(S.npcs||[]).map(x=>x.name)),text=relationshipEventText(scoped);
+  const role=mentorshipRole(raw),now=role?'师徒':kind,old=playerRelType(n.relation),edge=relOf(playerName(),n.name),prior=['夫妻','妾室','恋人','师徒'].includes(old)?old:edge&&['夫妻','妾室','恋人','师徒'].includes(edge.type)?edge.type:'';
+  const engaged=/未婚|婚约|指腹为婚/.test(raw),wasEngaged=/未婚|婚约|指腹为婚/.test(n.relation||'');
+  if(engaged&&['夫妻','妾室'].includes(prior))return false; // 模型不能把既有婚姻降回婚约
+  if(now===prior&&(!role||mentorshipRole(n.relation)===role)&&(now!=='恋人'||engaged===wasEngaged))return true; // 同阶段换称呼，不重办仪式
+  if(prior&&!['夫妻','妾室','恋人','师徒'].includes(now)&&!bloodRel(raw)&&!/义父|义母|干爹|干娘|义兄|义姐|义弟|义妹/.test(raw)){
+    return prior==='师徒'?/解除(?:了)?师徒|断绝(?:了)?师徒|师徒关系.{0,4}(?:解除|断绝)|不再.{0,5}师徒|逐出师门|逐出门墙/.test(text):/和离|休妻|休夫|休了|被休|分手|分开|解除(?:了)?婚姻|解除(?:了)?妾室|结束(?:了)?恋情|解除(?:了)?婚约|退婚|不再.{0,5}(?:夫妻|恋人|妾室)/.test(text);
+  }
+  if(role)return /拜师|拜.{0,6}为师|收.{0,6}(?:为徒|徒弟|门下|为弟子)|拜师礼|认.{0,3}(?:师父|师尊|师傅|恩师)/.test(text);
+  if(!kind&&!/义父|义母|干爹|干娘|义兄|义姐|义弟|义妹/.test(raw))return true;
   if(/义父|义母|干爹|干娘|义兄|义姐|义弟|义妹/.test(raw))return /认.{0,8}(?:义|干)|结义|义父|义母|干爹|干娘/.test(text);
   if(kind==='夫妻')return /成亲|成婚|婚礼|嫁给|(?:娶|收).{0,6}(?:为妻|为夫)|结为道侣|结为夫妻|共结连理/.test(text);
   if(kind==='妾室')return /纳.{0,8}(?:妾|侧室|偏房)|收.{0,6}为妾/.test(text);
-  if(kind==='恋人')return /两情相悦|相恋|互生爱慕|答应.{0,8}(?:相恋|在一起)|愿.{0,8}做.{0,4}道侣/.test(text);
+  if(kind==='恋人')return engaged?/订婚|订下婚约|订立婚约|定下婚约|婚约已定|应下婚约|答应.{0,6}婚约|指腹为婚|许配/.test(text):/两情相悦|相恋|互生爱慕|答应.{0,8}(?:相恋|在一起)|愿.{0,8}做.{0,4}道侣/.test(text);
   return true;
 }
 function rewardReference(st,action,ch){
@@ -9608,14 +9644,13 @@ function npcGuard(n,u,ctx){
   if(nr&&nr!==or){
     const orig=plain((S.origRel||{})[n.name])||or;
     const dec=(typeof decreeHits==='function'?decreeHits(S,n.name):[]).map(e=>e.f.relation).filter(Boolean).pop();
-    const romance=['夫妻','妾室','恋人'].includes(relKindOf(nr))||/仇|宿敌/.test(nr);
+    const prior=playerRelType(or),next=playerRelType(nr),romance=['夫妻','妾室','恋人','师徒'].includes(next)||['夫妻','妾室','恋人','师徒'].includes(prior)&&relationEventEvidence(n,nr,ctx)||/仇|宿敌/.test(nr);
     let why='';
     if(!relationRestoreRequested(n,nr,ctx)) why='玩家已主动结束这段关系，尚未要求重新缔结';
     else if(!relationEventEvidence(n,nr,ctx)) why='称谓含混或没有确立关系的经过';
     else if(bloodRel(orig)||bloodRel(or)) why='血亲改不了';
     else if(dec&&dec!==nr&&!romance&&!(dec==='故人'&&n.relationshipExits&&Object.keys(n.relationshipExits).length)&&!(n.relationshipExits&&n.relationshipExits[relationshipExitKind(nr)]&&relationRestoreRequested(n,nr,ctx))) why=`玩家写明是${dec}`;
     else if(PAST_REL.test(nr)||bloodRel(nr)) why='后来认识的人不会变成旧识、亲眷';
-    else if(/师父|师尊|师傅|恩师|徒弟|徒儿|^弟子$/.test(nr)&&!/拜师|拜.{0,6}为师|收.{0,4}(?:为徒|徒弟|门下|为弟子)|拜师礼|认.{0,3}师父|入门/.test(all)) why='没有拜师收徒的经过';
     else if(/师兄|师姐|师弟|师妹|同门|师叔|师伯/.test(nr)&&!(S.sect&&plain(n.faction)===S.sect.name)&&!/同门|入门|拜入/.test(all)) why='不是同门';
     if(why) guardNote(`${n.name}的关系不改成「${nr}」（${why}）`); else { const parts=nr.split(/[，,；;、]/); out.relation=parts[0]; if(parts.length>1&&typeof appendNote==='function') appendNote(n,parts.slice(1).join('，')); }
   }
@@ -11530,8 +11565,12 @@ function applyConvoEffects(n, eff, attemptOk, line, reply){
     const r=String(eff.relation).trim().slice(0,8);
     // 10-09：面谈改关系，和推演回合走同一道闸（血亲、旧日来历、玩家写明的不改；拜师要有经过）
     const gd=npcGuard(n,{relation:r},{actorName:n.name,act:String(line||''),txt:String(reply||'')});
-    if(/师父|师傅/.test(r)&&!c.free&&(c.fav<c.artGate||realmIndex(n.realm)<=realmIndex(p.realm))) out.push(`${n.name}还不肯认你这个徒弟`);
+    if(mentorshipRole(r)==='师父'&&mentorshipRole(n.relation)!=='师父'&&!c.free&&(c.fav<c.artGate||realmIndex(n.realm)<=realmIndex(p.realm))) out.push(`${n.name}还不肯认你这个徒弟`);
     else if(gd.relation&&gd.relation!==n.relation){ const before=n.relation; n.relation=gd.relation; const why=syncPlayerRel(n,before); if(why) out.push(why); else gain(out,`你与${n.name}的关系变成了「${n.relation}」`); }
+    else if(r===n.relation){
+      if(['夫妻','妾室','恋人','师徒'].includes(playerRelType(r)))repairPlayerSpouseAliases(S);
+      else if(!bloodRel((S.origRel||{})[n.name])&&['夫妻','妾室','恋人','师徒'].includes((relOf(playerName(),n.name)||{}).type)&&relationEventEvidence(n,r,{actorName:n.name,act:String(line||''),txt:String(reply||'')}))syncPlayerRel(n,n.relation);
+    }
   }
   if(eff.faction&&String(eff.faction).trim()&&risky){
     const fc=String(eff.faction).trim().slice(0,10);
