@@ -6864,10 +6864,89 @@ function sectRosterLine(){
   const tm=alive.filter(n=>!sh.includes(n)&&n.faction===S.sect.name).slice(-14);
   return `【师门名册（以此为准，不要另造师父、同门；新认识的同门写进newNpcs）】${S.sect.name}；师父：${sh.length?sh.map(n=>`${n.name}（${realmText(n.realm)}）`).join('、'):'尚未拜师'}；同门：${tm.length?tm.map(n=>`${n.name}（${n.relation||'同门'}，${realmText(n.realm)}）`).join('、'):'人脉里还没有'}\n`;
 }
-function stateBlocks(action){
-  return withSocialIndexes(()=>stateBlocksCore(action));
+/* 行囊原文只做请求投影，不写回存档。目录编号在这次预演内有效，同名异文分别编号。
+   只有纯文字的文书/凭证/图样可暂缓展开；功能、彩蛋、方谱及用途不明的物件照旧全给。 */
+function historicalItem(it){
+  if(!it||typeof it!=='object'||!it.name||!it.desc) return false;
+  if(Object.keys(it).some(k=>k!=='name'&&k!=='desc')) return false;
+  if(relicByName(it.name)||recipeKind(it)||Object.values(EGGS).some(e=>(e.items||[]).some(x=>x.name===it.name))) return false;
+  if(/传音符|护身|护体|储物|法宝|法器|丹药|灵药|草籽|种子|飞针|暗器|毒药|解毒/.test(it.name)||/战力|炼化|服用|吞服|催动|激发|祭出|佩戴|使用后|用后|装备|回复|恢复|增加|提升|加成|减免|伤害|延寿|寿元|修为|突破|传送|可引.{0,8}灵力/.test(it.desc)) return false;
+  return /图|拓|样|抄|纸|帛|书信|旧条|字条|契|册|簿|牒|牍|档|庚帖|凭|牌|路引|信物/.test(it.name)||/刻[着有一半个字]|牌[面背]|一行[字墨炭]|记号|凭记|刀痕|划痕|断口|走刀|字迹|炭字|同刀|同印|同料|旧物/.test(it.desc);
 }
-function stateBlocksCore(action){
+function itemText(t){return String(t||'').replace(/[《》「」『』【】\s]/g,'');}
+function makeItemContext(st,action){
+  const rows=[], groups=new Map();
+  for(const [i,it] of ((st.player.items||{}).其他||[]).entries()){
+    if(!it||typeof it!=='object'||!it.name) continue;
+    const key=JSON.stringify(it);
+    if(groups.has(key)){groups.get(key).count++;continue;}
+    const row={id:'I'+(i+1),name:it.name,item:JSON.parse(key),count:1,brief:historicalItem(it)};
+    rows.push(row);groups.set(key,row);
+  }
+  const ctx={rows,loaded:new Set(rows.filter(r=>!r.brief).map(r=>r.id)),selected:new Set(),reads:0};
+  // 别名只用至少四字且只对应同一物名的片段，不拿「旧」「图」「门三」等短词撒网。
+  const grams=new Map();
+  for(const r of rows){r.key=itemText(r.name);r.alias=r.key.replace(/旧/g,'');for(let i=0;i<=r.key.length-4;i++){const g=r.key.slice(i,i+4);if(!grams.has(g))grams.set(g,new Set());grams.get(g).add(r.name);}}
+  ctx.match=(r,text,min=4)=>{text=itemText(text);if(text.includes(r.key)||r.alias.length>=4&&text.replace(/旧/g,'').includes(r.alias))return true;for(let i=0;i<=r.key.length-min;i++){const g=r.key.slice(i,i+min);if(text.includes(g)&&(min>4||grams.get(g)?.size===1))return true;}return false;};
+  const select=r=>{ctx.loaded.add(r.id);ctx.selected.add(r.id);};
+  const add=(text,min=4)=>{for(const r of rows)if(ctx.match(r,text,min))select(r);};
+  const act=String(action||''), scene=st.scene||{};
+  add(act);
+  // 「量图残卷」「认路铜钱」这类短称：题词与物类同时对得上才展开，含混时保留全部候选。
+  for(const m of act.matchAll(/([一-龥]{2})(?:旧|残|半)?(卷|图|帛|拓样|铜钱|木牌|玉牌)/g)){
+    if(/^(?:那张|这张|半张|一张|半块|一块|那份|这份|一份|上回|上次)$/.test(m[1]))continue;
+    for(const r of rows)if(r.key.includes(m[1])&&r.key.includes(m[2]))select(r);
+  }
+  add([scene.location,...asArr(scene.unresolved)].join('；'),6);
+  for(const name of asArr(scene.present))if(String(name).length>=3)for(const r of rows)if(String(r.item.desc||'').includes(name))select(r);
+  for(const q of st.quests||[])if(q.status==='进行中')add([q.title,q.desc,...(Array.isArray(q.objectives)?q.objectives:[]).map(o=>o.text)].join('；'),6);
+  const anaphora=/那[张份卷件块枚个几些]|这[张份卷件块枚个几些]|上回|上次|刚才|先前|之前.*(?:图|拓|物|信|帛|纸)|旧物/.test(act);
+  for(const h of (st.history||[]).slice(anaphora?-3:-1))add([h.action,h.summary,h.narrative||h.narr].join('；'));
+  if(/全部|所有|逐件|一一/.test(act)&&/行囊|背包|旧物|物品|物件/.test(act))for(const r of rows)ctx.loaded.add(r.id);
+  if(anaphora&&!rows.some(r=>r.brief&&ctx.loaded.has(r.id)))for(const r of rows)ctx.loaded.add(r.id);
+  expandItemLinks(ctx);
+  return ctx;
+}
+function expandItemLinks(ctx){
+  // 只跟原文指向的物名/长别名走两层，避免共同套话把整段历史全拉进来。
+  for(let depth=0;depth<2;depth++){
+    const texts=ctx.rows.filter(r=>ctx.selected.has(r.id)).map(r=>r.item.desc||'');
+    const more=ctx.rows.filter(r=>!ctx.loaded.has(r.id)&&texts.some(t=>ctx.match(r,t,6)));
+    if(!more.length)break;
+    for(const r of more){ctx.loaded.add(r.id);ctx.selected.add(r.id);}
+  }
+}
+function itemContextBlock(ctx){
+  if(!ctx||!ctx.rows.some(r=>r.brief))return '';
+  const catalog=ctx.rows.filter(r=>r.brief).map(r=>[r.id,r.name,r.count]);
+  const details=ctx.rows.filter(r=>r.brief&&ctx.loaded.has(r.id)).map(r=>({id:r.id,count:r.count,item:r.item}));
+  return `【旧物全量目录（编号、原名、件数；同名不同编号是不同原文，不能混同）】${JSON.stringify(catalog)}
+【本回已展开的旧物原文】${JSON.stringify(details)}
+目录仅省略本回无关物件的描述，物品和历史仍全部存在；没有展开不等于丢失、遗忘、失效或任务重启。当前事实与已结算台账优先于旧物文字。
+若要使用未展开旧物的铭文、来历、图样、用途等具体内容，先只输出 {"needsItemDetails":["I编号或准确物名"]}，不要同时写正文或结算。别名指向不清可填 "*" 读全部。引擎最多补读一次，沿用同一时间、骰面和预演，不会先结算。补读后据原文输出本回最终JSON；原文未载的事不可编作旧记忆。
+`;
+}
+function itemReadRequest(ctx,d){
+  const requested=d&&d.needsItemDetails;
+  // 选项只提出下一步可以查看什么，目录里的物名已足够；不要因此把本回又扩成整包原文。
+  const text=itemText(JSON.stringify(d&&{narrative:d.narrative,reply:d.reply,summary:d.summary,itemsRemove:d.playerChanges&&d.playerChanges.itemsRemove,take:d.effects&&d.effects.take,factUpdates:d.factUpdates}||{}));
+  // 正文查漏只认完整物名/完整旧称；「半个凿字」「三处走刀」是共用的内容，不能当另一件物品。
+  const missing=ctx.rows.filter(r=>r.brief&&!ctx.loaded.has(r.id)&&(text.includes(r.key)||r.alias.length>=4&&text.replace(/旧/g,'').includes(r.alias)));
+  const refs=(Array.isArray(requested)?requested:requested==null?[]:[requested]).filter(x=>typeof x==='string'&&x.trim());
+  if(!refs.length&&!missing.length)return false;
+  if(ctx.reads){const e=new Error('旧物补读后仍缺少原文，尚未结算，请重试');e.itemRead=true;throw e;}
+  // 补读一次就把余下旧物全部给出：兼顾含混别名、同名异文和跨物件引用，避免多轮追读。
+  ctx.reads++;
+  for(const r of ctx.rows)ctx.loaded.add(r.id);
+  return {refs:refs.concat(missing.map(r=>r.id))};
+}
+function itemSupplement(ctx){
+  return '\n【旧物补读原文（只查阅，同一次预演；此前候选正文与变化均未执行）】'+JSON.stringify(ctx.rows.filter(r=>r.brief).map(r=>({id:r.id,count:r.count,item:r.item})))+'\n这次已给出全部旧物原文，不能再请求补读。请以最初玩家行动、原有骰面、时间与引擎判定为准，输出最终JSON；不得把补读写成玩家另做了一回行动、不得另算修为/物品/钱款/光阴。';
+}
+function stateBlocks(action,itemContext){
+  return withSocialIndexes(()=>stateBlocksCore(action,itemContext));
+}
+function stateBlocksCore(action,itemContext){
   worldState();
   const p=S.player;
   const M=MEM();
@@ -6899,7 +6978,8 @@ function stateBlocksCore(action){
   if(customAvatarOf(p)) delete pb.portrait;
   for(const k of ['realm','linggen','lingli','breakCD','lifeBonus','cultMode','cultMul','scarPower','bottleneckNoted','lifespan','tags','prep']) delete pb[k];
   pb.attributes=Object.assign({},p.attributes); delete pb.attributes['武功'];
-  if(p.items){ pb.items={}; for(const c in p.items) pb.items[c]=(c==='法器'||c==='玉简'?(p.items[c]||[]).map(it=>({item:it,count:1})):stackItems(p.items[c])).map(({item:it,count})=>{ if(!it||typeof it!=='object') return it; const o=Object.assign({},it); delete o.bonus; if(count>1) o.count=count; return o; }); }
+  if(itemContext===undefined)itemContext=makeItemContext(S,action);
+  if(p.items){ pb.items={}; for(const c in p.items) pb.items[c]=(c==='其他'&&itemContext?itemContext.rows.filter(r=>!r.brief).map(r=>({item:r.item,count:r.count})):c==='法器'||c==='玉简'?(p.items[c]||[]).map(it=>({item:it,count:1})):stackItems(p.items[c])).map(({item:it,count})=>{ if(!it||typeof it!=='object') return it; const o=Object.assign({},it); delete o.bonus; if(count>1) o.count=count; return o; }); }
   const currentFacts=continuityData(S,action), currentTime=timeAnchors();
   return `${CONTINUITY_RULES}【主角身世（开局时写下的；其中的田产、欠账、谁欺负谁、灵根探没探出来，都只是开局时的样子，后来改变了的以长期事实、人物名册和近况为准）】${p.backstory}
 【前尘卷录（早年经历的概要）】
@@ -6929,7 +7009,7 @@ ${worldThreadBlock(action)}
 【法宝战力】行囊中每件法宝的有效战力都计入当前战力；越级威力由引擎折算。已有特殊效果照常生效，叙事不得再次添加法宝战力或凭空增加攻击次数。
 【称呼与尊卑】${playerAddressRule()}至亲爱人保留亲近称呼；仇人不必行礼服软但要忌惮实力差；普通同门、弟子、陌生男女不算特殊关系。【眼下要紧的人】里每个人的「对主角」一栏写明了此人见主角该有的礼数，照办。
 【主角面板】${JSON.stringify(pb)}（称号：${titleOf(p)}；${rankName()}位次：${rankText()}）
-${sectRosterLine()}${S.sect&&!S.sect.own?`【宗门】${S.sect.name}${sectRank(S.sect.contrib)}，贡献${S.sect.contrib}${sectNext(S.sect.contrib)?`（攒到${sectNext(S.sect.contrib).need}升${sectNext(S.sect.contrib).name}）`:''}；剧情里称呼、差事都照这个位阶写\n`:''}${courtLine()}【生计】身上${p.money}块${moneyUnit()}，${upkeepText()}${S.destitute?(inXianjie()?'；主角仙晶已经用尽，日子捉襟见肘':'；主角灵石已经用尽，日子捉襟见肘'):''}${inXianjie()&&num((p.wallet||{})['灵石'])?`；另有下界带上来的${num(p.wallet['灵石'])}块下品灵石，在仙界不顶用`:''}；年岁${p.age}，寿元${lifeText(p)}（${ageNote()}）
+${itemContextBlock(itemContext)}${sectRosterLine()}${S.sect&&!S.sect.own?`【宗门】${S.sect.name}${sectRank(S.sect.contrib)}，贡献${S.sect.contrib}${sectNext(S.sect.contrib)?`（攒到${sectNext(S.sect.contrib).need}升${sectNext(S.sect.contrib).name}）`:''}；剧情里称呼、差事都照这个位阶写\n`:''}${courtLine()}【生计】身上${p.money}块${moneyUnit()}，${upkeepText()}${S.destitute?(inXianjie()?'；主角仙晶已经用尽，日子捉襟见肘':'；主角灵石已经用尽，日子捉襟见肘'):''}${inXianjie()&&num((p.wallet||{})['灵石'])?`；另有下界带上来的${num(p.wallet['灵石'])}块下品灵石，在仙界不顶用`:''}；年岁${p.age}，寿元${lifeText(p)}（${ageNote()}）
 【修为】${realmText(p.realm)}（修为驾驭得住的品阶到${gradeText(gradeCapFor(p))}；更高的法宝、功法也拿得到，只是发挥不全。越级的宝物要有来路：秘境、斗法战利品、高人相赠、重金买下，不要随手发；炼器想炼过这一档，剧情写成火候不够）；灵根${lgText(p.linggen)}；${lingliWord()}${Math.floor(num(p.lingli))}/${lingliNeed(p.realm)}${atBottleneck(p)?'（已到瓶颈，灵力攒不进去了，冲关要玩家自己发起）':''}${num(p.breakCD)>0?`；冲关受挫，还要调养${p.breakCD}个月`:''}；本境界一次闭关最长${durationText(closeMaxMonths())}
 【战力（引擎结算，不可自行改写）】${powerSummary(p)}；功法威力、熟练与境界压制在斗法中另算。
 ${debtBlock()}【标签】${(p.tags||[]).map(t=>t+'：'+(XTAGS[t]?XTAGS[t].desc:'')).join('；')||'无'}——数值部分引擎已经算进去了，你不用再加${tagLeanText(p)?`；要你在剧情里体现的倾向：${tagLeanText(p)}`:''}
@@ -7020,7 +7100,7 @@ function tailReminder(){
 - 必写：scene（含present）、本回打过交道的人的npcUpdates、options（3至5个，至少两种类型）。
 - 只输出那一个JSON对象。`;
 }
-function turnPrompt(action, judge){
+function turnPrompt(action, judge, itemContext){
   return `${worldRules()}
 
 【推演要求（本回合的状态、玩家行动与引擎判定都写在后面）】
@@ -7079,7 +7159,7 @@ ${JSON_RULE}
 必写：narrative、summary、scene（location、present、unresolved都要有）、options；本回合引擎有属性判定时写check；本回合和主角说过话、打过交道的已有人物，每人在npcUpdates里写一条，至少有好感度增减和mood（没变就写0）。人物名册、人物谱里标了「未定」「还缺」的人出场时，在npcUpdates里一次补齐（gender、age、realm、personality、appearance、secret）。
 写完对一遍：谁的好感该动了？哪桩心愿有了进展（questUpdates）？有没有新认识、有名有姓的人（newNpcs）？修真界有没有新风闻（rumors）？
 
-${stateBlocks(action)}
+${stateBlocks(action,itemContext)}
 
 【玩家本回合行动】${action}
 ${judge.cult==='闭关'&&S.lastCloseNarr?`【上回闭关已经写过的段落，这回不许再用里面的景物、动作和比喻】${S.lastCloseNarr}\n`:''}${parenBlock(action,false)}【本回合引擎判定（不可更改，必须如实体现）】
@@ -7088,7 +7168,7 @@ ${judge.convo?`\n【这回是谈话余波：下面的要求压过前面的推演
 ${tailReminder()}`;
 }
 
-function duelAftermathPrompt(action, judge, duel){
+function duelAftermathPrompt(action, judge, duel, itemContext){
   const log=duel.log.map(r=>r.plain).join('\n');
   const res=duel.resultText;
   return `${worldRules()}
@@ -7113,7 +7193,7 @@ ${JSON_RULE}
 "playerChanges":{"attributes":{},"fame":{"声望":0,"凶名":0},"money":0,"skills":{},"artsAdd":[],"artsTrain":[],"statusAdd":[],"statusRemove":[],"itemsAdd":{},"itemsRemove":[]},
 "npcUpdates":[],"newNpcs":[],"npcEvents":[],"rumors":[],"newVendettas":[],"questUpdates":[],"newQuests":[],"rankingUpdates":[],"rankingAdd":[],"factionUpdates":[],"duel":null,"options":[],"gameOver":false,"ending":null}
 
-${stateBlocks()}
+${stateBlocks(action,itemContext)}
 
 【本回合起因】${action}
 【斗法实录（引擎已推演完毕，胜负已定，不可更改）】
@@ -7128,7 +7208,12 @@ ${judgeBlock(judge)}
 ${tailReminder()}`;
 }
 
-function convoPrompt(npc, line, roll, gift){
+function convoItemContext(st,line,gift){
+  const text=[line,gift&&gift.name,...(convo&&convo.msgs||[]).slice(-2).map(m=>m.text)].filter(Boolean).join('；');
+  const ctx=makeItemContext(st,text);
+  return gift||/行囊|背包|旧物|物件|拓样|图样/.test(text)||ctx.rows.some(r=>ctx.match(r,text))?ctx:null;
+}
+function convoPrompt(npc, line, roll, gift, itemContext){
   const p=S.player;
   const lst=Math.max(0,Math.ceil((convo.msgs.length-20)/6)*6);   // 窗口每 6 句才挪一次（留 14 到 20 句），前面的字不动，缓存才命中得上
   const log=convo.msgs.slice(lst).map(m=>m.role==='me'?`主角：${m.text}`:`${npc.name}：${m.text}`).join('\n')||'（刚开口）';
@@ -7186,7 +7271,7 @@ ${log}
 【境界之别】${npc.name}${realmStance(npc)||'——'}
 【主角已会的功法（他早就会了，不要再教、不要再送对应的玉简）】${(p.arts||[]).length?p.arts.map(a=>`${a.name}（${a.style}，熟练${a.level}）`).join('；'):'尚无功法'}
 【主角行囊里的玉简】${((p.items&&p.items['玉简'])||[]).length?p.items['玉简'].map(x=>x.name).join('、'):'无'}
-${(npc.fromPlayer||[]).length?`【你这几门功夫是主角教的】${npc.fromPlayer.join('、')}——你绝不可能反过来把它们「传」给他，也拿不出对应的玉简
+${itemContextBlock(itemContext===undefined?convoItemContext(S,line,gift):itemContext)}${(npc.fromPlayer||[]).length?`【你这几门功夫是主角教的】${npc.fromPlayer.join('、')}——你绝不可能反过来把它们「传」给他，也拿不出对应的玉简
 `:''}【时间地点】${S.date}，${S.scene?S.scene.location:''}
 【主角眼下要做的事】${S.quests.filter(q=>q.status==='进行中').map(questContext).join('\n')||'无'}
 ${abandonedQuestBlock()}【未了之事】${S.scene?asArr(S.scene.unresolved).join('；')||'无':'无'}
@@ -7249,7 +7334,7 @@ function bioPrompt(cause){
   const p=S.player;
   return `${fillRules(WORLD_RULES.split('属性规则')[0])}
 主角${p.name}的仙途到此为止。结局：${cause}
-${stateBlocks()}
+${stateBlocks(null,null)}
 请用平实的白话写一篇《${p.name}传》（300-500字），像修真界野史里的一则小传，不抒情不升华，据前情提要与人物关系总结此人一生，点评其功过、性情与遗憾，写到身边人的下场。末尾给一句墓志铭（20字内）与一句总评（15字内）。
 ${JSON_RULE}
 输出：{"biography":"","epitaph":"","verdict":""}`;
@@ -7329,7 +7414,7 @@ async function callLLM(prompt, onPartial, opt){
   for(let i=0;;i++){
     if(bud){ if(bud.left<=0||Date.now()>bud.until) throw new Error('接口调用失败（这一回的请求次数用完了，点重试接着写）'); bud.left--; }
     try{
-      const raw=await callLLMOnce(prompt,onPartial,Object.assign({},opt,{networkAttempt:i+1}));
+      const raw=await callLLMOnce(prompt,onPartial,Object.assign({},opt,{networkAttempt:i+1},bud?{totalTimeout:Math.max(1,Math.min(opt.totalTimeout||240000,bud.until-Date.now()))}:{}));
       if(!String(raw||'').trim()) throw new Error('接口调用失败（模型返回了空回复）');
       return raw;
     }catch(e){
@@ -7491,12 +7576,25 @@ async function llmJSON(prompt, onPartial, opt){
     if(st&&d){ const r=styleFix(d,st,final); if(r.redo) throw new Error('文风不合要求：'+r.redo.join('；')); }
     return d;
   };
-  let note='', lastErr=null, tries=0;
+  let note='', supplement='', lastErr=null, tries=0;
   while(true){
-    const raw=await callLLM(note?prompt+note:prompt,onPartial,Object.assign({},opt,{formatAttempt:tries+1}));
+    // 旧物尚未全部展开时，先核对完整候选，防止把缺原文的剧情流到页面上。
+    const items=opt.itemContext, hold=items&&items.rows.some(r=>r.brief&&!items.loaded.has(r.id));
+    const raw=await callLLM(prompt+supplement+note,hold?null:onPartial,Object.assign({},opt,{formatAttempt:tries+1}));
     const final=opt.budget.left<=0||Date.now()>opt.budget.until||++tries>=4;   // 自己也数着，防 callLLM 被替换时没扣预算
-    try{ return take(raw,final); }
+    try{
+      if(items&&itemReadRequest(items,parseJSONLoose(raw))){
+        if(final){const e=new Error('旧物需要补读，但本回请求预算已用完，尚未结算，请重试');e.itemRead=true;throw e;}
+        supplement=itemSupplement(items);note='';
+        toast('正在补读行囊旧物原文，判定与时间不变……');
+        continue;
+      }
+      const d=take(raw,final);
+      if(hold&&onPartial)onPartial(JSON.stringify(d));
+      return d;
+    }
     catch(e){
+      if(e.itemRead)throw e;
       lastErr=e;
       if(final) break;
       const truncated=lastFinish==='length';
@@ -10685,7 +10783,7 @@ function warResultText(kind){
        :kind==='pyrrhic'?'惨胜：阵上占了上风，主将一场却输了，吞并不成，只讨得些赔偿'
        :'败北：这一仗输了';
 }
-function warAftermathPrompt(action, judge, wd){
+function warAftermathPrompt(action, judge, wd, itemContext){
   const w=wd.w, d=wd.duel, c=S.clan;
   const log=d.log.map(r=>r.plain).join('\n');
   return `${worldRules()}
@@ -10709,7 +10807,7 @@ ${JSON_RULE}
 "playerChanges":{"attributes":{},"fame":{"声望":0,"凶名":0},"money":0,"skills":{},"artsAdd":[],"artsTrain":[],"statusAdd":[],"statusRemove":[],"itemsAdd":{},"itemsRemove":[]},
 "npcUpdates":[],"newNpcs":[],"npcEvents":[],"rumors":[],"newVendettas":[],"questUpdates":[],"newQuests":[],"rankingUpdates":[],"rankingAdd":[],"factionUpdates":[],"duel":null,"options":[],"gameOver":false,"ending":null}
 
-${stateBlocks()}
+${stateBlocks(action,itemContext)}
 
 【本回合起因】${action}
 【宗门战实录（引擎已推演完毕，胜负已定，不可更改）】
@@ -11175,7 +11273,8 @@ async function convoSend(text, gift){
   const roll=operation.roll===undefined?convoAttempt(n,text):operation.roll;operation.roll=roll;
   snapshotConvo();saveGame();   // 引擎先定成败；模型看不到骰子
   try{
-    const d=fixNames(await llmJSON(convoPrompt(n,text,roll,gift),raw=>{ if(convo===myConvo&&S===owner&&request===convoRequest&&t0(raw)) wait.innerHTML=esc(t0(raw)); },{kind:'talk',maxTokens:2500,temperature:styleTemp(),timeout:90000,signal:controller&&controller.signal,validate:(d,o)=>validateConvo(d,n,roll,o,{line:text,gift}),style:{field:'reply',kind:'talk',noLen:fdm().freeAct&&parenReqs(text).length>0}}));
+    const itemContext=convoItemContext(S,text,gift);
+    const d=fixNames(await llmJSON(convoPrompt(n,text,roll,gift,itemContext),raw=>{ if(convo===myConvo&&S===owner&&request===convoRequest&&t0(raw)) wait.innerHTML=esc(t0(raw)); },{kind:'talk',itemContext,maxTokens:2500,temperature:styleTemp(),timeout:90000,signal:controller&&controller.signal,validate:(d,o)=>validateConvo(d,n,roll,o,{line:text,gift}),style:{field:'reply',kind:'talk',noLen:fdm().freeAct&&parenReqs(text).length>0}}));
     if(convo!==myConvo||S!==owner||request!==convoRequest) return;          // 等回复的当口玩家已经告辞了，就当没说过
     const receipt=commitConvoOnce(owner,n.name,d,gift,text,operation.id);
     myConvo.npc=owner.npcs.find(x=>x.name===n.name);myConvo.pending=null;committed=true;
@@ -13456,8 +13555,8 @@ async function runTurn(action, judge, extra){
     if(!pending.forecast)pending.forecast=forecastTurn(owner,judge,action);
     owner.pending=pending;saveGame();
     S=pending.forecast.state;
-    let prompt;
-    try{prompt=extra.warData?warAftermathPrompt(action,judge,extra.warData):extra.duelData?duelAftermathPrompt(action,judge,extra.duelData):turnPrompt(action,judge);}
+    let prompt,itemContext;
+    try{itemContext=makeItemContext(S,action);prompt=extra.warData?warAftermathPrompt(action,judge,extra.warData,itemContext):extra.duelData?duelAftermathPrompt(action,judge,extra.duelData,itemContext):turnPrompt(action,judge,itemContext);}
     finally{S=owner;}
     const consumedNews=(pending.forecast.state.engineNews||[]).slice();
     const noLen=fdm().freeAct&&/\d\s*字|字数|篇幅|长一点|短一点|写长|写短|详细|详写|简短/.test(parenReqs(action).join(' '));
@@ -13465,7 +13564,7 @@ async function runTurn(action, judge, extra){
     const d=fixNames(await llmJSON(prompt,raw=>{
       if(S!==owner||request!==turnRequest)return;
       const t=extractPartialField(raw,'narrative');if(t)updateChapterNarrative(t);
-    },{kind:extra.warData?'war':extra.duelData?'duel':'turn',validate:valid,signal:controller&&controller.signal,style:{field:'narrative',kind:turnStyleKind(judge,extra),noLen}}));
+    },{kind:extra.warData?'war':extra.duelData?'duel':'turn',itemContext,validate:valid,signal:controller&&controller.signal,style:{field:'narrative',kind:turnStyleKind(judge,extra),noLen}}));
     if(S!==owner||request!==turnRequest){if(request===turnRequest)setBusy(false);return;}
     if(d.deathFix) await fixDeathText(d,controller&&controller.signal);
     else if(d.checkFix) await fixCheckText(d,controller&&controller.signal);
