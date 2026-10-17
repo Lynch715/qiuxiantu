@@ -6791,6 +6791,29 @@ function clanBlock(){
 - ${c.unified?'主角已一统修真界，天下再无与之抗礼者。':(c.leagueLeader?'主角是当世修真界盟主。':`战史 ${num(c.wins)} 胜 ${num(c.losses)} 负。`)}${lastWar?`最近一仗：${lastWar.result==='lose'?'败于':'胜'}${lastWar.foe}。`:''}
 - 写到宗门时：弟子可以在剧情里说话、办事、出岔子、受伤，这些都写得；弟子的生死由引擎结算，宗门战、斗法里死了的才是死了；但宗门的势力、威望、公帐、弟子人数与武功全由引擎记账，不要在任何字段里改动，也不要凭空说宗门壮大了或垮了。`;
 }
+// 只压缩提示词的重复字段。共同字段列一次，其余字段逐人原样保留；小表继续用原格式。
+function promptRecords(records, columns, lines){
+  const rows=JSON.parse(JSON.stringify(records));
+  const original=lines?rows.map(o=>JSON.stringify(o)).join('\n'):JSON.stringify(rows);
+  if(rows.length<2)return original;
+  const common=columns.filter(k=>rows.every(o=>Object.prototype.hasOwnProperty.call(o,k)));
+  const table={columns:common.concat('其余原字段'),rows:rows.map(o=>{
+    const extra={};for(const k of Object.keys(o))if(!common.includes(k))extra[k]=o[k];
+    return common.map(k=>o[k]).concat([extra]);
+  })};
+  const compact=JSON.stringify(table);
+  return compact.length<original.length?compact:original;
+}
+// 称呼仍逐个调用原引擎；只把完全相同的结果共用一组，特殊亲属称呼不会被概括掉。
+function familyPromptTable(kids, adults){
+  const groups=[];
+  const rows=kids.map(k=>{
+    const names=adults.map(o=>addressFor(k,o)),key=JSON.stringify(names);
+    let i=groups.findIndex(x=>JSON.stringify(x)===key);if(i<0){i=groups.length;groups.push(names);}
+    return [k.name,k.gender==='男'?'子':'女',k.age==null?String(k.age):k.age,k.legit||'',k.alive===false,k.lgHidden?'未测灵根':lgText(k.linggen),k.realm&&k.realm.major>=0?realmText(k.realm):'',i+1];
+  });
+  return {称呼组:groups.map(group=>adults.map((o,i)=>({姓名:o.name,完整称呼:group[i]}))),子女列:['姓名','子/女','年龄','嫡庶','已故','灵根','境界','称呼组号'],子女:rows};
+}
 // 给模型看的家室：正室、妾室、恋人、子女与称呼、谁有孕
 function familyBlock(){
   const me=playerName(); if(!me) return '';
@@ -6800,7 +6823,10 @@ function familyBlock(){
   const preg=[S.player].concat(S.npcs).filter(o=>o&&o.alive!==false&&o.preg&&(o.name===me||o.preg.with===me));
   if(!L.spouse&&!concub.length&&!L.lovers.length&&!kids.length&&!preg.length) return '【家室】未婚，无子女';
   const head=L.spouse?findNpc(L.spouse):null;
-  const kidTxt=kids.map(k=>`${k.name}（${k.gender==='男'?'子':'女'}，${k.age}岁，${k.legit||''}${k.alive===false?'，已故':''}${k.lgHidden?'，未测灵根':'，'+lgText(k.linggen)}${k.realm&&k.realm.major>=0?'，'+realmText(k.realm):''}；称${me}为「${addressFor(k,S.player)}」${head?`，称${head.name}为「${addressFor(k,head)}」`:''}${concub.map(c=>{const o=findNpc(c);return o?`，称${c}为「${addressFor(k,o)}」`:'';}).join('')}）`).join('；');
+  const adults=[S.player].concat(head?[head]:[],concub.map(c=>findNpc(c)).filter(Boolean));
+  const fullKids=kids.map(k=>`${k.name}（${k.gender==='男'?'子':'女'}，${k.age}岁，${k.legit||''}${k.alive===false?'，已故':''}${k.lgHidden?'，未测灵根':'，'+lgText(k.linggen)}${k.realm&&k.realm.major>=0?'，'+realmText(k.realm):''}；${adults.map(o=>`称${o.name}为「${addressFor(k,o)}」`).join('，')}）`).join('；');
+  const compactKids=kids.length?'（表格每行依子女列读取；称呼组号从1开始，每项绑定姓名与完整称呼，必须原样使用；同姓同称呼也照写，不得自行加排行、改称呼或更改家规，空称呼不另编）'+JSON.stringify(familyPromptTable(kids,adults)):'';
+  const kidTxt=compactKids.length<fullKids.length?compactKids:fullKids;
   return `【家室】正室：${L.spouse||'无'}；${concub.length?`妾室：${concub.join('、')}；`:''}${L.lovers.length?`恋人：${L.lovers.map(x=>x.with).join('、')}${L.affair?'（有正室在，这是私情）':''}；`:''}子女：${kidTxt||'无'}${preg.length?`；有孕：${preg.map(o=>o.name).join('、')}`:''}。子女的称呼照这里写，不要另起。`;
 }
 // 人物谱的名单：平时只往后加；每 8 回整理一次，拿掉早已不相干的，最多 24 人（亲眷、在场、眼下要紧的不拿）
@@ -6962,7 +6988,7 @@ function stateBlocksCore(action,itemContext){
      【人物谱】要紧的人再加底子（秘密、备注、画像、与旁人），很少变；
      【眼下要紧的人】放每回都变的：好感、心情、近况、往来（在场的人给全，不在场的给最近两条）。 */
   const census=S.npcs.filter(n=>n&&n.alive&&n.name&&!n.beast).map(npcCard).join('\n')||'（尚无）';
-  const npcProfile=n=>({name:n.name,alignment:n.alignment,灵根:lgText(n.linggen),标签:(n.tags||[]).length?n.tags:undefined,portrait:npcPortrait(n),appearance:n.appearance||undefined,secret:n.secret,secretKnown:n.secretKnown||undefined,notes:n.notes||undefined,技艺:Object.keys(n.skills||{}).length?n.skills:undefined,与旁人:relsOfName(n.name).slice(-6).map(r=>relOther(r,n.name)+'·'+r.type),定论:decreeText(n)||undefined,待补:needFill(n)||undefined,学自主角的功法:(n.fromPlayer||[]).length?n.fromPlayer:undefined});
+  const npcProfile=n=>({name:n.name,alignment:n.alignment,灵根:lgText(n.linggen),标签:(n.tags||[]).length?n.tags:undefined,portrait:npcPortrait(n),appearance:n.appearance||undefined,secret:n.secret,secretKnown:n.secretKnown||false,notes:n.notes||undefined,技艺:Object.keys(n.skills||{}).length?n.skills:undefined,与旁人:relsOfName(n.name).slice(-6).map(r=>relOther(r,n.name)+'·'+r.type),定论:decreeText(n)||undefined,待补:needFill(n)||undefined,学自主角的功法:(n.fromPlayer||[]).length?n.fromPlayer:undefined});
   const npcNow=n=>{ const here=pres.includes(n.name); return {name:n.name,在场:asArr(S.scene&&S.scene.present).includes(n.name),对主角:realmStance(n),好感度:n['好感度'],爱恋值:n['爱恋值']==null?undefined:n['爱恋值'],mood:n.mood,location:n.location||'未知',近况:(n.life||[]).slice(-2).map(x=>x.text),与主角的往来:(n.memory||[]).slice(here?-M.npcMem:-2)}; };
   const npcBrief=near.map(npcNow);
   const rosterText=roster.map(n=>JSON.stringify(npcProfile(n))).join('\n')||'（无）';
@@ -6988,7 +7014,7 @@ ${vols}
 ${oldLed}
 【人物名册（主角认得的所有活人，引擎记的账：姓名｜性别｜年龄｜境界｜宗门｜身份｜和主角的关系｜性格。写到谁都照这里，不许改；按结识先后排）】
 ${census}
-【人物谱（要紧人物的底子：秘密、备注、画像、与旁人）】
+【人物谱（要紧人物的底子：秘密、备注、画像、与旁人；secret是私密底稿，secretKnown为false的秘密主角尚不知道，不得借回忆、听说或推断写成已知；本回真正揭露时才按secretRevealed协议落账）】
 ${rosterText}
 【流水账（前情与每回引擎记的账，全部为真，后文不得与之矛盾、不得当作没发生；最近几回附正文）】
 ${chron}
@@ -7106,10 +7132,7 @@ function turnPrompt(action, judge, itemContext){
 【推演要求（本回合的状态、玩家行动与引擎判定都写在后面）】
 ${`请推演本回合。要求：
 - 剧情250-500字。剧情必须紧接上一回合结尾：地点、在场人物、正在发生的事都要衔接上，除非玩家的行动明确是转场离开；时间流动要合理，不要无故跳过大段时间。
-- **沿玩家行动往前一步**：成果、代价、信息、人物态度或目标阶段至少有一项变化；平静日常可以只写时间与生活进展，不必改变地点或造大事。
-  连续练功、调查、疗伤是合法选择；要写阶段进展、具体代价或新的阻碍，不重复上一回的答案。不得强制转场或插入无关事件。
-  一件事要么推进、要么了结、要么撞上新的阻碍——不许原地描写心情、反复回想、重申决心来凑字数。
-- 新人新事要有来由，但修真界本来就会有人主动找上门：仇家寻仇、旧识传讯、陌生人求助、宗门招揽都不必事先铺垫过。别因为怕突兀就什么都不敢写。
+- 沿玩家行动取得成果、付出代价、获得信息、改变人物态度或推进目标阶段至少一项；平静日常允许只写时间与生活进展。一件事推进、了结或遇到新阻碍，不靠反复回想、重申决心凑字数。连续活动与新事件遵守后面的世界状态规则及前面的NPC规则。不得强制转场或插入无关事件。
 - 本回合结束时，把主角所在的具体地点写进scene.location。
 - scene.unresolved 只列**眼下真正还悬着、而且主角接下来打算去管**的事，至多4条；已经办完、已经落空、或者主角已经不在乎的，就别再写进去。
   本回合了结或放下了哪几桩，写进 resolvedInfo（原样照抄未了之事里的那句话），引擎会把它从账上划掉。
@@ -7118,8 +7141,7 @@ ${`请推演本回合。要求：
   日常吃穿住用引擎每月已经扣过，不要再写负数；只有剧情里真付出去一笔钱（买东西、过路费、罚款、打赏、请人办事），才写负数，moneyReason写一句付给谁、为什么；买到的东西写进itemsAdd。
   行囊里丹药、符箓、毒药、灵材有数量（面板里的count）。得到几件就在itemsAdd里写count，如 {"name":"回春丹","count":3}；名字里不要带数量。
   用掉、交出、卖掉的写itemsRemove：一项只拿走一件，几件写 {"name":"回春丹","count":2}。主角在剧情里服下丹药、祭出符箓，也要写进itemsRemove；手里没有的东西不能用。
-- 对白写进叙述里，用「」引起来，像小说那样交代谁说的；不要写成「某某：『……』」这种剧本格式。
-- 主角修习功法、与人切磋、受指点时，用playerChanges.artsTrain长熟练度；新学的功法写artsAdd并注明style与level。
+- 对白随叙述交代说话人，不写「某某：『……』」的剧本格式。修习、切磋、受指点及新功法按前面的功法制度记artsTrain、artsAdd。
 - 闭关只写这段光阴里的日子与心境，不要写灵力涨了多少、突破没有——那是引擎的账。闭关的剧情150-300字就够，多写出关时外头变了什么（谁来过、谁走了、出了什么事），
   不要重复上次闭关用过的景物和细节（上回写过的洞府陈设、屋外动静、某人的小动作，这回换别的或干脆不写）。
 - 受伤写 statusAdd，格式是 {"name":"伤名（4字以内，如「剑伤」「内伤」「中毒」「灵力反噬」）","desc":"一句话经过","months":将养几个月}；
@@ -7130,16 +7152,14 @@ ${`请推演本回合。要求：
   已经写在【主角面板】arts 里的功法，任何人都不可以再「传授」给主角一遍，也不可以把对应的玉简当礼物送他——
   那是他早就会的；其中有几门还是他自己教出去的，更不可能由对方回传。要给就给他没有的。
 - 寿元除了冲关，只有奇遇能长（延寿灵果、千年灵药、高人施法之类），写进playerChanges.lifespan（增量）与lifespanReason（一句话缘由），并在剧情里把这场奇遇写足。寻常疗伤进补一律不许加寿元；给多少由引擎裁定，你只管提。
-- 初次登场、有名有姓的新NPC写入newNpcs（完整面板含secret，gender、age、realm都要写，不得简化）；一回合最多添3人，宁可少不可滥。玩家行动里提到、人物名册里没有的人，就是新人物：玩家说了的（括号里的年龄、性别、境界、关系）照玩家的写，没说的照剧情合理定，不要空着。
+- 新登场的有名NPC按前面的NPC规则填入newNpcs，最多3人。行动里提到而名册中没有的也是新人；玩家注明的年龄、性别、境界、关系照写，未注明的合理补全；完整面板含secret、gender、age、realm，不得空缺。
 - 人物名册里已有的人，性别、年龄、境界、出身、所属宗门、和主角的关系都是定数，引擎记着账，你不要改，正文里也不要写得和账上不一样。npcUpdates里的relation只写这回真变了的（拜师、收徒、结仇、结为道侣、断交这类，正文要写出经过）；血亲和旧日来历谁也改不了，后来才认识的人不会变成旧识、故人、发小、青梅竹马。faction、identity只在正文写了此人入门、叛出、升迁、被逐时才写。不合这几条的改动，引擎一概不收。
-- 主角的师门和师父以【师门】那一栏为准：不要另造师父、同门，新认识的同门写进newNpcs；playerChanges.faction只在主角这回自己拜入或叛出宗门时写，拜访、做客、受人邀请都不算入门，引擎也不收。
-- 已有NPC的变化写入npcUpdates；若剧情揭开了某NPC的秘密，写secretRevealed:true。
-- npcEvents只写主角本回亲眼看见的相识NPC小事，没有就留空；NPC之间的婚嫁、生死、突破由引擎结算，你不要自己编。
-- rumors只写修真界新的风闻，没有新消息就留空。修士榜人物或势力有变动时写rankingUpdates/factionUpdates。宗门势力和宗主每年由引擎记账、会涨会跌会换人，以势力表为准；主角插手让某家得利或吃亏时，factionUpdates的power写增减（-10到10），reason写一句缘由。
+- 师门、师父依【师门】名册，不另造；新认识的同门写newNpcs。入门、叛出与playerChanges.faction依前面的宗门规则。
+- 已有NPC变化写npcUpdates；秘密本回揭开才写secretRevealed:true。npcEvents、rumors依前面的NPC及世界状态规则，无事留空。
+- 榜上人物或势力变动写rankingUpdates/factionUpdates；宗门势力与宗主每年由引擎更新，以势力表为准。主角干预某家得失时，factionUpdates.power写增减（-10到10），reason说明缘由。
 - 修士榜有空缺时，可用rankingAdd补一位新上榜的修士（给出姓名、所属、境界realm、一句成名评价），境界要与榜末相当，要像是修真界本就有这么个人，别硬造。
 - ${OPTIONS_RULE}
-- 若本回合要动手较量，按斗法制度填duel并把剧情收在动手前；否则duel为null。
-- 除非主角死亡或玩家明确要求收尾，gameOver必须为false。`}
+- 动手按前面的斗法制度填duel，战前收笔；否则duel为null。gameOver只在主角死亡或玩家明确要求收尾时可为true，其余为false。`}
 
 ${WORLD_STATE_RULES}
 ${JSON_RULE}
@@ -8111,7 +8131,15 @@ function renderQuests(){
   $('wQuests').querySelectorAll('[data-abandon-quest]').forEach(b=>{const q=qs[Number(b.dataset.abandonQuest)];b.onclick=()=>requestAbandonQuest(q);});
 }
 
-function questContext(t){if(t.status==='已放弃')return `- ${t.title}（已放弃）：原约定${questCondition(t)}；既有成果保留，不再推进、补计划、领奖或换标题重建。`;return `- ${t.title}（${t.status}，进度${num(t.progress)}%）：${plain(t.desc)}；结愿条件：${questCondition(t)}；已记成果：${(t.milestones||[]).slice(-8).join('；')||'无'}；条件清单：${questHasObjectives(t)?JSON.stringify(t.objectives.map(o=>({id:o.id,text:o.text,kind:o.kind,target:o.target,value:o.value,relation:o.relation,opponent:o.opponent,progress:o.progress,done:!!o.done,proof:o.proof}))):'待补全：本次questUpdates填写plan，把原结愿条件拆为有限条件，不提高要求'}；实际进展：${questObjectiveHint(t,S)||'按条件逐项核对'}`;}
+function questPromptObjectives(t){
+  return t.objectives.map(o=>({id:o.id,text:o.text,kind:o.kind,target:o.target,value:o.value,relation:o.relation,opponent:o.opponent,progress:o.progress,done:!!o.done,proof:o.proof,账面进度:o.done?undefined:(o.kind==='story'?num(o.progress):Math.floor(questObjectiveValue(o,S,t)*100))}));
+}
+function questContext(t){
+  if(t.status==='已放弃')return `- ${t.title}（已放弃）：原约定${questCondition(t)}；既有成果保留，不再推进、补计划、领奖或换标题重建。`;
+  const has=questHasObjectives(t),desc=plain(t.desc),goal=questCondition(t);
+  const conditions=has?promptRecords(questPromptObjectives(t),['id','text','kind','target','value','relation','opponent','progress','done','proof','账面进度']):'待补全：本次questUpdates填写plan，把原结愿条件拆为有限条件，不提高要求';
+  return `- ${t.title}（${t.status}，进度${num(t.progress)}%）：${desc}；结愿条件：${goal===desc?'同前述原文':goal}；已记成果：${(t.milestones||[]).slice(-8).join('；')||'无'}；条件清单：${conditions}${has?'（columns依次对应每行，末列为其余原字段；账面进度为当前百分比，done为已记成果，不重做）':`；实际进展：${questObjectiveHint(t,S)||'按条件逐项核对'}`}`;
+}
 // 有条件ID的剧情成果直接核对正文引用，不再要求某几个汉字或成功动词命中。
 function questQuotedEvidence(evidence,text){
   const key=questEvidenceKey(evidence),source=String(evidence||'').trim();
