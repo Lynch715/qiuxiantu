@@ -1362,7 +1362,7 @@ function migrate(s){
   if(!s.relFix1){
     for(const n of (s.npcs||[])){ if(!n) continue;
       const r=decreeHits(s,n.name).map(e=>e.f.relation).filter(Boolean).pop();
-      if(r&&r!==n.relation&&!/恋人|道侣|妻|夫|妾|未婚|仇|宿敌/.test(n.relation||'')) n.relation=r; }
+      if(r&&r!==n.relation&&!/恋人|道侣|妻|夫|妾|未婚|正室|仇|宿敌/.test(n.relation||'')) n.relation=r; }
     s.relFix1=true;
   }
   if(!s.origRel){ s.origRel={}; for(const n of (s.npcs||[])) if(n&&n.name) s.origRel[n.name]=n.relation||''; }
@@ -1394,7 +1394,8 @@ function migrate(s){
   syncQuestState(s,true);
   repairHiredVendettas(s);
   repairOriginFamily(s);
-  if(s.pending&&s.pending.forecast&&s.pending.forecast.state){ eggScaleWeapons(s.pending.forecast.state.player,true); repairHiredVendettas(s.pending.forecast.state); repairOriginFamily(s.pending.forecast.state); syncQuestState(s.pending.forecast.state,true); }
+  repairPlayerSpouseAliases(s);
+  if(s.pending&&s.pending.forecast&&s.pending.forecast.state){ eggScaleWeapons(s.pending.forecast.state.player,true); repairHiredVendettas(s.pending.forecast.state); repairOriginFamily(s.pending.forecast.state); repairPlayerSpouseAliases(s.pending.forecast.state); syncQuestState(s.pending.forecast.state,true); }
   return s;
 }
 
@@ -4129,9 +4130,33 @@ function relKindOf(text){
   if(/前妻|前夫|和离|休了|被休|旧情/.test(t)) return '相识';
   if(/小爹/.test(t)) return ''; // 含混称谓不推断为婚恋；正式身份另外记
   if(/妾|姨娘|侧室|偏房|侍妾/.test(t)) return '妾室';
-  if(/妻|夫君|丈夫|夫人|娘子|相公|道侣/.test(t)) return '夫妻';
+  if(/^(?:我的|主角的)?(?:正室|正夫)(?:$|[，,；;、（(\s])/.test(t)||/妻|夫君|丈夫|夫人|娘子|相公|道侣/.test(t)) return '夫妻';
   if(/恋人|情人|心上人|相好|意中人|未婚/.test(t)) return '恋人';
   return '';
+}
+// 旧版漏认「正室」时，人物称谓已经入账而夫妻边缺失。只补明确别名，
+// 不从正文猜婚事，不覆盖既有婚配、亲属边、解除记录或另一位正室。
+function repairPlayerSpouseAliases(s){
+  const p=s&&s.player;if(!p||!p.name||num(p.age)<18)return;
+  const rows=(s.npcs||[]).concat(Object.entries(s.planes||{}).filter(([pl])=>pl!==(s.plane||'下界')).flatMap(([,bag])=>bag.npcs||[]),s.xianLimbo||[]);
+  const edges=s.rels||[],mine=edges.filter(r=>r.a===p.name||r.b===p.name);
+  const byName=new Map(mine.map(r=>[r.a===p.name?r.b:r.a,r]));
+  const candidates=rows.filter(n=>n&&num(n.age)>=18&&/^(?:我的|主角的)?(?:正室|正妻|正夫)$/.test(String(n.relation||'').trim()));
+  if(!candidates.length)return;
+  const eligible=candidates.filter(n=>{
+    const r=byName.get(n.name),orig=(s.origRel||{})[n.name]||Object.values(s.planes||{}).map(b=>(b.origRel||{})[n.name]).find(Boolean)||'';
+    if(n.name===p.name||bloodRel(n.relation)||bloodRel(orig)||parentsOf(p).includes(n.name)||parentsOf(n).includes(p.name)||parentsOf(p).some(x=>parentsOf(n).includes(x)))return false;
+    if(n.relationshipExits&&n.relationshipExits.romance)return false;
+    if(r&&(['夫妻','妾室','亲属','师徒'].includes(r.type)||(r.history||[]).some(h=>/和离|休妻|休夫|休了|被休|离异|解除婚姻|解除妾室|结束恋情|解除婚约|玩家更正|断了|分开/.test(h.text||''))))return false;
+    return !edges.some(e=>(e.a===n.name||e.b===n.name)&&e.a!==p.name&&e.b!==p.name&&['夫妻','妾室'].includes(e.type));
+  });
+  // 多个互相冲突的旧称谓无法确定先后，不替玩家重排妻妾身份。
+  if(mine.some(r=>r.type==='夫妻')||eligible.length!==1)return;
+  const n=eligible[0],day=num(s.elapsedDays),date=s.date||'',text=`存档关系补全：${p.name}与${n.name}已为夫妻（原称谓：${n.relation}）`;
+  let r=byName.get(n.name);
+  if(!r){r={k:relKey(p.name,n.name),a:p.name,b:n.name,type:'夫妻',since:date,day,history:[]};(s.rels=s.rels||[]).push(r);}
+  else r.type='夫妻';
+  r.history=r.history||[];r.history.push({day,date,text});
 }
 // 剧情或对话把「与主角关系」改了之后，同步到边表；不满 18 岁不许婚嫁
 function syncPlayerRel(n,before){
@@ -8122,7 +8147,7 @@ function relationEventEvidence(n,relation,ctx){
   const all=String(ctx.act||'')+'\n'+String(ctx.txt||'');
   const text=ctx.actorName===n.name?all:nameCtx(n.name,all,(S.npcs||[]).map(x=>x.name));
   if(/义父|义母|干爹|干娘|义兄|义姐|义弟|义妹/.test(raw))return /认.{0,8}(?:义|干)|结义|义父|义母|干爹|干娘/.test(text);
-  if(kind==='夫妻')return /成亲|成婚|婚礼|嫁给|娶.{0,6}(?:为妻|为夫)|结为道侣|结为夫妻|共结连理/.test(text);
+  if(kind==='夫妻')return /成亲|成婚|婚礼|嫁给|(?:娶|收).{0,6}(?:为妻|为夫)|结为道侣|结为夫妻|共结连理/.test(text);
   if(kind==='妾室')return /纳.{0,8}(?:妾|侧室|偏房)|收.{0,6}为妾/.test(text);
   if(kind==='恋人')return /两情相悦|相恋|互生爱慕|答应.{0,8}(?:相恋|在一起)|愿.{0,8}做.{0,4}道侣/.test(text);
   return true;
@@ -9440,6 +9465,7 @@ function applyInit(d, opts){
   for(const n of S.npcs)n.lastMetDay=S.elapsedDays;
   S.date = dateStr();
   repairOriginFamily(S);
+  repairPlayerSpouseAliases(S);
   S.turn = 1;
   syncSect();
   syncQuestState(S);
@@ -9582,7 +9608,7 @@ function npcGuard(n,u,ctx){
   if(nr&&nr!==or){
     const orig=plain((S.origRel||{})[n.name])||or;
     const dec=(typeof decreeHits==='function'?decreeHits(S,n.name):[]).map(e=>e.f.relation).filter(Boolean).pop();
-    const romance=/恋人|道侣|妻|夫|未婚|仇|宿敌/.test(nr);
+    const romance=['夫妻','妾室','恋人'].includes(relKindOf(nr))||/仇|宿敌/.test(nr);
     let why='';
     if(!relationRestoreRequested(n,nr,ctx)) why='玩家已主动结束这段关系，尚未要求重新缔结';
     else if(!relationEventEvidence(n,nr,ctx)) why='称谓含混或没有确立关系的经过';

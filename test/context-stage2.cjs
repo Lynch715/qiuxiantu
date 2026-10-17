@@ -35,7 +35,7 @@ async function main(){
   const {BASE,UP}=require('./xjv2-env.cjs');
   const setup=file=>{const e=engine(file);e.run(BASE);e.run(UP);return e;};
   await test('提示词压缩边界保留；建设及主动生育只接入明确列出的函数',()=>{
-    const a=setup(baseline),b=setup(current),promptChanges=['familyBlock','stateBlocksCore','turnPrompt','questContext'],constructionHooks=['advanceTime','advanceTimeCore','cultivateMonth','npcCultivateMonth','clanMonth','studyRoll','applyTurn','openClose','cultHtml','renderPanel'],familyHooks=['refreshManagementActions','familyMonthCore','renderFamily','judgeBlock','validateTurnCore','forecastTurn','makeJudge','act','runTurn'],allowed=new Set([...promptChanges,...constructionHooks,...familyHooks]),changed=[];
+    const a=setup(baseline),b=setup(current),promptChanges=['familyBlock','stateBlocksCore','turnPrompt','questContext'],constructionHooks=['advanceTime','advanceTimeCore','cultivateMonth','npcCultivateMonth','clanMonth','studyRoll','applyTurn','openClose','cultHtml','renderPanel'],familyHooks=['refreshManagementActions','familyMonthCore','renderFamily','judgeBlock','validateTurnCore','forecastTurn','makeJudge','act','runTurn','migrate','applyInit','relKindOf','relationEventEvidence','npcGuard'],allowed=new Set([...promptChanges,...constructionHooks,...familyHooks]),changed=[];
     for(const [,name]of fs.readFileSync(baseline,'utf8').matchAll(/^(?:async )?function (\w+)\(/gm)){
       let old,now;try{old=a.run(name+'.toString()');now=b.run(name+'.toString()');}catch{continue;}
       if(old!==now){changed.push(name);assert(allowed.has(name),'unexpected change: '+name);}
