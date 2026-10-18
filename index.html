@@ -1333,7 +1333,7 @@ function migrate(s){
     }
     s.stubFix2=true;
   }
-  // 10-08 晚：第一版只看名字所在那一句、没看玩家行动，像「陆雪琪立在阶下……她已筑基初阶」这种认不出来。再过一遍带待补标记的人
+  // 10-08 晚：第一版只看名字所在那一句、没看玩家行动，像「人物甲立在阶下……她已筑基初期」这种认不出来。再过一遍带待补标记的人
   if(!s.stubFix3){
     const rc=(s.recent||[]).filter(Boolean), pl=s.player||{};
     const acts=rc.map(r=>String(r.action||'')).concat((s.history||[]).map(h=>String(h&&h.action||''))).join('\n');
@@ -1351,7 +1351,7 @@ function migrate(s){
     }
     s.stubFix3=true;
   }
-  // 10-08 夜：玩家以前在括号里写明的（陆雪琪(16岁，女，筑基初阶)），从历史行动里翻出来记进定论簿，人脉里对不上的改过来
+  // 10-08 夜：玩家以前在括号里写明的（人物甲(20岁，女，筑基初期)），从历史行动里翻出来记进定论簿，人脉里对不上的改过来
   if(!s.decreeFix1){
     s.decrees=s.decrees||[];
     const acts=(s.history||[]).map(h=>h&&h.action);
@@ -1581,7 +1581,7 @@ function nameCtx(nm,text,others){
   while(i>=0){ out+=' '+text.slice(Math.max(0,i-14),i).split(/[。！？\n]/).pop()+nm+afterName(text,i,nm,others,40,2); i=text.indexOf(nm,i+nm.length); }
   return out;
 }
-/* 玩家在行动里亲手写明的：「陆雪琪(16岁，女，筑基初阶，师妹)」。这是玩家定的，比模型和引擎猜的都准 */
+/* 玩家在行动里亲手写明的：「人物甲(20岁，女，筑基初期，师妹)」。这是玩家定的，比模型和引擎猜的都准 */
 const DECREE_REL=/^(?:我的|我)?(师父|师尊|师娘|师兄|师弟|师姐|师妹|师叔|师伯|师侄|徒弟|徒儿|弟子|同门|道侣|妻子|夫人|夫君|丈夫|未婚妻|未婚夫|恋人|父亲|母亲|爹|娘|哥哥|姐姐|弟弟|妹妹|兄长|义兄|义姐|义弟|义妹|朋友|好友|挚友|知己|红颜知己|发小|青梅竹马|仇人|宿敌|对头|恩人|故人|旧识|相识|主人|侍女|侍从|仆人|萍水相逢)$/;
 function decreeBody(t){
   t=String(t||''); const o={};
