@@ -2414,6 +2414,27 @@ function constructionHomeHere(h){
   if(h.sectKey){const f=constructionFaction(curPlane(),{id:h.sectKey});if(!f||S.player.faction!==f.name)return false;}
   return true;
 }
+function constructionFacilityHere(loc,site,facility){
+  const clean=x=>plain(x).replace(/\s/g,'').replace(/[・•／/＞>]/g,'·');
+  const a=clean(loc),b=clean(site);
+  if(!a||!b||!constructionSafePlace(a))return false;
+  const sites=[b];if(b.endsWith('山门'))sites.push(b.slice(0,-2));
+  // 驻地与设施必须连在同一条地点路径里，不能把别宗演武场、场外或途中算作到场。
+  return sites.some(x=>{const path=x+'·'+facility;return a===path||a.startsWith(path+'·')||a.endsWith('·'+path)||a.includes('·'+path+'·');});
+}
+function constructionTrainingReason(){
+  const t=constructionSect(),r=constructionSectRecord(t);
+  if(!t||!r)return '需先加入本界宗门并整备宗门设施';
+  if(!constructionCompatible(S.player,curPlane()))return '当前修为不适用本界设施';
+  if(S.inRealm)return '需先离开秘境';
+  if(!constructionFacilityHere(S.scene&&S.scene.location,r.location,'演武场'))return '需先到本门演武场';
+  return '';
+}
+function constructionTravelDestination(place){
+  if(S.inRealm)return '';
+  const r=constructionRealm(curPlane()),b=constructionSectRecord(constructionSect());
+  return [r&&r.home&&r.home.location,b&&b.location+'·藏经阁',b&&b.location+'·演武场'].filter(Boolean).includes(place)?place:'';
+}
 function constructionFrame(pl){
   const r=constructionRealm(pl),b=constructionPacket(pl),out={player:0,train:0,npc:{},disc:{}};
   if(!r||!b)return out;
@@ -2424,8 +2445,9 @@ function constructionFrame(pl){
     const f=constructionFaction(pl,rec);if(!f)continue;
     const A=BUILD_EFFECT.array[num(rec.levels.array)]||0,C=BUILD_EFFECT.library[num(rec.levels.library)]||0,Y=BUILD_EFFECT.arena[num(rec.levels.arena)]||0;
     if(current&&constructionCompatible(S.player,pl)&&S.player.faction===f.name&&!S.inRealm&&constructionHere(plain(S.scene&&S.scene.location),rec.location)){
-      playerArray=A;if(plain(S.scene.location)===rec.location+'·演武场')out.train=Y;
+      playerArray=A;
     }
+    if(current&&constructionCompatible(S.player,pl)&&S.player.faction===f.name&&!S.inRealm&&constructionFacilityHere(S.scene&&S.scene.location,rec.location,'演武场'))out.train=Y;
     for(const n of b.npcs||[]){
       if(!constructionCompatible(n,pl)||n.faction!==f.name)continue;
       const d=linked.get(n.name);if(d&&d.job==='云游')continue;
@@ -2475,7 +2497,7 @@ function constructionEndMonth(){if(!S.estates||S.estates.v!==1)return;S.estates.
 function constructionStudyBonus(m){
   if(!S.estates||m.recipe||!constructionCompatible(S.player,curPlane()))return 0;
   const t=constructionSect(),r=constructionSectRecord(t);if(!r||S.inRealm)return 0;
-  return plain(S.scene&&S.scene.location)===r.location+'·藏经阁'?num(r.levels.library):0;
+  return constructionFacilityHere(S.scene&&S.scene.location,r.location,'藏经阁')?num(r.levels.library):0;
 }
 function constructionTrainDelta(a,base,rate){
   if(!rate||base<=0||num(a.level)>=100)return base;
@@ -12052,7 +12074,7 @@ function openConstruction(mode){
   if(mode==='home'&&h)body+=`<div class="panel-actions"><button class="mbtn" id="buildGoHome" ${constructionHomeHere(h)?'disabled':''}>返回洞府</button></div>`;
   if(mode!=='home'&&b){
     body+='<div class="panel-actions"><button class="mbtn" id="buildGoLibrary">前往藏经阁</button><button class="mbtn" id="buildGoArena">前往演武场</button></div>';
-    if(S.player.arts&&S.player.arts.length)body+=`<section class="build-card"><h4>演练已学功法</h4><label class="build-select">选择功法<select id="buildTrainArt">${S.player.arts.map((a,i)=>`<option value="${i}">${esc(a.name)} · 熟练${num(a.level)}</option>`).join('')}</select></label><button class="mbtn" id="buildTrain" ${frame.train?'':'disabled'}>在演武场修炼一个月</button><p class="panel-note">需先到演武场；藏经阁参悟请从行囊选择已有功法玉简。</p></section>`;
+    if(S.player.arts&&S.player.arts.length){const reason=constructionTrainingReason();body+=`<section class="build-card"><h4>演练已学功法</h4><label class="build-select">选择功法<select id="buildTrainArt">${S.player.arts.map((a,i)=>`<option value="${i}">${esc(a.name)} · 熟练${num(a.level)}</option>`).join('')}</select></label><button class="mbtn" id="buildTrain" ${reason?'disabled':''}>在演武场修炼一个月</button><p class="panel-note">${reason?esc(reason)+'。':frame.train?'已在演武场，熟练增长额外 +'+Math.round(frame.train*100)+'%。':'已在演武场，可正常演练；升级后可获额外加成。'}<br>藏经阁参悟请从行囊选择已有功法玉简。</p></section>`;}
   }
   body+='<details class="panel-details"><summary>设施使用范围</summary><p>前往设施是正常行动。人界设施不加速仙元；离山、退宗或不合资格时不生效。离界后工程继续，门人沿用原有演化规则。</p></details>';
   if(owner&&S.estates){const logs=S.estates.history.filter(x=>x.owner===owner.id);if(logs.length)body+=`<details class="panel-details"><summary>建设记录（${logs.length}条）</summary>${logs.map(x=>`<div class="build-details">${esc(dateOf(S.ganzhi,Math.floor(x.day/30)))} · ${BUILD_NAMES[x.kind]||''}${esc(x.event)}${x.level?'，'+x.level+'级':''}${x.project?'，费用'+x.project.cost+' '+moneyUnit()+'（个人'+x.project.personal+'，公账'+x.project.public+'）':''}</div>`).join('')}</details>`;}
@@ -12060,11 +12082,11 @@ function openConstruction(mode){
   xModal(mode==='home'?'洞府建设':t.leader?'宗门建设':'个人赞建',curPlane()+' · 余额 '+S.player.money+' '+moneyUnit(),body,[{text:'关闭'}]);
   document.querySelectorAll('#xBody button[data-build]').forEach(btn=>btn.onclick=()=>{const site=$('buildHomeSite');openConstructionConfirm(btn.dataset.build,{site:site?site.value:'current'});});
   if($('buildPause'))$('buildPause').onclick=()=>{const result=constructionPause(owner.project.kind);toast(result.ok?(result.paused?'工程已暂停':'工程已恢复'):result.why);if(result.ok)constructionRefresh();openConstruction(mode);};
-  const travel=(place)=>{if(S.inRealm){toast('先离开秘境');return;}$('xMask').classList.remove('on');act('返回'+place+'，在此安顿下来',{type:'normal',months:1/30,text:'前往设施'});};
+  const travel=(place)=>{if(S.inRealm){toast('先离开秘境');return;}$('xMask').classList.remove('on');act('返回'+place+'，在此安顿下来',{type:'normal',months:1/30,text:'前往设施',constructionDestination:place});};
   if($('buildGoHome'))$('buildGoHome').onclick=()=>travel(h.location);
   if($('buildGoLibrary'))$('buildGoLibrary').onclick=()=>travel(b.location+'·藏经阁');
   if($('buildGoArena'))$('buildGoArena').onclick=()=>travel(b.location+'·演武场');
-  if($('buildTrain'))$('buildTrain').onclick=()=>{const art=S.player.arts[Number($('buildTrainArt').value)];if(!art)return;$('xMask').classList.remove('on');act('在'+b.location+'·演武场修炼《'+art.name+'》一个月，演练已学功法',{type:'rest',months:1,text:'修炼已学功法'});};
+  if($('buildTrain'))$('buildTrain').onclick=()=>{if(busy||S.pending)return;const why=constructionTrainingReason();if(why){toast(why);return;}const art=S.player.arts[Number($('buildTrainArt').value)];if(!art)return;$('xMask').classList.remove('on');act('在'+b.location+'·演武场修炼《'+art.name+'》一个月，演练已学功法',{type:'rest',months:1,text:'修炼已学功法'});};
 }
 function openConstructionConfirm(kind,opts){
   if(busy||S.pending)return;opts=Object.assign({},opts||{});
@@ -13358,6 +13380,7 @@ function makeJudge(opt,action){
   if(fateDire(judge.fate)&&(S.player.eggFx||{}).direBoon) judge.boon=S.player.eggFx.direBoon;   // 苏铭、李火旺：大凶反成机缘
   else if(fateDire(judge.fate)&&fdm().doom>0) judge.doom=makeDoom();
   if(opt&&opt.intimacy){judge.intimacy=opt.intimacy;judge.months=1/30;judge.cult='日常';judge.worldEvent=null;}
+  if(opt&&opt.constructionDestination){const destination=constructionTravelDestination(opt.constructionDestination);if(destination)judge.destination=destination;}
   if(opt&&opt.debtId) judge.debtId=opt.debtId;
   if(opt&&opt.reunion) judge.reunion=opt.reunion;
   if(opt&&opt.courtMission){ judge.courtMission=opt.courtMission; judge.missionTarget=opt.duel.opponent; }
