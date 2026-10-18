@@ -2402,25 +2402,23 @@ function constructionComplete(day){
   if(ctx&&!active){ctx.emptyState=S;ctx.emptyRev=e.rev;}
 }
 function constructionCompatible(o,pl){return !!o&&o.alive!==false&&o.realm&&o.realm.major>=0&&(pl==='仙界'?o.realm.major>=8:o.realm.major<8);}
+function constructionPath(location){
+  return plain(location).replace(/\s/g,'').replace(/[・•／/＞>]/g,'·').split('·').map(x=>x.length>2&&x.endsWith('山门')?x.slice(0,-2):x).join('·');
+}
 function constructionHere(loc,site){
-  const a=plain(loc).replace(/\s/g,''),b=plain(site).replace(/\s/g,'');
+  const a=constructionPath(loc),b=constructionPath(site);
   if(!a||!b||!constructionSafePlace(a))return false;
   // 设施须在明确驻地内；旧 samePlace 的三字前缀会把“紫霄仙域”和“紫霄仙庭”误当同地。
-  const sites=[b];if(b.endsWith('山门'))sites.push(b.slice(0,-2));
-  return sites.some(x=>x&&(a===x||a.startsWith(x+'·')||a.endsWith('·'+x)||a.includes('·'+x+'·')));
+  return a===b||a.startsWith(b+'·')||a.endsWith('·'+b)||a.includes('·'+b+'·');
 }
 function constructionHomeHere(h){
-  const loc=plain(S.scene&&S.scene.location);if(!h||S.inRealm||!(loc===h.location||loc.startsWith(h.location+'·')))return false;
+  if(!h||S.inRealm||!constructionHere(S.scene&&S.scene.location,h.location))return false;
   if(h.sectKey){const f=constructionFaction(curPlane(),{id:h.sectKey});if(!f||S.player.faction!==f.name)return false;}
   return true;
 }
 function constructionFacilityHere(loc,site,facility){
-  const clean=x=>plain(x).replace(/\s/g,'').replace(/[・•／/＞>]/g,'·');
-  const a=clean(loc),b=clean(site);
-  if(!a||!b||!constructionSafePlace(a))return false;
-  const sites=[b];if(b.endsWith('山门'))sites.push(b.slice(0,-2));
   // 驻地与设施必须连在同一条地点路径里，不能把别宗演武场、场外或途中算作到场。
-  return sites.some(x=>{const path=x+'·'+facility;return a===path||a.startsWith(path+'·')||a.endsWith('·'+path)||a.includes('·'+path+'·');});
+  return constructionHere(loc,constructionPath(site)+'·'+facility);
 }
 function constructionTrainingReason(){
   const t=constructionSect(),r=constructionSectRecord(t);
@@ -4357,9 +4355,10 @@ function addressFor(child,adult){
 }
 
 /* ================= 怀孕与子嗣 =================
-   NPC按月、主角仅主动同房时判定；概率仍用原有2%基础及个体/年龄/境界/感情系数。
+   NPC按月沿用2%基础；主角主动同房单独标定，保留个体/年龄/境界/感情系数。
    18 岁起才判定；产后 12 个月不判定；多胞胎 1%。只出结果，不写过程。 */
 const PREG_BASE=0.02;   // 规范初值 8%，50 年样本里一对夫妻生十几个，P5 下调到 2%
+const INTIMACY_PREG_BASE=1.5,INTIMACY_PREG_CAP=0.6; // 主动一夜按玩家选定的高档平衡；最终概率封顶60%，并非必孕。
 function personByName(name){ if(S.player&&S.player.name===name) return S.player; return findNpc(name); }
 function fertOf(o){ if(o.fert==null) o.fert=Math.round((0.5+Math.random())*100)/100; return o.fert; }
 function realmFertMul(o){ const m=o&&o.realm?o.realm.major:-1; return m<0?1:(m===0?0.8:(m===1?0.5:(m===2?0.3:0.15))); }
@@ -4374,7 +4373,8 @@ function togetherMul(r,a,b){
   if(a.name===me||b.name===me){ if(S.inRealm) return 0; const o=a.name===me?b:a; return (!o.location||!S.scene||o.location===S.scene.location)?1:0.4; }
   return 1;
 }
-function pregChance(r){
+function pregChance(r,opts){
+  opts=opts||{};
   const a=personByName(r.a), b=personByName(r.b);
   if(S._bg&&(a===S.player||b===S.player)) return 0;   // 主角人不在这一界
   if(!a||!b||a.alive===false||b.alive===false) return 0;
@@ -4386,7 +4386,10 @@ function pregChance(r){
   if(num(f.age)>=Math.max(45,realmLifespan(f.realm)*0.75)) return 0;
   const realmMul=Math.min(realmFertMul(f),realmFertMul(m));
   const ageMul=num(f.age)>=35&&realmFertMul(f)>=0.8?0.5:1;   // 凡人与炼气的女子三十五岁后减半
-  return PREG_BASE*fertOf(f)*fertOf(m)*loveMul(a,b)*realmMul*ageMul*togetherMul(r,a,b);
+  const fertility=o=>opts.preview?(o.fert==null?1:num(o.fert)):fertOf(o);
+  // 主动同房已经通过成年、相聚和安全检查，不再叠加旧月度“偶尔相聚/恋人”折扣。
+  const chance=(opts.active?INTIMACY_PREG_BASE:PREG_BASE)*fertility(f)*fertility(m)*loveMul(a,b)*realmMul*ageMul*(opts.active?1:togetherMul(r,a,b));
+  return opts.active?Math.min(INTIMACY_PREG_CAP,Math.max(0,chance)):chance;
 }
 // 玩家主动安排的一夜：资格只读核对；受孕只在预演副本判一次。
 function intimacyPlace(n){
@@ -4412,9 +4415,13 @@ function intimacyReason(name){
   if(f&&f.lastBirthDay!=null&&num(S.elapsedDays)-num(f.lastBirthDay)<360)return '产后休养未满一年';
   return '';
 }
+function intimacyChance(name,preview){
+  if(intimacyReason(name))return 0;
+  return pregChance(relOf(playerName(),name),{active:true,preview:!!preview});
+}
 function resolveIntimacy(name){
   const why=intimacyReason(name);if(why)throw new Error(why);
-  const p=S.player,n=findNpc(name),r=relOf(p.name,n.name),chance=pregChance(r),day=num(S.elapsedDays)+1;
+  const p=S.player,n=findNpc(name),chance=intimacyChance(name),day=num(S.elapsedDays)+1;
   const conceived=chance>0&&Math.random()<chance;
   const f=p.gender==='女'?p:n,m=f===p?n:p;
   if(conceived){f.preg={with:m.name,since:day,due:day+300,source:'player-intimacy'};lifeLog(f,`有孕（${m.name}的骨肉）`);ledger(`${f.name}有孕，是${m.name}的骨肉；满十个月后生产`);}
@@ -5524,8 +5531,9 @@ function familyPartnerCards(){
   return '<div class="family-partners">'+entries.map(({n,r})=>{const why=intimacyReason(n.name),blocked=managementBlock()||why,role=r.type==='夫妻'?'正室':r.type==='恋人'&&/未婚|婚约|指腹为婚/.test(n.relation||'')?'婚约':r.type;
     const f=S.player.gender==='女'?S.player:n.gender==='女'?n:null;
     const status=n.alive===false?'已经故去':f&&f.preg?'已有身孕 · 待产中':why||'相聚在此 · 同房耗时一天';
-    return `<article class="family-partner ${n.alive===false?'partner-gone':''}"><div class="family-partner-head">${avatarFace(n)}<div class="family-partner-name"><button class="flink" data-family-person="${esc(n.name)}">${esc(n.name)}</button><span class="family-role">${role}</span><div class="panel-note">${esc(status)}</div></div></div>${n.alive!==false?`<div class="family-actions"><button class="mbtn primary" data-intimacy="${esc(n.name)}" ${blocked?'disabled':''}>同房</button><button class="mbtn" data-family-person="${esc(n.name)}">查看人物</button></div>`:''}</article>`;
-  }).join('')+'</div><p class="panel-note family-planning-note">主动同房才判定受孕，成功后满十个月生产。沿用年龄、境界与个体生育率，高境界较难有子嗣；长闭关不会自动受孕。</p>';
+    const chance=!why&&S.player.fert!=null&&n.fert!=null?`<div class="panel-note">本次受孕率约 ${(intimacyChance(n.name,true)*100).toFixed(1)}%</div>`:'';
+    return `<article class="family-partner ${n.alive===false?'partner-gone':''}"><div class="family-partner-head">${avatarFace(n)}<div class="family-partner-name"><button class="flink" data-family-person="${esc(n.name)}">${esc(n.name)}</button><span class="family-role">${role}</span><div class="panel-note">${esc(status)}</div>${chance}</div></div>${n.alive!==false?`<div class="family-actions"><button class="mbtn primary" data-intimacy="${esc(n.name)}" ${blocked?'disabled':''}>同房</button><button class="mbtn" data-family-person="${esc(n.name)}">查看人物</button></div>`:''}</article>`;
+  }).join('')+'</div><p class="panel-note family-planning-note">主动同房才判定受孕，成功后满十个月生产。按主动相伴调整受孕率，仍受年龄、境界、个体生育率与感情影响，高境界较难有子嗣；单次最高60%，不保证受孕。长闭关不会自动受孕。</p>';
 }
 
 function renderFamily(){
