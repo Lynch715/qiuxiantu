@@ -13780,6 +13780,7 @@ const COURT_SHOP=[
   {key:'仙庭护劫·仙劫',cost:300,rank:3,prep:'xjCourt',val:true}
 ];
 const COURT_DUTY_DUE=24, COURT_OFFICIAL_STAY=12;
+const COURT_MONTHLY_MERIT=2; // 正常当值每年 24 功绩；闭关告假不记功，旧档零头继续累计。
 // 仙界里的仙庭势力；铸世没给就补一个
 function courtFaction(){
   if(!S.world) return null;
@@ -13898,10 +13899,10 @@ function dutyMissed(){
 function courtTick(){
   if(!courtOn()||!inXianjie()||S._bg) return;
   const c=S.court, p=S.player, i=courtRankIdx(c), closed=p.cultMode==='闭关';
+  courtSync(num(c.rankSeen)); // 先结算境界带来的升官，再记当月功绩，避免记功覆盖待播报的官阶。
   // 闭关算告假：俸禄减半、不记当值的功、不派新差，手上的差事期限顺延
   c.payAcc=num(c.payAcc)+COURT_RANKS[Math.max(0,i)].pay*(closed?0.5:1); const pay=Math.floor(c.payAcc); if(pay>0){ c.payAcc-=pay; p.money+=pay; S.courtPay=num(S.courtPay)+pay; }
-  if(!closed){ c.dutyAcc=num(c.dutyAcc)+0.25; const g=Math.floor(c.dutyAcc); if(g>0){ c.dutyAcc-=g; addMerit(g); } }
-  courtSync(num(c.rankSeen));
+  if(!closed){ c.dutyAcc=num(c.dutyAcc)+COURT_MONTHLY_MERIT; const g=Math.floor(c.dutyAcc); if(g>0){ c.dutyAcc-=g; addMerit(g); } }
   const m=num(S.months);
   if(c.duty&&!c.duty.taken&&closed) c.duty.due=num(c.duty.due)+1;
   else if(c.duty&&!c.duty.taken&&m>c.duty.due) dutyMissed();
@@ -14111,6 +14112,7 @@ function courtHtml(){
     <div class="lab" style="display:flex;justify-content:space-between;font-size:12px;color:var(--ink-soft)"><span>功绩</span><span>${Math.floor(num(c.merit))}${nx?' / '+nx.need:''}</span></div>
     <div class="bar" style="height:5px"><i style="width:${nx?Math.min(100,num(c.merit)/nx.need*100):100}%;background:#A8862F"></i></div>
     <div class="idesc">${nx?(nx.short?`再积 ${nx.short} 功绩`:'功绩已够')+(nx.realm?`、修到${nx.realm}`:'')+`可升${nx.name}`:'已至帝君'}　功德 ${gongDe()}　俸禄每年约 ${Math.round(COURT_RANKS[i].pay*12*10)/10} 块仙晶</div>
+    <div class="idesc">正常当值每月 +${COURT_MONTHLY_MERIT} 功绩（全年 +${COURT_MONTHLY_MERIT*12}）；闭关告假不记当值功绩。</div>
     ${d?`<div class="idesc">差事：${esc(d.text)}${d.taken?'（正在办）':'（约 '+Math.max(1,d.due-num(S.months))+' 个月内办完）'}</div>`:''}
     <div style="display:flex;gap:8px;margin-top:7px"><button class="mbtn" id="btnCourtShop" style="flex:1">仙庭兑换</button><button class="mbtn" id="btnCourtQuit" style="flex:1">辞官</button></div></div>`;
 }
