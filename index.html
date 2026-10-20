@@ -2275,9 +2275,11 @@ const BUILD_MONTHS={
   '下界':{home:[1,3,6,12,24],array:[3,6,12,24,48],library:[2,4,8,16,32],arena:[1,3,6,12,24]},
   '仙界':{home:[3,12,36,120,360],array:[6,18,60,180,600],library:[6,12,36,120,360],arena:[3,12,36,120,360]}
 };
-const BUILD_EFFECT={home:[0,.08,.14,.20,.25,.30],array:[0,.05,.10,.15,.20,.25],library:[0,.03,.06,.09,.12,.15],arena:[0,.50,1,1.50,2,3]};
+const BUILD_EFFECT={home:[0,.08,.14,.20,.25,.30],array:[0,.25,.50,.75,1,1.50],library:[0,.25,.50,.75,1,1.50],arena:[0,.50,1,1.50,2,3]};
 const BUILD_ARENA_TRAIN=[0,.50,1,1.50,2,3]; // 主角功法演练与门人修炼分别结算。
-const BUILD_NPC_CAP=3.40; // 满级聚灵阵25%＋藏经阁15%＋演武场300%，不再被旧60%上限截掉。
+const BUILD_LIBRARY_STUDY=[0,5,10,15,20,25];
+const BUILD_PLAYER_CAP=BUILD_EFFECT.home[5]+BUILD_EFFECT.array[5];
+const BUILD_NPC_CAP=BUILD_EFFECT.array[5]+BUILD_EFFECT.library[5]+BUILD_EFFECT.arena[5];
 let constructionContext=null;
 function constructionRealm(pl,create){
   if(!S||!BUILD_COST[pl])return null;
@@ -2463,7 +2465,7 @@ function constructionFrame(pl){
       out.disc[d.id]=Math.min(BUILD_NPC_CAP,A+C+(d.job==='修炼'?Y:0));
     }
   }
-  out.home=home;out.array=playerArray;out.player=Math.min(.50,home+playerArray);return out;
+  out.home=home;out.array=playerArray;out.player=Math.min(BUILD_PLAYER_CAP,home+playerArray);return out;
 }
 function constructionAccrueDay(){
   const e=S.estates;if(!e||e.v!==1)return 0;
@@ -2497,7 +2499,7 @@ function constructionEndMonth(){if(!S.estates||S.estates.v!==1)return;S.estates.
 function constructionStudyBonus(m){
   if(!S.estates||m.recipe||!constructionCompatible(S.player,curPlane()))return 0;
   const t=constructionSect(),r=constructionSectRecord(t);if(!r||S.inRealm)return 0;
-  return constructionFacilityHere(S.scene&&S.scene.location,r.location,'藏经阁')?num(r.levels.library):0;
+  return constructionFacilityHere(S.scene&&S.scene.location,r.location,'藏经阁')?(BUILD_LIBRARY_STUDY[num(r.levels.library)]||0):0;
 }
 function constructionTrainDelta(a,base,rate){
   if(!rate||base<=0||num(a.level)>=100)return base;
@@ -6647,13 +6649,17 @@ function manualMeta(it){
   };
   return it.meta;
 }
+function studyDifficulty(m){
+  const p=S.player;
+  return Math.max(20,m.need+diff().dc+fdm().studyDC+tagAdd(p,'studyDC')-(relicLearned(p,'primer')?5:0)-constructionStudyBonus(m));
+}
 function studyRoll(m){
   const p=S.player;
   let val=num(p.attributes['悟性'])+Math.floor(num(p.attributes['神识'])/4);
   if(p.hp<30) val-=10;
   if(S.destitute) val-=Math.round(5*fdm().starve);
   if((p.status||[]).includes('走火入魔')) val-=10;
-  const roll=d20(), dc=Math.max(20,m.need+diff().dc+fdm().studyDC+tagAdd(p,'studyDC')-(relicLearned(p,'primer')?5:0)-constructionStudyBonus(m)), total=val+rollMod(roll);   // 悟性通玄 −10、孤僻 −5
+  const roll=d20(), dc=studyDifficulty(m), total=val+rollMod(roll);   // 悟性通玄 −10、孤僻 −5
   const crit=roll===20?'大成功':(roll===1&&fdm().studyHurt>=0.5?'走火入魔':'');
   const success=roll===20?true:(roll===1?false:total>=dc);
   return {val,roll,mod:rollMod(roll),dc,total,success,crit};
@@ -12083,7 +12089,7 @@ function renderConstructionEntries(){
 function constructionEffectText(kind,level){
   if(!level)return '尚无新增加成';
   if(kind==='home')return '洞府修炼 +'+Math.round(BUILD_EFFECT.home[level]*100)+'%';
-  if(kind==='library')return '门人培养 +'+Math.round(BUILD_EFFECT.library[level]*100)+'% · 功法玉简参悟难度 −'+level;
+  if(kind==='library')return '门人培养 +'+Math.round(BUILD_EFFECT.library[level]*100)+'% · 功法玉简参悟难度 −'+BUILD_LIBRARY_STUDY[level];
   if(kind==='arena')return '主角演武熟练增长 +'+Math.round(BUILD_ARENA_TRAIN[level]*100)+'% · 在山修炼门人培养 +'+Math.round(BUILD_EFFECT.arena[level]*100)+'%';
   return '在山本门修炼与培养 +'+Math.round(BUILD_EFFECT.array[level]*100)+'%';
 }
@@ -12097,7 +12103,7 @@ function openConstruction(mode){
     body+=`<section class="build-overview"><h4>${h?esc(h.location):'开辟一处养成洞府'}</h4>`;
     if(!h)body+=`<label class="build-select">选择洞府地点<select id="buildHomeSite"><option value="current">当前安全地点</option>${t?`<option value="sect">${esc(t.name)}驻地内（可共享聚灵阵）</option>`:''}</select></label><p class="panel-note">每界一处，首次开工选定；本版不支持迁址。</p>`;
     const base=monthlyLingli(S.player,{mode:'闭关',gongfa:gongfaMult(S.player)*(num(S.player.cultMul)||1),aura:auraOf(),partner:partnerMul(S.player)}),fmt=v=>Math.round(v*100)/100;
-    body+=`<div class="build-stats"><div class="build-stat"><small>原有闭关 · 每月</small><b>${fmt(base)}</b></div><div class="build-stat"><small>当前生效 · 每月</small><b>${fmt(base*(1+frame.player))}</b></div></div><div class="build-details">洞府 +${Math.round(num(frame.home)*100)}%　聚灵阵 +${Math.round(num(frame.array)*100)}%<br>设施合计额外 ${Math.round(frame.player*100)}%，上限50%。${h&&!constructionHomeHere(h)?'<br>目前未在洞府内，洞府加成未生效。':''}</div></section>`;
+    body+=`<div class="build-stats"><div class="build-stat"><small>原有闭关 · 每月</small><b>${fmt(base)}</b></div><div class="build-stat"><small>当前生效 · 每月</small><b>${fmt(base*(1+frame.player))}</b></div></div><div class="build-details">洞府 +${Math.round(num(frame.home)*100)}%　聚灵阵 +${Math.round(num(frame.array)*100)}%<br>设施合计额外 ${Math.round(frame.player*100)}%，上限${Math.round(BUILD_PLAYER_CAP*100)}%。${h&&!constructionHomeHere(h)?'<br>目前未在洞府内，洞府加成未生效。':''}</div></section>`;
   }else body+=`<section class="build-overview"><h4>${esc(t.name)}</h4><div class="build-details">${esc(b&&b.location||t.site)} · 势力 ${num(t.f.power)}</div><p class="panel-note">${t.leader?'可选现有宗门公账或个人出资。':'个人赞建，设施归宗门，不授予宗主权限或贡献。'}在山修炼门人培养额外加成最多${Math.round(BUILD_NPC_CAP*100)}%，主角不重复领取；其他分工不领取演武训练加成。</p></section>`;
   if(owner&&owner.project)body+=`<section class="build-progress"><div class="build-effect">${esc(constructionStatus(owner))}</div><p class="panel-note">升级期间原等级继续生效；开工后不退款。</p><button class="mbtn" id="buildPause">${owner.project.paused?'恢复工程':'暂停工程'}</button></section>`;
   for(const kind of mode==='home'?['home']:['array','library','arena']){
@@ -12240,13 +12246,13 @@ function manualHtml(list){
     const m=manualMeta(x);
     const p=S.player;
     const val=num(p.attributes['悟性'])+Math.floor(num(p.attributes['神识'])/4);
-    const dc=Math.max(20,m.need+diff().dc+fdm().studyDC+tagAdd(p,'studyDC')-(relicLearned(p,'primer')?5:0));
+    const studyBonus=constructionStudyBonus(m),dc=studyDifficulty(m);
     let hit=0; for(let r=1;r<=20;r++){ if(r===20||(r!==1&&val+rollMod(r)>=dc)) hit++; }
     const chance=hit*5;
     return `<div class="item"><span class="itag" style="background:${m.recipe?'#7A6A4A':'#A8862F'}">${m.recipe?'方':'籍'}</span><b class="${gq(m.grade)}">${esc(x.name)}</b>${eggItemInfo(x)?eggMark():''}
       <span class="${gq(m.grade)}" style="font-size:13px">（${esc(m.grade)}·${m.recipe?esc(m.recipe)+'方谱':(m.element?esc(m.element)+'·':'')+esc(m.style)}）</span>
       <div class="idesc">${esc(x.desc||'')}</div>
-      <div class="idesc" style="color:#7A8A80">闭关 ${m.months} 个月 · 成算约 <b style="color:var(--accent)">${chance}%</b><br>悟性+神识/4 = ${val}　难度 ${dc}${m.mastered?'　✦ 已参透':''}${m.recipe?`<br>参透以后${esc(m.recipe)}${m.product?'「'+esc(m.product)+'」':''}判定 +10，不算功法`:''}</div>
+      <div class="idesc" style="color:#7A8A80">闭关 ${m.months} 个月 · 成算约 <b style="color:var(--accent)">${chance}%</b><br>悟性+神识/4 = ${val}　难度 ${dc}${studyBonus?'（藏经阁 −'+studyBonus+'）':''}${m.mastered?'　✦ 已参透':''}${m.recipe?`<br>参透以后${esc(m.recipe)}${m.product?'「'+esc(m.product)+'」':''}判定 +10，不算功法`:''}</div>
       ${(()=>{const e=eggItemInfo(x);return e?eggBlock(e.key,e.can,e.cost):'';})()}${m.mastered?'':`<button class="mbtn" data-mi="${i}" style="margin-top:6px;padding:4px 12px;font-size:13px">闭关参悟</button>`}</div>`;
   }).join('');
 }

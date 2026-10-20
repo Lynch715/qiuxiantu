@@ -33,7 +33,7 @@ for(const plane of ['下界','仙界']){
   e.run(`S.scene.location=rec.location;openConstruction('sect');`);assert(e.run('uiBody').match(/id="buildTrain" disabled/));assert(e.run('uiBody').includes('需先到本门演武场'));
  });
  test(plane+'：藏经阁共享明确地点路径判定，方谱和阁外仍不减难度',()=>{
-  const e=setup(plane);e.run(`S.scene.location='本界·'+rec.location.replace(/山门$/,'')+'·藏经阁·静室';`);assert.equal(e.run('constructionStudyBonus({})'),5);assert.equal(e.run('constructionStudyBonus({recipe:"炼丹"})'),0);e.run(`S.scene.location=rec.location+'·藏经阁外';`);assert.equal(e.run('constructionStudyBonus({})'),0);
+  const e=setup(plane);e.run(`S.scene.location='本界·'+rec.location.replace(/山门$/,'')+'·藏经阁·静室';`);assert.equal(e.run('constructionStudyBonus({})'),25);assert.equal(e.run('constructionStudyBonus({recipe:"炼丹"})'),0);e.run(`S.scene.location=rec.location+'·藏经阁外';`);assert.equal(e.run('constructionStudyBonus({})'),0);
  });
  test(plane+'：前往设施只指定已登记终点，正常行动与原耗时保留',()=>{
   const e=setup(plane);ui(e);e.run(`openConstruction('sect');uiElements.buildGoArena.onclick();var j=makeJudge(uiAction.opt,uiAction.action);`);assert.equal(e.run('j.destination'),e.run(`rec.location+'·演武场'`));assert.equal(e.run('j.months'),1/30);

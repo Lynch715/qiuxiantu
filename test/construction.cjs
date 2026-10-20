@@ -56,8 +56,8 @@ test('升级中旧级继续生效，暂停/恢复不二次收费，完成消息�
  const resumeMoney=e.run('S.player.money');e.run(`constructionPause('home');`);assert.equal(e.run('S.player.money'),resumeMoney);e.run(`advanceTime(.5);constructionComplete(S.elapsedDays);constructionComplete(S.elapsedDays);`);assert.equal(e.run('constructionRealm(curPlane()).home.level'),1);assert.equal(e.run(`S.estates.history.filter(x=>x.event==='完工').length`),1);assert.equal(e.run(`S.estates.history.filter(x=>x.event==='开工').length`),1);
  e.run(`constructionStart('home',{site:'sect'});S.scene.location=constructionRealm(curPlane()).home.location;S.player.lingli=0;`);const g=originalRate(e);e.run(`advanceTime(4);`);near(e.run('S.player.lingli'),g*(3*1.08+1.14));
 });
-test('先逐段封顶再按天数加权，月中离山所得25%不是27.5%',()=>{
- const e=setup();install(e);const g=originalRate(e);assert.equal(e.run('constructionFrame(curPlane()).player'),.5);e.run(`advanceTime(.5);S.scene.location='远方山谷';advanceTime(.5);`);near(e.run('S.player.lingli'),g*1.25);
+test('先逐段封顶再按天数加权，月中离山仅按半月计180%设施收益',()=>{
+ const e=setup();install(e);const g=originalRate(e);assert.equal(e.run('constructionFrame(curPlane()).player'),1.8);e.run(`advanceTime(.5);S.scene.location='远方山谷';advanceTime(.5);`);near(e.run('S.player.lingli'),g*1.9);
 });
 test('设施地点不沿用三字前缀：同名仙域、宗门外与远处不算在山',()=>{
  const e=setup();assert(!e.run(`constructionHere('紫霄仙域·接引城','紫霄仙庭山门')`));assert(!e.run(`constructionHere('青云宗山门外·坊市','青云宗山门')`));assert(!e.run(`constructionHere('青云宗山门途中','青云宗山门')`));assert(e.run(`constructionHere('紫霄仙域·紫霄仙庭·正院','紫霄仙庭山门')`));assert(e.run(`constructionHere('青云宗山门·演武场','青云宗山门')`));
@@ -72,20 +72,20 @@ test('离界工程完工只追加消息，不截掉原有信件与工程历史',
 });
 test('聚灵阵与藏经阁作用于真实NPC，演武仅修炼岗位，同人两本账不重复',()=>{
  const e=setup();install(e);e.run(`S.npcs=[normNpc({name:'门人甲',realm:'筑基初期',age:30,faction:S.sect.name,location:'青云宗山门',lingli:0})];var n=S.npcs[0];n.lingli=0;n.tags=[];n.breakCD=0;S.clan={name:S.sect.name,disciples:[{id:'d1',name:n.name,npcName:n.name,alive:true,job:'修炼',武功:n.武功,talent:5,prog:0}],treasury:1000};`);
- assert.equal(e.run(`constructionFrame(curPlane()).npc[n.entityId||n.name]`),3.4);assert.equal(e.run(`constructionFrame(curPlane()).disc.d1||0`),0);
- const g=e.run(`monthlyLingli(n,{mode:'闭关'})*.7`);e.run('npcCultivateMonth(n,[])');near(e.run('n.lingli'),g*4.4);e.run(`S.clan.disciples[0].job='授艺';`);near(e.run(`constructionFrame(curPlane()).npc[n.entityId||n.name]`),.4);
+ assert.equal(e.run(`constructionFrame(curPlane()).npc[n.entityId||n.name]`),6);assert.equal(e.run(`constructionFrame(curPlane()).disc.d1||0`),0);
+ const g=e.run(`monthlyLingli(n,{mode:'闭关'})*.7`);e.run('npcCultivateMonth(n,[])');near(e.run('n.lingli'),g*7);e.run(`S.clan.disciples[0].job='授艺';`);near(e.run(`constructionFrame(curPlane()).npc[n.entityId||n.name]`),3);
  e.run(`S.clan.disciples[0].job='云游';`);assert.equal(e.run(`constructionFrame(curPlane()).npc[n.entityId||n.name]||0`),0);
 });
 test('抽象弟子使用独立培养入口，资质上限和原训练分工保留',()=>{
- const e=setup();install(e);e.run(`S.clan={name:S.sect.name,disciples:[{id:'d0',name:'抽象弟子',alive:true,job:'修炼',武功:20,talent:5,prog:0}],treasury:1000};`);assert.equal(e.run(`constructionFrame(curPlane()).disc.d0`),3.4);e.run(`S.clan.disciples[0].job='护山';`);near(e.run(`constructionFrame(curPlane()).disc.d0`),.4);
+ const e=setup();install(e);e.run(`S.clan={name:S.sect.name,disciples:[{id:'d0',name:'抽象弟子',alive:true,job:'修炼',武功:20,talent:5,prog:0}],treasury:1000};`);assert.equal(e.run(`constructionFrame(curPlane()).disc.d0`),6);e.run(`S.clan.disciples[0].job='护山';`);near(e.run(`constructionFrame(curPlane()).disc.d0`),3);
 });
 test('月中补齐NPC身份标识后，前后两个时段的培养收益仍属于同一个人',()=>{
  const e=setup();install(e,[0,1,0,0]);e.run(`S.npcs=[normNpc({name:'新门人',realm:'筑基初期',age:30,faction:S.sect.name,location:'青云宗山门'})];var n=S.npcs[0];n.lingli=0;n.breakCD=0;n.tags=[];`);
- const g=e.run(`monthlyLingli(n,{mode:'闭关'})*.7`);e.run(`advanceTime(.5);syncKnownEntities(S);advanceTime(.5);`);near(e.run('n.lingli'),g*1.05);
+ const g=e.run(`monthlyLingli(n,{mode:'闭关'})*.7`);e.run(`advanceTime(.5);syncKnownEntities(S);advanceTime(.5);`);near(e.run('n.lingli'),g*1.25);
 });
 test('藏经阁只减已持功法参悟难度，不减方谱与突破，不改变骰点',()=>{
- const e=setup();install(e);e.run(`S.scene.location=rec.location+'·藏经阁';`);assert.equal(e.run(`constructionStudyBonus({recipe:''})`),5);assert.equal(e.run(`constructionStudyBonus({recipe:'炼丹'})`),0);
- const a=e.force(.5,()=>e.val(`studyRoll({need:85,recipe:''})`));e.run(`S.scene.location='远方山谷';`);const b=e.force(.5,()=>e.val(`studyRoll({need:85,recipe:''})`));assert.equal(b.dc-a.dc,5);assert.equal(a.roll,b.roll);
+ const e=setup();install(e);e.run(`S.scene.location=rec.location+'·藏经阁';`);assert.equal(e.run(`constructionStudyBonus({recipe:''})`),25);assert.equal(e.run(`constructionStudyBonus({recipe:'炼丹'})`),0);
+ const a=e.force(.5,()=>e.val(`studyRoll({need:85,recipe:''})`));e.run(`S.scene.location='远方山谷';`);const b=e.force(.5,()=>e.val(`studyRoll({need:85,recipe:''})`));assert.equal(b.dc-a.dc,25);assert.equal(a.roll,b.roll);
 });
 test('演武场熟练额外小数累计，不每次向上取整，场外不生效',()=>{
  const e=setup();install(e);e.run(`var art={name:'旧剑诀',style:'攻伐',level:20};`);assert.deepEqual(e.val(`[constructionTrainDelta(art,1,.25),constructionTrainDelta(art,1,.25),constructionTrainDelta(art,1,.25),constructionTrainDelta(art,1,.25)]`),[1,1,1,2]);
