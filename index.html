@@ -2276,6 +2276,7 @@ const BUILD_MONTHS={
   '仙界':{home:[3,12,36,120,360],array:[6,18,60,180,600],library:[6,12,36,120,360],arena:[3,12,36,120,360]}
 };
 const BUILD_EFFECT={home:[0,.08,.14,.20,.25,.30],array:[0,.05,.10,.15,.20,.25],library:[0,.03,.06,.09,.12,.15],arena:[0,.05,.10,.15,.20,.25]};
+const BUILD_ARENA_TRAIN=[0,.50,1,1.50,2,3]; // 主角功法演练单独计效；门人培养仍用原加成与60%上限。
 let constructionContext=null;
 function constructionRealm(pl,create){
   if(!S||!BUILD_COST[pl])return null;
@@ -2445,7 +2446,7 @@ function constructionFrame(pl){
     if(current&&constructionCompatible(S.player,pl)&&S.player.faction===f.name&&!S.inRealm&&constructionHere(plain(S.scene&&S.scene.location),rec.location)){
       playerArray=A;
     }
-    if(current&&constructionCompatible(S.player,pl)&&S.player.faction===f.name&&!S.inRealm&&constructionFacilityHere(S.scene&&S.scene.location,rec.location,'演武场'))out.train=Y;
+    if(current&&constructionCompatible(S.player,pl)&&S.player.faction===f.name&&!S.inRealm&&constructionFacilityHere(S.scene&&S.scene.location,rec.location,'演武场'))out.train=BUILD_ARENA_TRAIN[num(rec.levels.arena)]||0;
     for(const n of b.npcs||[]){
       if(!constructionCompatible(n,pl)||n.faction!==f.name)continue;
       const d=linked.get(n.name);if(d&&d.job==='云游')continue;
@@ -2500,7 +2501,7 @@ function constructionStudyBonus(m){
 function constructionTrainDelta(a,base,rate){
   if(!rate||base<=0||num(a.level)>=100)return base;
   const e=S.estates;e.artRemainders=e.artRemainders||{};const key=curPlane()+'|'+a.name+'|'+a.style;
-  const raw=(e.artRemainders[key]||0)+base*Math.min(.25,rate),extra=Math.floor(raw+1e-9);
+  const raw=(e.artRemainders[key]||0)+base*Math.max(0,Math.min(BUILD_ARENA_TRAIN[5],num(rate))),extra=Math.floor(raw+1e-9);
   e.artRemainders[key]=Math.max(0,raw-extra);return base+extra;
 }
 function constructionBlock(){
@@ -9991,8 +9992,8 @@ function applyTurn(d, action, judge){
     dv=Math.min(dv, 4*months*(fateTier(fate)==='great'?2:1));
     dv=Math.max(1,Math.round(dv*artGrowMul(p,a)));      // 悟性通玄、根骨奇佳、剑心通明
     if(S.estates&&/演武场/.test(action)&&/演练|练习|修炼|练功/.test(action))dv=constructionTrainDelta(a,dv,num(judge.timeAdvance&&judge.timeAdvance.constructionTraining));
-    a.level=clamp(num(a.level)+dv);
-    lastDeltas['功法·'+a.name]=dv;
+    const before=num(a.level);a.level=clamp(before+dv);
+    lastDeltas['功法·'+a.name]=a.level-before;
   }
   if(ch.personalityAdd) for(const t of ch.personalityAdd){ if(t&&!p.personality.includes(t)) p.personality.push(t); }
   // 模型爱把整句话塞进 statusAdd，这里拆成「伤名＋说明＋将养几个月」，同一个伤不重复挂
@@ -12082,7 +12083,7 @@ function constructionEffectText(kind,level){
   if(!level)return '尚无新增加成';
   if(kind==='home')return '洞府修炼 +'+Math.round(BUILD_EFFECT.home[level]*100)+'%';
   if(kind==='library')return '门人培养 +'+Math.round(BUILD_EFFECT.library[level]*100)+'% · 功法玉简参悟难度 −'+level;
-  if(kind==='arena')return '在山修炼门人培养、主角演武熟练增长 +'+Math.round(BUILD_EFFECT.arena[level]*100)+'%';
+  if(kind==='arena')return '主角演武熟练增长 +'+Math.round(BUILD_ARENA_TRAIN[level]*100)+'% · 在山修炼门人培养 +'+Math.round(BUILD_EFFECT.arena[level]*100)+'%';
   return '在山本门修炼与培养 +'+Math.round(BUILD_EFFECT.array[level]*100)+'%';
 }
 function openConstruction(mode){

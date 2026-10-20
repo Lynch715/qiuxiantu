@@ -13,11 +13,11 @@ function setup(){
   const e=setup();e.run(`callLLMOnce=async()=>{calls++;lastFinish='stop';if(calls===1)return '{"needsItemDetails":["*"]}';if(${JSON.stringify(mode)}==='failure-then-retry'&&calls===2)throw Error('接口调用失败（HTTP 401：测试失败）');return JSON.stringify({narrative:'他在演武场练习旧剑诀，一个月里逐式校正运转，最后将旧物原件收好。',summary:'演练旧剑诀',scene:{location:S.scene.location,present:[],unresolved:[]},playerChanges:{artsTrain:[{name:'旧剑诀',level:4}]},options:[]});};`);
   await e.run(`runTurn('在演武场修炼《旧剑诀》一个月，演练已学功法',{months:1,cult:'闭关',fate:10,check:null})`);
   if(mode==='failure-then-retry'){
-   assert.equal(e.run('S.elapsedDays'),e.run('initialDays'));assert.equal(e.run('S.player.arts[0].level'),41);assert.equal(e.run('settles'),0);assert.equal(e.run('S.pending.forecast.time.constructionTraining'),.25);
+   assert.equal(e.run('S.elapsedDays'),e.run('initialDays'));assert.equal(e.run('S.player.arts[0].level'),41);assert.equal(e.run('settles'),0);assert.equal(e.run('S.pending.forecast.time.constructionTraining'),3);
    await e.run(`runTurn('在演武场修炼《旧剑诀》一个月，演练已学功法',{months:1,cult:'闭关',fate:10,check:null})`);
   }
-  assert.equal(e.run('forecasts'),1);assert.equal(e.run('settles'),1);assert.equal(e.run('S.elapsedDays-initialDays'),30);assert.equal(e.run('S.turn-initialTurn'),1);assert.equal(e.run('S.player.arts[0].level'),46);assert.equal(e.run('JSON.stringify(S.player.items)'),e.run('itemsBefore'));assert(!e.run('!!S.pending'));
-  console.log('✓ '+mode+'：补读/重试只结算30天及一次25%演武收益，旧物原文不变');
+  assert.equal(e.run('forecasts'),1);assert.equal(e.run('settles'),1);assert.equal(e.run('S.elapsedDays-initialDays'),30);assert.equal(e.run('S.turn-initialTurn'),1);assert.equal(e.run('S.player.arts[0].level'),57);assert.equal(e.run('JSON.stringify(S.player.items)'),e.run('itemsBefore'));assert(!e.run('!!S.pending'));
+  console.log('✓ '+mode+'：补读/重试只结算30天及一次300%演武收益，旧物原文不变');
  }
  console.log('2 arena flow regressions passed');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -89,7 +89,7 @@ test('藏经阁只减已持功法参悟难度，不减方谱与突破，不改�
 });
 test('演武场熟练额外小数累计，不每次向上取整，场外不生效',()=>{
  const e=setup();install(e);e.run(`var art={name:'旧剑诀',style:'攻伐',level:20};`);assert.deepEqual(e.val(`[constructionTrainDelta(art,1,.25),constructionTrainDelta(art,1,.25),constructionTrainDelta(art,1,.25),constructionTrainDelta(art,1,.25)]`),[1,1,1,2]);
- e.run(`S.scene.location=rec.location+'·演武场';`);assert.equal(e.run(`constructionFrame(curPlane()).train`),.25);e.run(`S.scene.location='远方山谷';`);assert.equal(e.run(`constructionFrame(curPlane()).train`),0);
+ e.run(`S.scene.location=rec.location+'·演武场';`);assert.equal(e.run(`constructionFrame(curPlane()).train`),3);e.run(`S.scene.location='远方山谷';`);assert.equal(e.run(`constructionFrame(curPlane()).train`),0);
 });
 test('存读档恢复月中分段、暂停和工程，不丢历史物品且不重复付款',()=>{
  const e=setup();install(e,[4,4,4,4]);e.run(`advanceTime(.5);constructionStart('home',{site:'sect'});constructionPause('home');var exported=JSON.stringify(S);S=JSON.parse(exported);migrate(S);`);assert(e.run('constructionRealm(curPlane()).home.project.paused'));assert.equal(e.run('S.estates.history[0].event'),'开工');assert(e.run(`S.player.items&&S.npcs.length>0`));
