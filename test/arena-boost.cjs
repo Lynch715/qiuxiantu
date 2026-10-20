@@ -12,11 +12,11 @@ for(const plane of ['下界','仙界']){
   for(let level=0;level<=5;level++){run(`rec.levels.arena=${level};`);rates.push(run('constructionFrame(curPlane()).train'));gains.push(run('constructionTrainDelta(S.player.arts[0],4,constructionFrame(curPlane()).train)'));}
   assert.deepEqual(rates,[0,.5,1,1.5,2,3]);assert.deepEqual(gains,[4,6,8,10,12,16]);
  });
- test(plane+'：训练岗位门人仍为原25%培养加成，其他设施与费用工期不变',()=>{
+ test(plane+'：训练岗位门人同为300%培养加成，其他设施与费用工期不变',()=>{
   const {run}=setup(plane);run(`S.npcs=[normNpc({name:'训练门人',realm:'${plane==='仙界'?'地仙初期':'筑基初期'}',faction:S.player.faction,location:rec.location,activity:'修炼'})];S.npcs[0].activity='修炼';`);
-  assert.equal(run('constructionFrame(curPlane()).npc[S.npcs[0].entityId||S.npcs[0].name]'),.25);
+  assert.equal(run('constructionFrame(curPlane()).npc[S.npcs[0].entityId||S.npcs[0].name]'),3);
   assert.equal(run('constructionFrame(curPlane()).player'),0);
-  assert.match(run(`constructionEffectText('arena',5)`),/主角演武熟练增长 \+300%.*门人培养 \+25%/);
+  assert.match(run(`constructionEffectText('arena',5)`),/主角演武熟练增长 \+300%.*门人培养 \+300%/);
  });
 }
 test('旧档0.75小数不丢失，一级两次一点训练按1/2累计',()=>{

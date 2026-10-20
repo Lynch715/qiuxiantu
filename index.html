@@ -2275,8 +2275,9 @@ const BUILD_MONTHS={
   '下界':{home:[1,3,6,12,24],array:[3,6,12,24,48],library:[2,4,8,16,32],arena:[1,3,6,12,24]},
   '仙界':{home:[3,12,36,120,360],array:[6,18,60,180,600],library:[6,12,36,120,360],arena:[3,12,36,120,360]}
 };
-const BUILD_EFFECT={home:[0,.08,.14,.20,.25,.30],array:[0,.05,.10,.15,.20,.25],library:[0,.03,.06,.09,.12,.15],arena:[0,.05,.10,.15,.20,.25]};
-const BUILD_ARENA_TRAIN=[0,.50,1,1.50,2,3]; // 主角功法演练单独计效；门人培养仍用原加成与60%上限。
+const BUILD_EFFECT={home:[0,.08,.14,.20,.25,.30],array:[0,.05,.10,.15,.20,.25],library:[0,.03,.06,.09,.12,.15],arena:[0,.50,1,1.50,2,3]};
+const BUILD_ARENA_TRAIN=[0,.50,1,1.50,2,3]; // 主角功法演练与门人修炼分别结算。
+const BUILD_NPC_CAP=3.40; // 满级聚灵阵25%＋藏经阁15%＋演武场300%，不再被旧60%上限截掉。
 let constructionContext=null;
 function constructionRealm(pl,create){
   if(!S||!BUILD_COST[pl])return null;
@@ -2452,14 +2453,14 @@ function constructionFrame(pl){
       const d=linked.get(n.name);if(d&&d.job==='云游')continue;
       if(n.location&&!constructionHere(n.location,rec.location))continue;
       const training=d?d.job==='修炼':!!n.location&&constructionHere(n.location,rec.location)&&/修炼|闭关|练功|修行/.test(String(n.activity||'')+' '+String(n.mood||''));
-      out.npc[n.entityId||n.name]=Math.min(.60,A+C+(training?Y:0));
+      out.npc[n.entityId||n.name]=Math.min(BUILD_NPC_CAP,A+C+(training?Y:0));
     }
     if(b.clan&&b.clan.name===f.name)for(const d of b.clan.disciples||[]){
       if(!d.alive||d.job==='云游')continue;
       const known=d.npcName&&npcByName.get(d.npcName);if(known&&known.realm&&known.realm.major>=0)continue;
       if(d.location&&!constructionHere(d.location,rec.location))continue;
       if(pl==='仙界'&&d.realm&&d.realm.major<8)continue;
-      out.disc[d.id]=Math.min(.60,A+C+(d.job==='修炼'?Y:0));
+      out.disc[d.id]=Math.min(BUILD_NPC_CAP,A+C+(d.job==='修炼'?Y:0));
     }
   }
   out.home=home;out.array=playerArray;out.player=Math.min(.50,home+playerArray);return out;
@@ -12097,7 +12098,7 @@ function openConstruction(mode){
     if(!h)body+=`<label class="build-select">选择洞府地点<select id="buildHomeSite"><option value="current">当前安全地点</option>${t?`<option value="sect">${esc(t.name)}驻地内（可共享聚灵阵）</option>`:''}</select></label><p class="panel-note">每界一处，首次开工选定；本版不支持迁址。</p>`;
     const base=monthlyLingli(S.player,{mode:'闭关',gongfa:gongfaMult(S.player)*(num(S.player.cultMul)||1),aura:auraOf(),partner:partnerMul(S.player)}),fmt=v=>Math.round(v*100)/100;
     body+=`<div class="build-stats"><div class="build-stat"><small>原有闭关 · 每月</small><b>${fmt(base)}</b></div><div class="build-stat"><small>当前生效 · 每月</small><b>${fmt(base*(1+frame.player))}</b></div></div><div class="build-details">洞府 +${Math.round(num(frame.home)*100)}%　聚灵阵 +${Math.round(num(frame.array)*100)}%<br>设施合计额外 ${Math.round(frame.player*100)}%，上限50%。${h&&!constructionHomeHere(h)?'<br>目前未在洞府内，洞府加成未生效。':''}</div></section>`;
-  }else body+=`<section class="build-overview"><h4>${esc(t.name)}</h4><div class="build-details">${esc(b&&b.location||t.site)} · 势力 ${num(t.f.power)}</div><p class="panel-note">${t.leader?'可选现有宗门公账或个人出资。':'个人赞建，设施归宗门，不授予宗主权限或贡献。'}门人培养额外加成最多60%，主角不重复领取。</p></section>`;
+  }else body+=`<section class="build-overview"><h4>${esc(t.name)}</h4><div class="build-details">${esc(b&&b.location||t.site)} · 势力 ${num(t.f.power)}</div><p class="panel-note">${t.leader?'可选现有宗门公账或个人出资。':'个人赞建，设施归宗门，不授予宗主权限或贡献。'}在山修炼门人培养额外加成最多${Math.round(BUILD_NPC_CAP*100)}%，主角不重复领取；其他分工不领取演武训练加成。</p></section>`;
   if(owner&&owner.project)body+=`<section class="build-progress"><div class="build-effect">${esc(constructionStatus(owner))}</div><p class="panel-note">升级期间原等级继续生效；开工后不退款。</p><button class="mbtn" id="buildPause">${owner.project.paused?'恢复工程':'暂停工程'}</button></section>`;
   for(const kind of mode==='home'?['home']:['array','library','arena']){
     const lv=kind==='home'?num(h&&h.level):num(b&&b.levels[kind]);
