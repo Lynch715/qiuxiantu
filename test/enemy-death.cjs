@@ -25,7 +25,7 @@ for(const text of ['周试敌被你杀死了。','周试敌被你一掌打死。
 }
 test('具名第三方杀人只记死者，不算主角击杀',()=>{const e=setup();e.run(`S.npcs.push(normNpc({name:'旁人',realm:'金丹初期',alive:true}));`);settle(e,'周试敌被旁人一掌击毙。');assert.equal(e.run('findNpc("周试敌").alive'),false);assert.equal(e.run('findNpc("旁人").alive'),true);assert.equal(e.run('S.stats.kills'),0);});
 test('正文漏写npcUpdates或误填alive:true，明确死亡仍落账',()=>{for(const updates of [[],[{name:'周试敌',alive:true}]]){const e=setup();settle(e,'周试敌被你当场斩杀，尸身坠地。',updates);assert.equal(e.run('findNpc("周试敌").alive'),false);assert.equal(e.run('S.stats.kills'),1);}});
-for(const text of ['周试敌没有被你斩杀。','你差点杀死了周试敌。','你准备杀死周试敌。','如果周试敌被你斩杀，旧怨就了了。','听说周试敌已死。','你说：「周试敌死定了。」','周试敌的分身被你斩杀。','周试敌诈死逃走。','周试敌杀死了另一名修士。','周试敌的父亲被你杀死了。','周试敌打死了另一名修士。','周试敌死了父亲。','周试敌悼念死去的父亲。','周试敌看见一位老修士坐化。','当年周试敌被你杀死了。','周试敌未死，你收起了剑。']){
+for(const text of ['周试敌没有被你斩杀。','你差点杀死了周试敌。','你准备杀死周试敌。','如果周试敌被你斩杀，旧怨就了了。','听说周试敌已死。','你说：「周试敌死定了。」','周试敌的分身被你斩杀。','周试敌诈死逃走。','周试敌杀死了另一名修士。','周试敌的父亲被你杀死了。','周试敌被你请来，杀死了守卫。','周试敌走进屋内，一位老修士坐化了。','周试敌打死了另一名修士。','周试敌死了父亲。','周试敌悼念死去的父亲。','周试敌看见一位老修士坐化。','当年周试敌被你杀死了。','周试敌未死，你收起了剑。']){
  test('不误杀：'+text,()=>{const e=setup();settle(e,text,[{name:'周试敌',alive:false}]);assert.equal(e.run('findNpc("周试敌").alive'),true);assert.equal(e.run('S.stats.kills'),0);});
 }
 test('行动写杀死但正文未发生死亡，不得只凭意图杀人',()=>{const e=setup();settle(e,'周试敌收起法器，双方各自离去。',[{name:'周试敌',alive:false}],'杀死周试敌');assert.equal(e.run('findNpc("周试敌").alive'),true);});

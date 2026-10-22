@@ -9722,9 +9722,10 @@ function npcDeathEvidence(n,text){
       let after=raw.slice(0,40);
       for(const other of S.npcs||[])if(other.name&&other.name!==name){const i=after.indexOf(other.name);if(i>=0&&!/(?:被|遭|由)[^，,]{0,8}$/.test(after.slice(0,i)))after=after.slice(0,i);}
       const victim=new RegExp(kill+'(?:了|掉)?\\s*$').test(prefix)||/(?:将|把)$/.test(prefix)&&new RegExp('^[^，,]{0,20}'+kill).test(after);
-      const passive=/^[^，,]{0,12}(?:被|遭)/.test(after)&&new RegExp(kill).test(after);
+      const clause=after.split(/[，,]/)[0];
+      const passive=/^[^，,]{0,12}(?:被|遭)/.test(clause)&&new RegExp(kill).test(clause);
       const death=/(?:身死|身亡|死亡|死去|已死|死于|死在|命丧|丧生|(?<![杀毒害打拍刺砍烧轰震勒掐冻射])死了(?!父|母|妻|夫|儿|女|兄|弟|姐|妹)|陨落|殒落|殒命|毙命|丧了?命|气绝|断了?气|咽了?气|没了气息|魂飞魄散|身首异处|尸首分离|首级落地|人头落地|坐化|病故|寿终)/.exec(after);
-      const gone=!!death&&!/看|望|想|忆|悼|祭|听|闻|说|道|谈|提起|得知|目睹|见|盼|希望|害怕|担心|惧|关于|他人|别人|对方/.test(after.slice(0,death.index));
+      const gone=!!death&&!/看|望|想|忆|悼|祭|听|闻|说|道|谈|提起|得知|目睹|见|盼|希望|害怕|担心|惧|关于|他人|别人|对方|[你他她]的|一[位名个]|有人/.test(after.slice(0,death.index));
       const otherSubject=/^的(?:父|母|兄|弟|姐|妹|师|妻|夫|徒|儿|女|同门|亲友|朋友|仇|敌)/.test(after);
       if(!otherSubject&&(victim||passive||gone)){
         const me='(?:你|主角|'+reLiteral(playerName())+')';
