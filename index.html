@@ -1017,6 +1017,7 @@ details.eggd.fate>summary{color:inherit;font-size:inherit}
       <button class="mbtn" id="npcPillBtn" style="display:none">求一颗筑基丹</button>
       <button class="mbtn gold" id="npcTalkBtn">交谈</button>
       <button class="mbtn primary" id="npcDuelBtn">⚔ 切磋</button>
+      <button class="mbtn primary" id="npcRevengeBtn" style="display:none">⚔ 主动寻仇</button>
     </div>
   </div>
 </div>
@@ -4250,7 +4251,7 @@ function managementBlock(){
 }
 function refreshManagementActions(){
   const blocked=!!managementBlock();
-  document.querySelectorAll('[data-abandon-quest],[data-end-love],[data-end-relation],#discExpel').forEach(b=>b.disabled=blocked);
+  document.querySelectorAll('[data-abandon-quest],[data-end-love],[data-end-relation],#discExpel,[data-revenge],#npcRevengeBtn').forEach(b=>b.disabled=blocked);
   document.querySelectorAll('[data-intimacy]').forEach(b=>b.disabled=blocked||!!intimacyReason(b.dataset.intimacy));
 }
 function mentorshipRel(text){return !!mentorshipRole(text);}
@@ -6437,6 +6438,26 @@ function rebuildStatus(){
 }
 
 /* ================= 仇家 ================= */
+function revengeApproach(n){
+  const here=S.scene&&S.scene.location,present=(S.scene&&S.scene.present||[]).includes(n.name);
+  if(present||n.location&&here&&samePlace(n.location,here,S))return 'here';
+  return n.location?'travel':'search';
+}
+function revengeLabel(n){const how=revengeApproach(n);return how==='here'?'⚔ 主动寻仇':how==='travel'?'前往'+n.location+'寻仇':'打听仇家下落';}
+async function startRevenge(name){
+  const why=managementBlock();if(why){toast(why);return;}
+  const n=findNpc(name);if(!n||n.alive===false){toast('此人已经故去');return;}
+  if(!hostileToPlayer(n)){toast('与此人并无仇怨');return;}
+  const how=revengeApproach(n);$('npcMask').classList.remove('on');
+  if(how!=='here'){
+    const action=how==='travel'?`前往${n.location}寻找仇家${n.name}，当面了结旧怨`:`打听仇家${n.name}的下落，找到之后再寻仇`;
+    const judge=makeJudge(how==='travel'?{months:1}:{days:1},action);if(how==='travel')judge.destination=n.location;
+    await runTurn(action,judge,{});return;
+  }
+  const v=(S.vendettas||[]).find(v=>v.name===n.name);
+  if(v)v.lethal=true;else addVendetta(n.name,'你主动寻仇，要与其了结旧怨',true,60);
+  startDuel(n,{friendly:false,lethal:true,vendetta:n.name,reason:'你主动寻仇，此战不再是切磋',action:`向仇家${n.name}寻仇，进行生死斗法`});
+}
 function addVendetta(name, reason, lethal, heat){
   if(name) ledger(`与${name}结仇：${plain(reason)||'说不清的过节'}${lethal?'（死仇）':''}`);
   if(!name) return;
@@ -9688,12 +9709,55 @@ function appendNote(n,t){
   while(x.length>200&&x.indexOf('；')>=0) x=x.slice(x.indexOf('；')+1);
   n.notes=x.slice(-200);
 }
-// 写死一个熟人要有来由：这回在场、交了手、或者主角就是冲他去的；而且正文写到他死
+// 只收正文中已经发生的具名死亡；行动里的杀意、传闻、否定与分身不算死亡凭据。
+function npcDeathEvidence(n,text){
+  const name=String(n.name||''),kill='(?:杀死|杀害|杀掉|斩杀|斩首|击杀|击毙|诛杀|处死|[打拍刺砍烧轰震勒掐冻射毒]死|轰杀|灭杀|抹杀|杀|斩|诛|毙|宰|结果)';
+  const narrated=String(text||'').replace(/「[^」]*」|“[^”]*”|"[^"\n]*"/g,'');
+  for(const sentence of narrated.split(/[。！？!?\n；;]/)){
+    if(!sentence.includes(name))continue;
+    if(/未死|没死|没有死|未能|没能|未曾|未被|没有被|并未|并没有|还没|尚未|差点|差一点|险些|险遭|几乎|试图|想要|准备|打算|决定|扬言|声称|据说|听说|传闻|传言|谣言|回忆|回想|忆起|当年|曾经|若是|如果|假如|要是|一旦|倘若|万一|会被|将被|要被|想杀|要杀|欲杀|莫非|是否|分身|化身|幻象|替身|诈死|假死|装死|死里逃生|逃过一劫|保住.{0,3}命/.test(sentence))continue;
+    let at=sentence.indexOf(name);
+    while(at>=0){
+      const before=sentence.slice(0,at),prefix=before.split(/[，,]/).pop(),raw=sentence.slice(at+name.length);
+      let after=raw.slice(0,40);
+      for(const other of S.npcs||[])if(other.name&&other.name!==name){const i=after.indexOf(other.name);if(i>=0&&!/(?:被|遭|由)[^，,]{0,8}$/.test(after.slice(0,i)))after=after.slice(0,i);}
+      const victim=new RegExp(kill+'(?:了|掉)?\\s*$').test(prefix)||/(?:将|把)$/.test(prefix)&&new RegExp('^[^，,]{0,20}'+kill).test(after);
+      const passive=/^[^，,]{0,12}(?:被|遭)/.test(after)&&new RegExp(kill).test(after);
+      const death=/(?:身死|身亡|死亡|死去|已死|死于|死在|命丧|丧生|(?<![杀毒害打拍刺砍烧轰震勒掐冻射])死了(?!父|母|妻|夫|儿|女|兄|弟|姐|妹)|陨落|殒落|殒命|毙命|丧了?命|气绝|断了?气|咽了?气|没了气息|魂飞魄散|身首异处|尸首分离|首级落地|人头落地|坐化|病故|寿终)/.exec(after);
+      const gone=!!death&&!/看|望|想|忆|悼|祭|听|闻|说|道|谈|提起|得知|目睹|见|盼|希望|害怕|担心|惧|关于|他人|别人|对方/.test(after.slice(0,death.index));
+      const otherSubject=/^的(?:父|母|兄|弟|姐|妹|师|妻|夫|徒|儿|女|同门|亲友|朋友|仇|敌)/.test(after);
+      if(!otherSubject&&(victim||passive||gone)){
+        const me='(?:你|主角|'+reLiteral(playerName())+')';
+        const byPlayer=new RegExp(me+'[^，,]{0,24}'+kill+'(?:了|掉)?\\s*$').test(prefix)||
+          new RegExp(me+'[^，,]{0,12}(?:将|把)$').test(prefix)&&victim||new RegExp('被'+me+'[^，,]{0,16}'+kill).test(after)||new RegExp('(?:死于|死在|命丧)'+me+'[^，,]{0,8}(?:剑|掌|刀|手|枪|法|毒)').test(after);
+        return {text:sentence.trim(),byPlayer};
+      }
+      at=sentence.indexOf(name,at+name.length);
+    }
+  }
+  return null;
+}
+// 死亡统一落到账本、榜单和仇家；重复续写、读档不得再次记杀人数或制造血债。
+function settleNpcDeath(n,reason,byPlayer){
+  if(!n||n.alive===false)return false;
+  n.alive=false;appendNote(n,dateStr()+' '+reason);lifeLog(n,reason);recordEntityDeath(S,n.name,reason);
+  S.vendettas=(S.vendettas||[]).filter(v=>v.name!==n.name);
+  for(const v of S.vendettas)if(v.hired===n.name)delete v.hired;
+  if(S.scene&&Array.isArray(S.scene.present))S.scene.present=S.scene.present.filter(name=>name!==n.name);
+  ledger(byPlayer?`亲手杀了${n.name}`:`${n.name}死了`);
+  if(byPlayer){
+    S.stats.kills=num(S.stats.kills)+1;S.player['凶名']=clamp(num(S.player['凶名'])+(n.alignment==='邪道'?4:15));
+    for(const k of kinOf(n).slice(0,2))addVendetta(k.name,`你杀了${n.name}，他要为其讨还血债`,true,45);
+  }
+  syncKnownEntities(S);
+  return true;
+}
+// 写死一个熟人要有来由：这回在场、交了手、或者主角就是冲他去的。
 function deathOk(n,ctx,judge,prePresent){
-  const all=String(ctx.act||'')+'\n'+String(ctx.txt||'');
-  if(!new RegExp(n.name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'[^。！？\\n]{0,40}(?:死|亡|陨|殒|断了?气|咽了?气|毙|丧了?命|气绝|没了气息|魂飞魄散)|(?:杀|斩|诛|毙|宰|结果)了?'+n.name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).test(all)) return false;
+  if(judge&&judge.duelOpponent===n.name&&judge.duelDisposition&&judge.duelDisposition!=='kill')return false;
+  if(!npcDeathEvidence(n,ctx.txt))return false;
   if((prePresent||[]).includes(n.name)) return true;
-  if(judge&&judge.duel) return true;   // 斗法余波：死的是对手
+  if(judge&&judge.duel&&judge.duelOpponent===n.name)return true;
   if(judge&&judge.war) return true;
   return String(ctx.act||'').includes(n.name)&&/杀|斩|诛|灭口|除掉|了结|宰|毒死|击毙|取.{0,2}性命/.test(String(ctx.act||''));
 }
@@ -10063,6 +10127,14 @@ function applyTurn(d, action, judge){
   decreeRecord(S,String(action&&typeof action==='object'?(action.text||action.action||''):(action||'')),S.months);
   const storyCtx={act:String(action&&typeof action==='object'?(action.text||action.action||''):(action||'')),txt:String(d.narrative||'')+'\n'+String(d.summary||'')};
   const prePresent=asArr(S.scene&&S.scene.present).slice();
+  // 正文明确写死而漏填 alive 时，补进同一套具名、在场与因果校验，避免有尸无账。
+  d.npcUpdates=d.npcUpdates||[];
+  for(const n of S.npcs||[]){
+    if(n.alive===false||!deathOk(n,storyCtx,judge,prePresent))continue;
+    let u=d.npcUpdates.find(u=>u.name===n.name);
+    if(!u){u={name:n.name};d.npcUpdates.push(u);}
+    u.alive=false;
+  }
   for(const u of (d.npcUpdates||[])){
     const n=findNpc(u.name);
     if(!n) continue;
@@ -10075,7 +10147,7 @@ function applyTurn(d, action, judge){
     if(gd.relation){ const before=n.relation; n.relation=gd.relation; const why=syncPlayerRel(n,before); if(why) news(why); }
     else if(u.relation) u._relRejected=true;
     if(u.alive===false&&n.alive!==false){
-      if(deathOk(n,storyCtx,judge,prePresent)){ n.alive=false; ledger(`${n.name}死了`); }
+      if(deathOk(n,storyCtx,judge,prePresent)){ const ev=npcDeathEvidence(n,storyCtx.txt);settleNpcDeath(n,ev.text,ev.byPlayer); }
       else { u._deathRejected=true; guardNote(`正文没写清${n.name}怎么死的（不在场、没交手、也不是主角下的手），${n.name}还活着`); }
     }
     if(gd.identity) n.identity=gd.identity;
@@ -10673,7 +10745,7 @@ function restoreDuel(){
   if(duel.over){
     if(duel.dead) showDuelDeath();
     else if(duel.resultText) showDuelGo();
-    else if(duel.result==='win') showWinChoice();
+    else if(duel.result==='win'||duel.result==='oppYield'&&!duel.friendly) showWinChoice();
     else { duel.resultText='斗法结束。'; showDuelGo(); }
   }
 }
@@ -10856,11 +10928,13 @@ function showDuelDeath(){
 // 胜后处置面板（留手/重创/杀）
 function showWinChoice(){
   const him=duel.opp.name, act=$('duelActions');
-  act.innerHTML=`<div class="duelend"><div class="verdict">胜</div><p>${esc(him)}倒在你脚下，生死只在你一念之间。</p>
+  act.innerHTML=`<div class="duelend"><div class="verdict">胜</div><p>${esc(him)}${duel.result==='oppYield'?'收起法器认输，是否放过由你决定':'倒在你脚下，生死只在你一念之间'}。</p>
     <div class="mbtnrow"><button class="mbtn" id="dSpare">留手放过</button><button class="mbtn gold" id="dMaim">重创，毁其道基</button><button class="mbtn primary" id="dKill">杀</button></div></div>`;
-  const finish=txt=>{ duel.resultText=txt; snapshotDuel(); saveGame(); showDuelGo(); };
-  $('dSpare').onclick=()=>{ S.stats.spares++; S.player['声望']=clamp(S.player['声望']+2); ledger(`胜过${him}，留手放过`); finish(`主角获胜，留手放过了${him}。`); };
+  const claim=kind=>{if(!duel||duel.disposition||duel.opp.alive===false)return false;duel.disposition=kind;return true;};
+  const finish=txt=>{ duel.resultText=txt;if(duel.disposition==='spare')settleVendetta(duel.result);snapshotDuel(); saveGame(); showDuelGo(); };
+  $('dSpare').onclick=()=>{ if(!claim('spare'))return;S.stats.spares++; S.player['声望']=clamp(S.player['声望']+2); ledger(`胜过${him}，留手放过`); finish(`主角获胜，留手放过了${him}。`); };
   $('dMaim').onclick=()=>{
+    if(!claim('maim'))return;
     { const o=duel.opp; if(o.realm&&o.realm.major>=0){ for(let k=0;k<3;k++){ if(o.realm.major===0&&o.realm.minor<=1) break; if(o.realm.minor>1) o.realm.minor--; else { o.realm.major--; o.realm.minor=realmMinorMax(o.realm.major); } } o.realm.perfect=false; o.lingli=0; syncPower(o); } }
     duel.opp.notes=(duel.opp.notes?duel.opp.notes+'；':'')+`被${S.player.name}毁了道基，修为跌到${realmText(duel.opp.realm)}`;
     duel.opp['好感度']=clamp(duel.opp['好感度']-30);
@@ -10869,12 +10943,10 @@ function showWinChoice(){
     finish(`主角获胜，重创${him}，毁了他的道基（修为跌到${realmText(duel.opp.realm)}，结下死仇）。`);
   };
   $('dKill').onclick=()=>{
-    duel.opp.alive=false; S.stats.kills++; ledger(`亲手杀了${duel.opp.name}`);
-    const r=(S.world.ranking||[]).find(x=>x.name===duel.opp.name); if(r) r.alive=false;
-    S.player['凶名']=clamp(S.player['凶名']+(duel.opp.alignment==='邪道'?4:15));
+    if(!claim('kill'))return;
     // 死者的同门亲友会来寻仇
     const kin=kinOf(duel.opp).slice(0,2);
-    for(const k of kin) addVendetta(k.name,`你杀了${him}，他要为其讨还血债`,true,45);
+    settleNpcDeath(duel.opp,`被${S.player.name}在斗法后斩杀`,true);
     let txt=`主角获胜，并杀死了${him}。`;
     if(kin.length){ txt+=`（${kin.map(k=>k.name).join('、')}势必寻仇）`; duelSys(`⚑ ${kin.map(k=>k.name).join('、')}记下了这笔血债。`); }
     finish(txt);
@@ -10918,9 +10990,10 @@ function settleVendetta(kind){
   }
 }
 function endDuel(kind){
+  if(duel.over)return;
   duel.over=true; duel.result=kind;
   recordQuestCombat(duel,S);
-  settleVendetta(kind);
+  if(!((kind==='win'||kind==='oppYield')&&!duel.friendly))settleVendetta(kind);
   trainFromDuel(kind==='win'||kind==='oppYield');
   if((kind==='win'||kind==='oppYield')&&!duel.friendly&&relicHas(S.player,'devour')){ const g=Math.round(lingliNeed(S.player.realm)*0.03); addLingli(S.player,g); S.player['凶名']=clamp(num(S.player['凶名'])+1); news(`那道符纹从${duel.opp.name}身上吞来一股灵力`); }
   if((kind==='win'||kind==='oppYield')&&duel.opp&&duel.opp.relicHeld&&RELIC[duel.opp.relicHeld]){ const rr=RELIC[duel.opp.relicHeld], it=relicItem(rr); (S.player.items[rr.cat]=S.player.items[rr.cat]||[]).push(it); relicGain(it); delete duel.opp.relicHeld; ledger(`从${duel.opp.name}手里夺回【${it.name}】`); duelSys(`✦ 你从${duel.opp.name}身上拿回了那件东西：【${it.name}】。`); }
@@ -10941,7 +11014,7 @@ function endDuel(kind){
     snapshotDuel(); saveGame();
     return showWinChoice();
   }
-  if(kind==='oppYield'){ S.stats.duelWins++; duelSys(`${him}收了法器，认输。`); return finish(`${him}不敌，主动认输，主角获胜。`); }
+  if(kind==='oppYield'){ S.stats.duelWins++; duelSys(`${him}收了法器，认输。`);if(!duel.friendly){snapshotDuel();saveGame();return showWinChoice();}return finish(`${him}不敌，主动认输，主角获胜。`); }
   if(kind==='draw'){
     const ahead=duel.pHp>=duel.oHp;
     duelSys(`斗了${cnNum(AD.maxRounds)}回合不分高下，各自收了法器。`);
@@ -11009,6 +11082,7 @@ async function afterDuel(){
   renderPanel(); checkAchievements();
   const judge=duel.judge||{fate:d20(),check:null,worldEvent:null};
   judge.duel=true;
+  judge.duelOpponent=duel.opp.name;judge.duelDisposition=duel.disposition||((duel.result==='win'||duel.result==='oppYield')?'spare':'escaped');
   { const orr=typeof npcRealmOf==='function'?npcRealmOf(duel.opp):null; if(orr) judge.oppMajor=orr.major; }   // 10-09：战利品越级按对手修为
   if(judge.relicTry) judge.relicWin=duel.result==='win'||duel.result==='oppYield';
   if(judge.foeFight) judge.foeWin=duel.result==='win'||duel.result==='oppYield';
@@ -11291,6 +11365,7 @@ async function afterWarDuel(){
   renderPanel(); saveGame();
   const judge=dl.judge||{fate:d20(),check:null,worldEvent:null,months:2};
   judge.duel=true;
+  judge.duelOpponent=dl.opp.name;judge.duelDisposition=dl.disposition||((dl.result==='win'||dl.result==='oppYield')?'spare':'escaped');
   await runTurn(dl.action, judge, {warData:{w,duel:dl,kind}});
 }
 
@@ -12538,6 +12613,7 @@ function showNpc(n){
   $('npcTalkBtn').textContent=remote?'前往'+n.location+'探访':'与他交谈';
   $('npcTalkBtn').onclick=()=>{if(!remote){openConvo(n);return;}if(busy||S.over)return;$('npcMask').classList.remove('on');const action='前往'+n.location+'探访'+n.name;const j=makeJudge({months:1},action);j.destination=n.location;runTurn(action,j,{});};
   $('npcDuelBtn').onclick=()=>{ if(busy||S.over) return;if(n.location&&S.scene&&n.location!==S.scene.location&&!fdm().freeAct){toast('先前往'+n.location+'再切磋');return;} $('npcMask').classList.remove('on'); startDuel(n,{friendly:true,lethal:false,reason:`你向${n.name}提出切磋`,action:`向${n.name}提出切磋，二人斗法比试`}); };
+  const revenge=$('npcRevengeBtn');revenge.style.display=n.alive!==false&&hostileToPlayer(n)?'':'none';revenge.disabled=!!managementBlock();revenge.textContent=revengeLabel(n);revenge.onclick=()=>startRevenge(n.name);
   const rb=$('npcRecruitBtn');
   if(rb){
     const why=hasClan()?recruitBlock(n):'x';
@@ -12635,8 +12711,9 @@ function renderWorld(){
     return `<div class="quest ${h>=70?'hot':''}"><div class="qt"><span>${esc(v.name)}${n&&!n.alive?'〔亡故〕':''}${v.lethal?' <small style="color:#9B4A3C">死仇</small>':''}</span><small>${h}%</small></div>
       <div class="qd">${esc(v.reason)}</div>
       <div class="qd" style="color:${v.eta!=null&&num(v.eta)<=1?'#9B4A3C':'var(--ink-soft)'}">${esc(vStateText(v))}${n?`　${realmText(n.realm)}${realmIndex(n.realm)<realmIndex(S.player.realm)-3?'（远不如你）':''}`:''}</div>
-      <div class="bar"><i style="width:${h}%;background:${h>=70?'#9B4A3C':'#A8862F'}"></i></div></div>`;
+      <div class="bar"><i style="width:${h}%;background:${h>=70?'#9B4A3C':'#A8862F'}"></i></div>${n&&n.alive!==false?`<button class="mbtn" data-revenge="${esc(n.name)}" ${managementBlock()?'disabled':''}>${esc(revengeLabel(n))}</button>`:''}</div>`;
   }).join('')+'<div style="font-size:12px;color:var(--ink-soft);margin-top:4px">恨意满了他才动身，还得走上几个月才到得了你跟前。修为差你太多的不敢亲自来，但可能花钱请人。与其修好（好感≥45）或破财消灾可平息。</div>':'<div class="empty">暂时没人惦记着要你的命</div>';
+  $('wVendetta').querySelectorAll('[data-revenge]').forEach(b=>b.onclick=()=>startRevenge(b.dataset.revenge));
   $('wAch').innerHTML=ACHIEVEMENTS.map(([id,name,_,desc,hidden])=>{ const on=S.achievements.includes(id); const nm=hidden&&!on?'？？？':name, ds=hidden?(on?`以「${S.player&&S.player.egg||''}」之名入道`:'隐藏成就'):desc; return `<span class="ach ${on?'on':''}" title="${esc(ds)}">${on?'✦ ':''}${esc(nm)}</span>`; }).join('');
   renderHall();
 }
