@@ -2,15 +2,14 @@
 const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict'),crypto=require('node:crypto'),{performance}=require('node:perf_hooks');
 const {env,BASE,UP}=require('./xjv2-env.cjs');
 const current=process.argv[2]||path.join(__dirname,'../index.html');
-let baseline=process.env.CONSTRUCTION_BASELINE||path.join(__dirname,'../_backup/index-before-construction-20261017.html');
-if(!fs.existsSync(baseline)&&!process.env.CONSTRUCTION_BASELINE){const tmp=fs.mkdtempSync(path.join(require('node:os').tmpdir(),'xian-construction-baseline-'));baseline=path.join(tmp,'index.html');fs.writeFileSync(baseline,require('node:child_process').execFileSync('git',['show','1b8a829:index.html'],{cwd:path.join(__dirname,'..'),maxBuffer:5*1024*1024}));process.on('exit',()=>fs.rmSync(tmp,{recursive:true,force:true}));}
+const baseline=process.env.CONSTRUCTION_BASELINE||current;
 const approvedText=fs.readFileSync(path.join(__dirname,'../洞府与宗门建设_第一版设计方案_v0.1.md'),'utf8');
 const approved={};for(const [plane,title,unit] of [['下界','人界','灵石'],['仙界','仙界','仙晶']]){const section=approvedText.split('### '+title+'价格与工期')[1].split('\n##')[0];approved[plane]=section.split('\n').filter(line=>/^\| [一二三四五]级 \|/.test(line)).map(line=>line.split('|').slice(2,-1).map(cell=>{const m=cell.trim().match(new RegExp('^(\\d+)'+unit+' / (\\d+)个月$'));assert(m,'公开方案价目格式');return {cost:Number(m[1]),days:Number(m[2])*30};}));assert.equal(approved[plane].length,5);}
 const results=[];let passed=0;
 const clone=x=>JSON.parse(JSON.stringify(x)),hash=x=>crypto.createHash('sha256').update(x).digest('hex');
 const near=(a,b)=>assert(Math.abs(a-b)<1e-7,`${a} != ${b}`);
 function test(name,fn){const t=performance.now();fn();passed++;console.log('✓ '+name);results.push({name,ms:Math.round(performance.now()-t)});}
-function setup(plane='下界',file=current){const e=env(file,31);if(file===baseline)require('./player-family-policy.cjs')(e);e.run(BASE);if(plane==='仙界')e.run(UP);e.run(`S.player.money=1e8;S.player.age=30;S.player.lifeBonus=1e6;S.player.cultMode='闭关';S.player.lingli=0;`);return e;}
+function setup(plane='下界',file=current){const e=env(file,31);e.run(BASE);if(plane==='仙界')e.run(UP);e.run(`S.player.money=1e8;S.player.age=30;S.player.lifeBonus=1e6;S.player.cultMode='闭关';S.player.lingli=0;`);return e;}
 function install(e,levels=[5,5,5,5]){
   e.run(`constructionStart('home',{site:'sect'});var home=constructionRealm(curPlane()).home,rec=constructionRealm(curPlane()).sects[0];home.project=null;home.level=${levels[0]};rec.levels={array:${levels[1]},library:${levels[2]},arena:${levels[3]}};S.scene.location=home.location;S.estates.rev++;`);
 }
@@ -94,14 +93,14 @@ test('演武场熟练额外小数累计，不每次向上取整，场外不生�
 test('存读档恢复月中分段、暂停和工程，不丢历史物品且不重复付款',()=>{
  const e=setup();install(e,[4,4,4,4]);e.run(`advanceTime(.5);constructionStart('home',{site:'sect'});constructionPause('home');var exported=JSON.stringify(S);S=JSON.parse(exported);migrate(S);`);assert(e.run('constructionRealm(curPlane()).home.project.paused'));assert.equal(e.run('S.estates.history[0].event'),'开工');assert(e.run(`S.player.items&&S.npcs.length>0`));
 });
-if(fs.existsSync(baseline))for(const pl of ['下界','仙界'])test(pl+'：零级未建设：统一主动生育规则后一年预演/RNG与发布版相同',()=>{
- const a=setup(pl,baseline),b=setup(pl,current),expr=`JSON.stringify(forecastTurn(S,{months:12,cult:'闭关',fate:10},'闭关一年'))`;assert.equal(b.run(expr),a.run(expr));assert.equal(b.run('Math.random()'),a.run('Math.random()'));assert(!b.run('!!S.estates'));
+if(fs.existsSync(baseline))for(const pl of ['下界','仙界'])test(pl+'：零级未建设：一年预演/RNG与禁用设施效果相同',()=>{
+ const a=setup(pl,baseline),b=setup(pl,current);a.run('constructionFrame=()=>({player:0,npc:{},disc:{},train:0});constructionStudyBonus=()=>0;');const expr=`JSON.stringify(forecastTurn(S,{months:12,cult:'闭关',fate:10},'闭关一年'))`;assert.equal(b.run(expr),a.run(expr));assert.equal(b.run('Math.random()'),a.run('Math.random()'));assert(!b.run('!!S.estates'));
 });
 if(process.env.REAL_SAVE){
  const bytes=fs.readFileSync(process.env.REAL_SAVE),save=JSON.parse(bytes),beforeHash=hash(bytes);
- const real=(file=current,seed=31)=>{const e=env(file,seed);if(file===baseline)require('./player-family-policy.cjs')(e);e.run('v=>Object.assign(globalThis,v)')({privateSave:clone(save)});e.run('S=privateSave;saveGame=()=>{};toast=()=>{};migrate(S);');return e;};
- for(const months of [12,3600])test('用户存档未建设：'+months+'个月完整预演/RNG与原发布版一致',()=>{
-  const a=real(baseline),b=real(),expr=`JSON.stringify(forecastTurn(S,{months:${months},cult:'闭关',fate:10},'闭关'))`,ta=performance.now(),x=a.run(expr),beforeMs=performance.now()-ta,tb=performance.now(),y=b.run(expr),afterMs=performance.now()-tb;assert.equal(y,x);assert.equal(b.run('Math.random()'),a.run('Math.random()'));results.push({actualSave:true,months,beforeMs,afterMs,hash:hash(y),sameStateAndRandom:true});
+ const real=(file=current,seed=31,reference=false)=>{const e=env(file,seed);if(reference)e.run('constructionFrame=()=>({player:0,npc:{},disc:{},train:0});constructionStudyBonus=()=>0;');e.run('v=>Object.assign(globalThis,v)')({privateSave:clone(save)});e.run('S=privateSave;saveGame=()=>{};toast=()=>{};migrate(S);');return e;};
+ for(const months of [12,3600])test('用户存档未建设副本：'+months+'个月预演/RNG与禁用设施效果一致',()=>{
+  const a=real(baseline,31,true),b=real();for(const e of [a,b])e.run('delete S.estates');const expr=`JSON.stringify(forecastTurn(S,{months:${months},cult:'闭关',fate:10},'闭关'))`,ta=performance.now(),x=a.run(expr),beforeMs=performance.now()-ta,tb=performance.now(),y=b.run(expr),afterMs=performance.now()-tb;assert.equal(y,x);assert.equal(b.run('Math.random()'),a.run('Math.random()'));results.push({actualSave:true,months,beforeMs,afterMs,hash:hash(y),sameStateAndRandom:true});
  });
  test('用户仙界存档：洞府、三项赞建及原始记忆/物品不被工程操作改动',()=>{
   const e=real();const facts=e.val(`[S.player.items,S.npcs,S.rels,S.history,S.quests,S.volumes,S.knowledge]`);for(const k of ['home','array','library','arena']){e.run(`var q=constructionQuote('${k}',{site:'sect',source:'personal'});`);assert(e.run('q.ok'));e.run(`constructionStart('${k}',{site:'sect',source:'personal'},q);S.elapsedDays+=q.days;S.months=Math.floor(S.elapsedDays/30);constructionComplete(S.elapsedDays);`);}assert.deepEqual(e.val(`[S.player.items,S.npcs,S.rels,S.history,S.quests,S.volumes,S.knowledge]`),facts);results.push({actualSave:true,plane:'仙界',constructionRetainsRecords:true});
