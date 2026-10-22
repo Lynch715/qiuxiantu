@@ -1,8 +1,9 @@
 const assert=require('node:assert/strict'),env=require('./power-scale-env.cjs'),xj=require('./xjv2-env.cjs');
 const tests=[];function test(name,fn){tests.push([name,fn]);}
 function qe(progress=90){const e=env();e.run(`S.quests=[{title:'寻找失踪父亲',desc:'查清父亲的下落',progress:${progress},status:'进行中'}];S.stats.questsDone=0;`);return e;}
+const finalMsg=`({reply:'你终于查明了父亲的下落。',effects:{questProgress:{title:'寻找失踪父亲',progress:10,status:'完成',reason:'你终于查明了父亲的下落'}}})`;
 const msg=`({reply:'我找到了父亲的手札。',effects:{questProgress:{title:'寻找失踪父亲',progress:10,reason:'找到了父亲的手札'}}})`;
-test('面谈100%完成并发声望，重放同消息不重复奖励',()=>{const {run}=qe();run(`var fame=S.player.声望;var n=S.npcs[0];commitConvoOnce(S,n.name,${msg},null,'打听父亲','one');commitConvoOnce(S,n.name,${msg},null,'打听父亲','one');`);assert.equal(run('S.quests[0].status'),'完成');assert.equal(run('S.stats.questsDone'),1);assert.equal(run('S.player.声望-fame'),3);});
+test('面谈100%完成并发声望，重放同消息不重复奖励',()=>{const {run}=qe();run(`var fame=S.player.声望;var n=S.npcs[0];commitConvoOnce(S,n.name,${finalMsg},null,'打听父亲','one');commitConvoOnce(S,n.name,${finalMsg},null,'打听父亲','one');`);assert.equal(run('S.quests[0].status'),'完成');assert.equal(run('S.stats.questsDone'),1);assert.equal(run('S.player.声望-fame'),3);});
 test('同成果在面谈和回合间不能重复领取',()=>{const {run}=qe(0);run(`commitConvoOnce(S,S.npcs[0].name,${msg},null,'打听父亲','one');var q={title:'失踪父亲',progress:20,reason:'父亲的手札'};settleQuestUpdate(q,S,'我找到了父亲的手札。','寻找父亲');`);assert.equal(run('S.quests[0].progress'),10);});
 test('模型漏凭据时仅从相关成果原句补齐',()=>{const {run}=qe(0);run(`var q={title:'寻找失踪父亲',progress:10};settleQuestUpdate(q,S,'我找到了父亲的手札。','打听父亲');`);assert.equal(run('S.quests[0].progress'),10);});
 test('无关喝茶、无成果、未找到和回忆不加进度',()=>{for(const text of ['在客栈喝茶。','父亲没有找到。','当年找到了父亲的手札。','打算找到父亲。']){const {run}=qe(0);run(`settleQuestUpdate({title:'失踪父亲',progress:100,status:'完成'},S,${JSON.stringify(text)},'寻找父亲');`);assert.equal(run('S.quests[0].progress'),0,text);}});

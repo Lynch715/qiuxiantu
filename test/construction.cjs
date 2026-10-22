@@ -72,7 +72,8 @@ test('离界工程完工只追加消息，不截掉原有信件与工程历史',
 test('聚灵阵与藏经阁作用于真实NPC，演武仅修炼岗位，同人两本账不重复',()=>{
  const e=setup();install(e);e.run(`S.npcs=[normNpc({name:'门人甲',realm:'筑基初期',age:30,faction:S.sect.name,location:'青云宗山门',lingli:0})];var n=S.npcs[0];n.lingli=0;n.tags=[];n.breakCD=0;S.clan={name:S.sect.name,disciples:[{id:'d1',name:n.name,npcName:n.name,alive:true,job:'修炼',武功:n.武功,talent:5,prog:0}],treasury:1000};`);
  assert.equal(e.run(`constructionFrame(curPlane()).npc[n.entityId||n.name]`),6);assert.equal(e.run(`constructionFrame(curPlane()).disc.d1||0`),0);
- const g=e.run(`monthlyLingli(n,{mode:'闭关'})*.7`);e.run('npcCultivateMonth(n,[])');near(e.run('n.lingli'),g*7);e.run(`S.clan.disciples[0].job='授艺';`);near(e.run(`constructionFrame(curPlane()).npc[n.entityId||n.name]`),3);
+ // 保持同一分工，分别关闭/开启设施，独立核对设施仍恰好乘7；分工本身由audit-seven覆盖。
+ const g=e.run(`var snapshot=JSON.stringify(S),facilityRate=constructionMonthRate;constructionMonthRate=()=>0;npcCultivateMonth(n,[]);var gain=n.lingli;S=JSON.parse(snapshot);n=S.npcs[0];constructionMonthRate=facilityRate;gain`);e.run('npcCultivateMonth(n,[])');near(e.run('n.lingli'),g*7);e.run(`S.clan.disciples[0].job='授艺';`);near(e.run(`constructionFrame(curPlane()).npc[n.entityId||n.name]`),3);
  e.run(`S.clan.disciples[0].job='云游';`);assert.equal(e.run(`constructionFrame(curPlane()).npc[n.entityId||n.name]||0`),0);
 });
 test('抽象弟子使用独立培养入口，资质上限和原训练分工保留',()=>{
