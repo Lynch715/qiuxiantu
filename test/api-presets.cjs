@@ -34,7 +34,7 @@ test('切换平台自动填写预设、清除旧密钥并保存无密钥配置',
   assert.deepEqual(e.val('cfg'),{base:'https://open.bigmodel.cn/api/paas/v4',key:'',model:'glm-5.3-flash',think:true,fontSize:16});
   assert.equal(JSON.parse(e.store.get('xian_cfg')).key,'');
   e.run("$('cfgKey').value='glm-only';saveCfgFromFields();$('cfgProvider').value='qwen';applyApiPreset();");
-  assert.equal(e.run('cfg.key'),'');assert.equal(e.run('cfg.model'),'qwen-flash');
+  assert.equal(e.run('cfg.key'),'');assert.equal(e.run('cfg.model'),'qwen3.8-flash');
   assert.equal(e.run("$('cfgThink').disabled"),true);
 });
 test('手动修改接口到其他域名也清除密钥，同域路径编辑保留密钥',()=>{
@@ -146,5 +146,33 @@ test('新 GLM 预设显示按量计费且思考开关不可关闭，免费选项
 test('已有 GLM 4.7 免费配置打开保存后仍是原模型和密钥，不自动改付费模型',()=>{
   const e=setup();e.run("cfg={base:'https://open.bigmodel.cn/api/paas/v4',key:'existing-free-key',model:'glm-4.7-flash',think:false,fontSize:20};openSettings();saveCfgFromFields();");
   assert.equal(e.run("$('cfgProvider').value"),'glm-free');assert.equal(e.run('cfg.model'),'glm-4.7-flash');assert.equal(e.run('cfg.key'),'existing-free-key');assert.equal(e.run('cfg.think'),false);
+});
+test('三款千问新预设传入准确模型名、非思考和 JSON 参数，切模型不丢地域及密钥',async()=>{
+  const e=setup();e.run("$('cfgProvider').value='qwen';applyApiPreset();$('cfgQwenRegion').value='ap-southeast-1';applyQwenRegion();$('cfgKey').value='existing-regional-key';saveCfgFromFields();");
+  assert.deepEqual(Object.keys(e.val('QWEN_MODELS')),['qwen3.8-flash','qwen3.7-plus','qwen3.8-max']);
+  for(const model of Object.keys(e.val('QWEN_MODELS'))){
+    e.run('m=>{$("cfgQwenModel").value=m;applyQwenModel();openSettings();}')(model);
+    assert.equal(e.run('cfg.model'),model);assert.equal(e.run('cfg.key'),'existing-regional-key');assert.equal(e.run("$('cfgQwenRegion').value"),'ap-southeast-1');assert.equal(e.run("$('cfgQwenModel').value"),model);
+    await e.send();const req=e.calls.at(-1);assert.match(req.url,/dashscope-intl/);assert.equal(req.body.model,model);assert.equal(req.body.enable_thinking,false);assert.equal(req.body.thinking,undefined);assert.equal(req.body.max_tokens,7000);assert.equal(req.body.response_format.type,'json_object');
+  }
+});
+test('千问付费与试用额度文案分开，海外地域不承诺新人额度，提供官方费用入口',()=>{
+  const e=setup();e.run("$('cfgProvider').value='qwen';applyApiPreset();");
+  assert.match(e.run("$('cfgProviderNote').textContent"),/按量计费/);assert.match(e.run("$('cfgQwenBilling').textContent"),/试用额度不是永久免费/);
+  e.run("$('cfgQwenRegion').value='cn-beijing';applyQwenRegion();");assert.match(e.run("$('cfgQwenBilling').textContent"),/90 天/);assert.match(e.run("$('cfgQwenBilling').textContent"),/额度耗尽或到期后继续调用会计费/);
+  e.run("$('cfgQwenRegion').value='us-east-1';applyQwenRegion();");assert.match(e.run("$('cfgQwenBilling').textContent"),/此地域无新人免费额度/);
+  assert(html.includes('https://help.aliyun.com/zh/model-studio/model-pricing'));assert(html.includes('https://help.aliyun.com/zh/model-studio/new-free-quota'));
+  for(const model of ['Qwen 3.8 Flash','Qwen 3.7 Plus','Qwen 3.8 Max'])assert(html.includes(model+'（按量计费'));
+});
+test('旧千问模型和自填模型不自动升级，保留原地址、密钥与模型名',()=>{
+  const e=setup();for(const model of ['qwen-flash','qwen-plus','qwen3.7-flash','my-qwen-model']){
+    e.run('model=>{cfg={base:"https://dashscope-intl.aliyuncs.com/compatible-mode/v1",model,key:"legacy-key",think:false};openSettings();saveCfgFromFields();}')(model);
+    assert.equal(e.run('cfg.model'),model);assert.equal(e.run('cfg.key'),'legacy-key');assert.equal(e.run("$('cfgQwenModel').value"),'custom');assert.match(e.run("$('cfgModelNote').textContent"),/不会自动升级/);
+    e.run("$('cfgQwenModel').value='custom';applyQwenModel();");assert.equal(e.run('cfg.model'),model);
+  }
+});
+test('千问模型预设及费用说明只在千问下展示，旧 GLM 免费选项保持独立',()=>{
+  const e=setup();e.run("$('cfgProvider').value='qwen';applyApiPreset();");assert.equal(e.run("$('cfgQwenModelWrap').hidden"),false);
+  e.run("$('cfgProvider').value='glm-free';applyApiPreset();");assert.equal(e.run("$('cfgQwenModelWrap').hidden"),true);assert.equal(e.run('cfg.model'),'glm-4.7-flash');assert.match(e.run("$('cfgProviderNote').textContent"),/标价免费/);
 });
 (async()=>{for(const [name,fn]of tests){await fn();console.log('✓ '+name);}console.log(`${tests.length} API preset regressions passed`);})().catch(err=>{console.error(err);process.exitCode=1;});
