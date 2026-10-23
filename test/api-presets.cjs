@@ -31,7 +31,7 @@ test('旧 DeepSeek 配置打开设置不被预设覆盖',()=>{
 });
 test('切换平台自动填写预设、清除旧密钥并保存无密钥配置',()=>{
   const e=setup();e.run("cfg.key='deepseek-only';openSettings();$('cfgProvider').value='glm';applyApiPreset();");
-  assert.deepEqual(e.val('cfg'),{base:'https://open.bigmodel.cn/api/paas/v4',key:'',model:'glm-4.7-flash',think:false,fontSize:16});
+  assert.deepEqual(e.val('cfg'),{base:'https://open.bigmodel.cn/api/paas/v4',key:'',model:'glm-5.3-flash',think:true,fontSize:16});
   assert.equal(JSON.parse(e.store.get('xian_cfg')).key,'');
   e.run("$('cfgKey').value='glm-only';saveCfgFromFields();$('cfgProvider').value='qwen';applyApiPreset();");
   assert.equal(e.run('cfg.key'),'');assert.equal(e.run('cfg.model'),'qwen-flash');
@@ -50,7 +50,7 @@ test('自定义接口原地址、模型、密钥和字号保留，隐藏无关�
 });
 test('空地址和模型使用当前预设默认值，千问旧思考配置也归一为关闭',()=>{
   const e=setup();e.run("$('cfgProvider').value='glm';applyApiPreset();$('cfgBase').value='';$('cfgModel').value='';saveCfgFromFields();");
-  assert.equal(e.run('cfg.model'),'glm-4.7-flash');assert.equal(e.run('cfg.base'),'https://open.bigmodel.cn/api/paas/v4');
+  assert.equal(e.run('cfg.model'),'glm-5.3-flash');assert.equal(e.run('cfg.base'),'https://open.bigmodel.cn/api/paas/v4');
   e.run("cfg={...API_PRESETS.qwen,key:'qwen-key',think:true};openSettings();saveCfgFromFields();");
   assert.equal(e.run('cfg.think'),false);assert.equal(e.run("$('cfgThink').value"),'off');
 });
@@ -60,7 +60,7 @@ test('千问地域与业务空间域名可识别，仿冒域名和 Coding 地址
 });
 test('GLM 关闭与开启思考均发送官方参数，输出预算正确且流式正文完整',async()=>{
   const e=setup();for(const think of [false,true]){
-    e.run('think=>cfg={...API_PRESETS.glm,key:"glm-fixture",think}')(think);
+    e.run('think=>cfg={...API_PRESETS["glm-free"],key:"glm-fixture",think}')(think);
     assert.equal(await e.send(),'{"ok":true}');const req=e.calls.at(-1);
     assert.equal(req.url,'https://open.bigmodel.cn/api/paas/v4/chat/completions');
     assert.equal(req.headers.Authorization,'Bearer glm-fixture');assert.equal(req.body.model,'glm-4.7-flash');
@@ -78,7 +78,7 @@ test('千问始终关闭思考、不额外扩充输出预算，分类请求保�
 });
 test('预设变化不改游戏存档，不消耗游戏随机数，密钥不会写入用量统计',async()=>{
   const e=setup(),control=setup(),before=e.run('JSON.stringify(S)');
-  for(const id of ['glm','qwen','deepseek']){
+  for(const id of ['glm','glm-free','qwen','deepseek']){
     e.run('id=>{$("cfgProvider").value=id;applyApiPreset();if(id==="qwen"){$("cfgQwenRegion").value="ap-southeast-1";applyQwenRegion();}$("cfgKey").value="fixture-private-key";saveCfgFromFields();}')(id);
     await e.send();assert.equal(e.run('JSON.stringify(S)'),before);
   }
@@ -87,9 +87,9 @@ test('预设变化不改游戏存档，不消耗游戏随机数，密钥不会�
   assert(!e.store.has('xian_save_v1'));
 });
 test('官方链接按服务商更新，并使用新页面和 noreferrer',()=>{
-  const e=setup();for(const id of ['glm','qwen','deepseek']){
+  const e=setup();for(const id of ['glm','glm-free','qwen','deepseek']){
     e.run('id=>{$("cfgProvider").value=id;applyApiPreset();}')(id);
-    const preset=e.val(id==='qwen'?"qwenLinks($('cfgQwenRegion').value)":`API_PRESETS.${id}`);assert.equal(e.elements.get('cfgRegister').attrs.href,preset.register);assert.equal(e.elements.get('cfgGetKey').attrs.href,preset.keyPage);
+    const preset=e.val(id==='qwen'?"qwenLinks($('cfgQwenRegion').value)":`API_PRESETS[${JSON.stringify(id)}]`);assert.equal(e.elements.get('cfgRegister').attrs.href,preset.register);assert.equal(e.elements.get('cfgGetKey').attrs.href,preset.keyPage);
   }
   for(const id of ['cfgRegister','cfgGetKey'])assert.match(html,new RegExp(`id="${id}" target="_blank" rel="noopener noreferrer"`));
 });
@@ -129,5 +129,22 @@ test('其他地域专属域名不受枚举地域限制，支持手填地址与�
   const e=setup();e.run("$('cfgProvider').value='qwen';applyApiPreset();$('cfgQwenRegion').value='custom';applyQwenRegion();$('cfgBase').value='https://workspace.other-region.maas.aliyuncs.com/compatible-mode/v1';saveCfgFromFields();$('cfgKey').value='fixture';saveCfgFromFields();openSettings();");
   assert.equal(e.run("$('cfgQwenRegion').value"),'custom');assert.equal(e.run('apiProvider(cfg.base)'),'qwen');
   await e.send();assert.match(e.calls[0].url,/other-region/);assert.equal(e.calls[0].body.enable_thinking,false);
+});
+test('GLM 5.3 Flash/FlashX 强制开启思考并使用低推理力度，旧关闭配置不会发 disabled',async()=>{
+  const e=setup();for(const model of ['glm-5.3-flash','glm-5.3-flashx'])for(const think of [false,true]){
+    e.run('(v)=>cfg={...API_PRESETS.glm,key:"glm53-fixture",...v}')({model,think});
+    assert.equal(await e.send(),'{"ok":true}');const req=e.calls.at(-1).body;
+    assert.equal(req.model,model);assert.deepEqual(req.thinking,{type:'enabled'});assert.equal(req.reasoning_effort,'low');assert.equal(req.max_tokens,15000);assert.equal(req.response_format.type,'json_object');
+  }
+});
+test('新 GLM 预设显示按量计费且思考开关不可关闭，免费选项仍可关闭',()=>{
+  const e=setup();e.run("$('cfgProvider').value='glm';applyApiPreset();");
+  assert.equal(e.run("$('cfgThink').disabled"),true);assert.equal(e.run("$('cfgThink').value"),'on');assert.match(e.run("$('cfgProviderNote').textContent"),/按量计费/);
+  e.run("$('cfgProvider').value='glm-free';applyApiPreset();");
+  assert.equal(e.run('cfg.model'),'glm-4.7-flash');assert.equal(e.run('cfg.think'),false);assert.equal(e.run("$('cfgThink').disabled"),false);
+});
+test('已有 GLM 4.7 免费配置打开保存后仍是原模型和密钥，不自动改付费模型',()=>{
+  const e=setup();e.run("cfg={base:'https://open.bigmodel.cn/api/paas/v4',key:'existing-free-key',model:'glm-4.7-flash',think:false,fontSize:20};openSettings();saveCfgFromFields();");
+  assert.equal(e.run("$('cfgProvider').value"),'glm-free');assert.equal(e.run('cfg.model'),'glm-4.7-flash');assert.equal(e.run('cfg.key'),'existing-free-key');assert.equal(e.run('cfg.think'),false);
 });
 (async()=>{for(const [name,fn]of tests){await fn();console.log('✓ '+name);}console.log(`${tests.length} API preset regressions passed`);})().catch(err=>{console.error(err);process.exitCode=1;});
