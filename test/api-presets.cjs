@@ -6,7 +6,7 @@ const ui=html.slice(html.indexOf('function renderApiPreset(){'),html.indexOf('fu
 const tests=[],test=(name,fn)=>tests.push([name,fn]);
 function setup(){
   const e=env(),store=new Map(),calls=[];
-  e.run('v=>Object.assign(globalThis,v)')({TextDecoder,localStorage:{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v)},fetch:async(url,options)=>{
+  e.run('v=>Object.assign(globalThis,v)')({TextDecoder,LEGACY_GLM:{glm:{base:'https://open.bigmodel.cn/api/paas/v4',model:'glm-5.3-flash'},'glm-free':{base:'https://open.bigmodel.cn/api/paas/v4',model:'glm-4.7-flash'}},localStorage:{getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v)},fetch:async(url,options)=>{
     calls.push({url,headers:options.headers,body:JSON.parse(options.body)});
     let done=false;
     return {ok:true,body:{getReader:()=>({read:async()=>{
@@ -30,10 +30,10 @@ test('旧 DeepSeek 配置打开设置不被预设覆盖',()=>{
   assert.equal(e.run("$('cfgKey').value"),'old-key');
 });
 test('切换平台自动填写预设、清除旧密钥并保存无密钥配置',()=>{
-  const e=setup();e.run("cfg.key='deepseek-only';openSettings();$('cfgProvider').value='glm';applyApiPreset();");
-  assert.deepEqual(e.val('cfg'),{base:'https://open.bigmodel.cn/api/paas/v4',key:'',model:'glm-5.3-flash',think:true,fontSize:16});
+  const e=setup();e.run("cfg={...LEGACY_GLM.glm,key:'glm-only',think:true};openSettings();$('cfgProvider').value='deepseek';applyApiPreset();");
+  assert.deepEqual(e.val('cfg'),{base:'https://api.deepseek.com',key:'',model:'deepseek-v4-flash',think:false,fontSize:16});
   assert.equal(JSON.parse(e.store.get('xian_cfg')).key,'');
-  e.run("$('cfgKey').value='glm-only';saveCfgFromFields();$('cfgProvider').value='qwen';applyApiPreset();");
+  e.run("$('cfgKey').value='deepseek-only';saveCfgFromFields();$('cfgProvider').value='qwen';applyApiPreset();");
   assert.equal(e.run('cfg.key'),'');assert.equal(e.run('cfg.model'),'qwen3.8-flash');
   assert.equal(e.run("$('cfgThink').disabled"),true);
 });
@@ -49,8 +49,8 @@ test('自定义接口原地址、模型、密钥和字号保留，隐藏无关�
   assert.equal(e.run("$('cfgProviderLinks').hidden"),true);assert.equal(e.elements.get('cfgRegister').attrs.href,undefined);
 });
 test('空地址和模型使用当前预设默认值，千问旧思考配置也归一为关闭',()=>{
-  const e=setup();e.run("$('cfgProvider').value='glm';applyApiPreset();$('cfgBase').value='';$('cfgModel').value='';saveCfgFromFields();");
-  assert.equal(e.run('cfg.model'),'glm-5.3-flash');assert.equal(e.run('cfg.base'),'https://open.bigmodel.cn/api/paas/v4');
+  const e=setup();e.run("$('cfgProvider').value='deepseek';applyApiPreset();$('cfgBase').value='';$('cfgModel').value='';saveCfgFromFields();");
+  assert.equal(e.run('cfg.model'),'deepseek-v4-flash');assert.equal(e.run('cfg.base'),'https://api.deepseek.com');
   e.run("cfg={...API_PRESETS.qwen,key:'qwen-key',think:true};openSettings();saveCfgFromFields();");
   assert.equal(e.run('cfg.think'),false);assert.equal(e.run("$('cfgThink').value"),'off');
 });
@@ -60,7 +60,7 @@ test('千问地域与业务空间域名可识别，仿冒域名和 Coding 地址
 });
 test('GLM 关闭与开启思考均发送官方参数，输出预算正确且流式正文完整',async()=>{
   const e=setup();for(const think of [false,true]){
-    e.run('think=>cfg={...API_PRESETS["glm-free"],key:"glm-fixture",think}')(think);
+    e.run('think=>cfg={...LEGACY_GLM["glm-free"],key:"glm-fixture",think}')(think);
     assert.equal(await e.send(),'{"ok":true}');const req=e.calls.at(-1);
     assert.equal(req.url,'https://open.bigmodel.cn/api/paas/v4/chat/completions');
     assert.equal(req.headers.Authorization,'Bearer glm-fixture');assert.equal(req.body.model,'glm-4.7-flash');
@@ -78,7 +78,7 @@ test('千问始终关闭思考、不额外扩充输出预算，分类请求保�
 });
 test('预设变化不改游戏存档，不消耗游戏随机数，密钥不会写入用量统计',async()=>{
   const e=setup(),control=setup(),before=e.run('JSON.stringify(S)');
-  for(const id of ['glm','glm-free','qwen','deepseek']){
+  for(const id of ['qwen','deepseek']){
     e.run('id=>{$("cfgProvider").value=id;applyApiPreset();if(id==="qwen"){$("cfgQwenRegion").value="ap-southeast-1";applyQwenRegion();}$("cfgKey").value="fixture-private-key";saveCfgFromFields();}')(id);
     await e.send();assert.equal(e.run('JSON.stringify(S)'),before);
   }
@@ -87,7 +87,7 @@ test('预设变化不改游戏存档，不消耗游戏随机数，密钥不会�
   assert(!e.store.has('xian_save_v1'));
 });
 test('官方链接按服务商更新，并使用新页面和 noreferrer',()=>{
-  const e=setup();for(const id of ['glm','glm-free','qwen','deepseek']){
+  const e=setup();for(const id of ['qwen','deepseek']){
     e.run('id=>{$("cfgProvider").value=id;applyApiPreset();}')(id);
     const preset=e.val(id==='qwen'?"qwenLinks($('cfgQwenRegion').value)":`API_PRESETS[${JSON.stringify(id)}]`);assert.equal(e.elements.get('cfgRegister').attrs.href,preset.register);assert.equal(e.elements.get('cfgGetKey').attrs.href,preset.keyPage);
   }
@@ -132,20 +132,26 @@ test('其他地域专属域名不受枚举地域限制，支持手填地址与�
 });
 test('GLM 5.3 Flash/FlashX 强制开启思考并使用低推理力度，旧关闭配置不会发 disabled',async()=>{
   const e=setup();for(const model of ['glm-5.3-flash','glm-5.3-flashx'])for(const think of [false,true]){
-    e.run('(v)=>cfg={...API_PRESETS.glm,key:"glm53-fixture",...v}')({model,think});
+    e.run('(v)=>cfg={...LEGACY_GLM.glm,key:"glm53-fixture",...v}')({model,think});
     assert.equal(await e.send(),'{"ok":true}');const req=e.calls.at(-1).body;
     assert.equal(req.model,model);assert.deepEqual(req.thinking,{type:'enabled'});assert.equal(req.reasoning_effort,'low');assert.equal(req.max_tokens,15000);assert.equal(req.response_format.type,'json_object');
   }
 });
-test('新 GLM 预设显示按量计费且思考开关不可关闭，免费选项仍可关闭',()=>{
-  const e=setup();e.run("$('cfgProvider').value='glm';applyApiPreset();");
-  assert.equal(e.run("$('cfgThink').disabled"),true);assert.equal(e.run("$('cfgThink').value"),'on');assert.match(e.run("$('cfgProviderNote').textContent"),/按量计费/);
-  e.run("$('cfgProvider').value='glm-free';applyApiPreset();");
-  assert.equal(e.run('cfg.model'),'glm-4.7-flash');assert.equal(e.run('cfg.think'),false);assert.equal(e.run("$('cfgThink').disabled"),false);
+test('服务商仅保留 DeepSeek、千问、自定义，既有 GLM 配置显示为自定义且没有推荐入口',()=>{
+  const e=setup();assert.deepEqual(Object.keys(e.val('API_PRESETS')),['deepseek','qwen']);
+  const providerSelect=html.match(/<select id="cfgProvider">([\s\S]*?)<\/select>/)[1];
+  assert.deepEqual([...providerSelect.matchAll(/value="([^"]+)"/g)].map(x=>x[1]),['deepseek','qwen','custom']);
+  for(const id of ['glm','glm-free']){
+    e.run('id=>{cfg={...LEGACY_GLM[id],key:"legacy-key",think:false};openSettings();}')(id);
+    assert.equal(e.run("$('cfgProvider').value"),'custom');assert.equal(e.run("$('cfgProviderLinks').hidden"),true);
+    assert.equal(e.elements.get('cfgRegister').attrs.href,undefined);assert.equal(e.elements.get('cfgGetKey').attrs.href,undefined);
+    assert(!e.run("$('cfgThinkNote').textContent").includes('可选择 GLM'));
+    assert.equal(e.run("$('cfgThink').disabled"),id==='glm');
+  }
 });
 test('已有 GLM 4.7 免费配置打开保存后仍是原模型和密钥，不自动改付费模型',()=>{
   const e=setup();e.run("cfg={base:'https://open.bigmodel.cn/api/paas/v4',key:'existing-free-key',model:'glm-4.7-flash',think:false,fontSize:20};openSettings();saveCfgFromFields();");
-  assert.equal(e.run("$('cfgProvider').value"),'glm-free');assert.equal(e.run('cfg.model'),'glm-4.7-flash');assert.equal(e.run('cfg.key'),'existing-free-key');assert.equal(e.run('cfg.think'),false);
+  assert.equal(e.run("$('cfgProvider').value"),'custom');assert.equal(e.run('cfg.model'),'glm-4.7-flash');assert.equal(e.run('cfg.key'),'existing-free-key');assert.equal(e.run('cfg.think'),false);assert.equal(e.run('cfg.fontSize'),20);
 });
 test('三款千问新预设传入准确模型名、非思考和 JSON 参数，切模型不丢地域及密钥',async()=>{
   const e=setup();e.run("$('cfgProvider').value='qwen';applyApiPreset();$('cfgQwenRegion').value='ap-southeast-1';applyQwenRegion();$('cfgKey').value='existing-regional-key';saveCfgFromFields();");
@@ -171,13 +177,13 @@ test('旧千问模型和自填模型不自动升级，保留原地址、密钥�
     e.run("$('cfgQwenModel').value='custom';applyQwenModel();");assert.equal(e.run('cfg.model'),model);
   }
 });
-test('千问模型预设及费用说明只在千问下展示，旧 GLM 免费选项保持独立',()=>{
+test('千问模型预设及费用说明只在千问下展示',()=>{
   const e=setup();e.run("$('cfgProvider').value='qwen';applyApiPreset();");assert.equal(e.run("$('cfgQwenModelWrap').hidden"),false);
-  e.run("$('cfgProvider').value='glm-free';applyApiPreset();");assert.equal(e.run("$('cfgQwenModelWrap').hidden"),true);assert.equal(e.run('cfg.model'),'glm-4.7-flash');assert.match(e.run("$('cfgProviderNote').textContent"),/标价免费/);
+  e.run("$('cfgProvider').value='deepseek';applyApiPreset();");assert.equal(e.run("$('cfgQwenModelWrap').hidden"),true);assert.equal(e.run('cfg.model'),'deepseek-v4-flash');
 });
 test('GLM 免费及付费直连显示跨域限制，其他平台不误显示',()=>{
   const e=setup();for(const id of ['glm','glm-free','qwen','deepseek','custom']){
-    e.run('id=>{$("cfgProvider").value=id;applyApiPreset();}')(id);
+    e.run('id=>{cfg={...(LEGACY_GLM[id]||API_PRESETS[id]||{base:"https://custom.invalid/v1",model:"custom"}),key:"",think:false};openSettings();}')(id);
     const shown=id==='glm'||id==='glm-free';assert.equal(e.run("$('cfgBrowserNote').hidden"),!shown);
     if(shown){assert.match(e.run("$('cfgBrowserNote').textContent"),/模型名和密钥正确也可能无法连接/);assert.match(e.run("$('cfgBrowserNote').textContent"),/自己的转发接口/);}
   }
@@ -187,7 +193,7 @@ function retryClock(e){
 }
 test('Safari Load failed 后自动重试，恢复后正常返回正文且存档不变',async()=>{
   const e=setup(),waits=retryClock(e),fetchOk=e.run('fetch'),before=e.run('JSON.stringify(S)');let attempts=0;
-  e.run('cfg={...API_PRESETS["glm-free"],key:"fixture-private-key",think:false}');
+  e.run('cfg={...LEGACY_GLM["glm-free"],key:"fixture-private-key",think:false}');
   e.run('f=>fetch=f')(async(...args)=>{if(++attempts===1)throw new TypeError('Load failed');return fetchOk(...args);});
   assert.equal(await e.run('callLLM("JSON 测试",null,{})'),'{"ok":true}');assert.equal(attempts,2);assert.deepEqual(waits,[1500]);
   assert.equal(e.run('JSON.stringify(S)'),before);const metrics=JSON.parse(e.store.get('xian_llm_metrics_v1'));
@@ -196,14 +202,14 @@ test('Safari Load failed 后自动重试，恢复后正常返回正文且存档�
 });
 test('持续跨域或网络失败最多请求三次并给出明确说明，不无限重试',async()=>{
   const e=setup(),waits=retryClock(e);let attempts=0;
-  e.run('cfg={...API_PRESETS["glm-free"],key:"fixture-private-key",think:false}');
+  e.run('cfg={...LEGACY_GLM["glm-free"],key:"fixture-private-key",think:false}');
   e.run('f=>fetch=f')(async()=>{attempts++;throw new TypeError('Load failed');});
   await assert.rejects(e.run('callLLM("JSON 测试",null,{})'),err=>/CORS/.test(err.message)&&/需等待平台恢复/.test(err.message)&&!/fixture-private-key/.test(err.message));
   assert.equal(attempts,3);assert.deepEqual(waits,[1500,4000]);
 });
 test('HTTP 鉴权与格式错误保持原有状态码和原因且不重试',async()=>{
   for(const status of [400,401,403]){
-    const e=setup(),waits=retryClock(e);let attempts=0;e.run('cfg={...API_PRESETS["glm-free"],key:"fixture",think:false}');
+    const e=setup(),waits=retryClock(e);let attempts=0;e.run('cfg={...LEGACY_GLM["glm-free"],key:"fixture",think:false}');
     e.run('f=>fetch=f')(async()=>{attempts++;return {ok:false,status,json:async()=>({error:{message:'fixture API error'}})};});
     await assert.rejects(e.run('callLLM("JSON 测试",null,{})'),new RegExp('HTTP '+status+'：fixture API error'));
     assert.equal(attempts,1);assert.deepEqual(waits,[]);
