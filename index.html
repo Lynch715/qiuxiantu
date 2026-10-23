@@ -948,6 +948,7 @@ details.eggd.fate>summary{color:inherit;font-size:inherit}
         <option value="custom">自定义 OpenAI 兼容接口</option>
       </select>
       <div class="note" id="cfgProviderNote"></div>
+      <div class="note" id="cfgBrowserNote" role="note" hidden></div>
       <div class="api-links" id="cfgProviderLinks">
         <a id="cfgRegister" target="_blank" rel="noopener noreferrer">前往官方注册 / 登录 ↗</a>
         <a id="cfgGetKey" target="_blank" rel="noopener noreferrer">获取 API Key ↗</a>
@@ -8146,7 +8147,12 @@ function llmTransient(e){
   if(/请求已取消|请先在设置中填写密钥/.test(m)) return false;
   const h=m.match(/HTTP (\d{3})/);
   if(h){ const c=+h[1]; return c===408||c===409||c===429||c>=500; }
-  return /等待超时|网络不通|Failed to fetch|NetworkError|network|空回复|ERR_|terminated|reset/i.test(m);
+  return /等待超时|网络不通|Failed to fetch|Load failed|NetworkError|network|空回复|ERR_|terminated|reset/i.test(m);
+}
+function llmConnectionError(e,base){
+  if(!/Failed to fetch|Load failed|NetworkError|network|ERR_|terminated|reset/i.test(String(e&&e.message||'')))return e&&e.message||'网络不通';
+  const common='网络不通，浏览器未能读取接口响应。请检查网络、接口地址及服务商是否允许网页跨域调用（CORS）。';
+  return common+(apiProvider(base)==='glm'?'智谱直连可能被平台跨域策略拦截；更换模型名不能解决，需等待平台恢复跨域支持或使用你自己的转发接口。':'');
 }
 async function callLLM(prompt, onPartial, opt){
   opt=opt||{};
@@ -8205,7 +8211,7 @@ async function callLLMOnce(prompt, onPartial, opt){
   }catch(e){
     requestStatus=opt.signal&&opt.signal.aborted?'cancelled':'failed';
     if(e.message&&e.message.startsWith('接口调用失败'))throw e;
-    throw new Error('接口调用失败（'+(opt.signal&&opt.signal.aborted?'请求已取消':e.name==='AbortError'?'等待超时，已中止':e.message||'网络不通')+'）');
+    throw new Error('接口调用失败（'+(opt.signal&&opt.signal.aborted?'请求已取消':e.name==='AbortError'?'等待超时，已中止':llmConnectionError(e,cfg.base))+'）');
   }finally{
     clearTimeout(timer);clearTimeout(total);if(opt.signal)opt.signal.removeEventListener('abort',abort);
     recordLlmMetric(Object.assign({at:Date.now(),kind:opt.kind,model:body.model,status:requestStatus,durationMs:Math.max(0,Math.round(llmClock()-started)),firstTextMs,networkAttempt:opt.networkAttempt,formatAttempt:opt.formatAttempt},llmUsage(usage)));
@@ -15142,6 +15148,10 @@ function renderApiPreset(){
   $('cfgQwenModel').value=qwenModel;
   $('cfgQwenBilling').textContent=qwenBillingNote(region);
   $('cfgProviderNote').textContent=p?p.note:'填写服务商提供的 OpenAI 兼容地址、模型名和密钥。';
+  const glmDirect=apiProvider($('cfgBase').value)==='glm';
+  $('cfgBrowserNote').hidden=!glmDirect;
+  $('cfgBrowserNote').style.display=glmDirect?'block':'none';
+  $('cfgBrowserNote').textContent=glmDirect?'网页直连限制：智谱接口可能因跨域策略导致 Load failed / Failed to fetch；模型名和密钥正确也可能无法连接。此时需等待平台恢复跨域支持，或填写你自己的转发接口。游戏目前使用浏览器直连。':'';
   $('cfgModelNote').textContent=isQwen?(QWEN_MODELS[qwenModel]?.note||'保留当前模型名，不会自动升级；请按该模型与地域的实际价格使用。'):p?p.modelNote:'按服务商文档填写模型名；游戏需要支持流式回复与 JSON 输出的文本模型。';
   $('cfgBase').placeholder=isQwen?(QWEN_REGIONS[region]?.base||(QWEN_REGIONS[region]?'https://业务空间ID.'+region+'.maas.aliyuncs.com/compatible-mode/v1':'填写所选地域的完整 Base URL')):p?p.base:'https://你的接口地址/v1';
   $('cfgQwenRegionNote').textContent='这是 API 服务地域，与玩家所在地和时区无关；密钥必须与接口地域一致。'+(QWEN_REGIONS[region]&&!QWEN_REGIONS[region].base?'此地域使用业务空间专属地址，请从该地域控制台复制完整 Base URL（包含业务空间 ID）。':region==='custom'?'请手动填写该地域控制台提供的完整 Base URL。':'也可手动填写该地域的业务空间专属地址。');

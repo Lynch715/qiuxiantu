@@ -175,4 +175,45 @@ test('千问模型预设及费用说明只在千问下展示，旧 GLM 免费选
   const e=setup();e.run("$('cfgProvider').value='qwen';applyApiPreset();");assert.equal(e.run("$('cfgQwenModelWrap').hidden"),false);
   e.run("$('cfgProvider').value='glm-free';applyApiPreset();");assert.equal(e.run("$('cfgQwenModelWrap').hidden"),true);assert.equal(e.run('cfg.model'),'glm-4.7-flash');assert.match(e.run("$('cfgProviderNote').textContent"),/标价免费/);
 });
+test('GLM 免费及付费直连显示跨域限制，其他平台不误显示',()=>{
+  const e=setup();for(const id of ['glm','glm-free','qwen','deepseek','custom']){
+    e.run('id=>{$("cfgProvider").value=id;applyApiPreset();}')(id);
+    const shown=id==='glm'||id==='glm-free';assert.equal(e.run("$('cfgBrowserNote').hidden"),!shown);
+    if(shown){assert.match(e.run("$('cfgBrowserNote').textContent"),/模型名和密钥正确也可能无法连接/);assert.match(e.run("$('cfgBrowserNote').textContent"),/自己的转发接口/);}
+  }
+});
+function retryClock(e){
+  const waits=[];e.run('fn=>setTimeout=fn')((fn,ms)=>{if(ms===1500||ms===4000){waits.push(ms);queueMicrotask(fn);}return 0;});return waits;
+}
+test('Safari Load failed 后自动重试，恢复后正常返回正文且存档不变',async()=>{
+  const e=setup(),waits=retryClock(e),fetchOk=e.run('fetch'),before=e.run('JSON.stringify(S)');let attempts=0;
+  e.run('cfg={...API_PRESETS["glm-free"],key:"fixture-private-key",think:false}');
+  e.run('f=>fetch=f')(async(...args)=>{if(++attempts===1)throw new TypeError('Load failed');return fetchOk(...args);});
+  assert.equal(await e.run('callLLM("JSON 测试",null,{})'),'{"ok":true}');assert.equal(attempts,2);assert.deepEqual(waits,[1500]);
+  assert.equal(e.run('JSON.stringify(S)'),before);const metrics=JSON.parse(e.store.get('xian_llm_metrics_v1'));
+  assert.deepEqual(metrics.map(x=>x.status),['failed','returned']);assert.deepEqual(metrics.map(x=>x.networkAttempt),[1,2]);
+  assert(!JSON.stringify(metrics).includes('fixture-private-key'));
+});
+test('持续跨域或网络失败最多请求三次并给出明确说明，不无限重试',async()=>{
+  const e=setup(),waits=retryClock(e);let attempts=0;
+  e.run('cfg={...API_PRESETS["glm-free"],key:"fixture-private-key",think:false}');
+  e.run('f=>fetch=f')(async()=>{attempts++;throw new TypeError('Load failed');});
+  await assert.rejects(e.run('callLLM("JSON 测试",null,{})'),err=>/CORS/.test(err.message)&&/需等待平台恢复/.test(err.message)&&!/fixture-private-key/.test(err.message));
+  assert.equal(attempts,3);assert.deepEqual(waits,[1500,4000]);
+});
+test('HTTP 鉴权与格式错误保持原有状态码和原因且不重试',async()=>{
+  for(const status of [400,401,403]){
+    const e=setup(),waits=retryClock(e);let attempts=0;e.run('cfg={...API_PRESETS["glm-free"],key:"fixture",think:false}');
+    e.run('f=>fetch=f')(async()=>{attempts++;return {ok:false,status,json:async()=>({error:{message:'fixture API error'}})};});
+    await assert.rejects(e.run('callLLM("JSON 测试",null,{})'),new RegExp('HTTP '+status+'：fixture API error'));
+    assert.equal(attempts,1);assert.deepEqual(waits,[]);
+  }
+});
+test('浏览器网络错误统一解释连接限制，不误判为密钥或模型错误',()=>{
+  const e=setup();for(const msg of ['Load failed','Failed to fetch','NetworkError when attempting to fetch resource.','net::ERR_CONNECTION_RESET']){
+    const glm=e.run('llmConnectionError')({message:msg},'https://open.bigmodel.cn/api/paas/v4');assert.match(glm,/浏览器未能读取接口响应/);assert.match(glm,/智谱直连可能/);
+    const other=e.run('llmConnectionError')({message:msg},'https://api.deepseek.com');assert.match(other,/CORS/);assert(!other.includes('智谱'));
+  }
+  assert.equal(e.run('llmConnectionError')({message:'unexpected fixture'},'https://api.deepseek.com'),'unexpected fixture');
+});
 (async()=>{for(const [name,fn]of tests){await fn();console.log('✓ '+name);}console.log(`${tests.length} API preset regressions passed`);})().catch(err=>{console.error(err);process.exitCode=1;});
