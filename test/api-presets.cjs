@@ -79,7 +79,7 @@ test('千问始终关闭思考、不额外扩充输出预算，分类请求保�
 test('预设变化不改游戏存档，不消耗游戏随机数，密钥不会写入用量统计',async()=>{
   const e=setup(),control=setup(),before=e.run('JSON.stringify(S)');
   for(const id of ['glm','qwen','deepseek']){
-    e.run('id=>{$("cfgProvider").value=id;applyApiPreset();$("cfgKey").value="fixture-private-key";saveCfgFromFields();}')(id);
+    e.run('id=>{$("cfgProvider").value=id;applyApiPreset();if(id==="qwen"){$("cfgQwenRegion").value="ap-southeast-1";applyQwenRegion();}$("cfgKey").value="fixture-private-key";saveCfgFromFields();}')(id);
     await e.send();assert.equal(e.run('JSON.stringify(S)'),before);
   }
   assert.equal(e.run('Math.random()'),control.run('Math.random()'));
@@ -89,8 +89,45 @@ test('预设变化不改游戏存档，不消耗游戏随机数，密钥不会�
 test('官方链接按服务商更新，并使用新页面和 noreferrer',()=>{
   const e=setup();for(const id of ['glm','qwen','deepseek']){
     e.run('id=>{$("cfgProvider").value=id;applyApiPreset();}')(id);
-    const preset=e.val(`API_PRESETS.${id}`);assert.equal(e.elements.get('cfgRegister').attrs.href,preset.register);assert.equal(e.elements.get('cfgGetKey').attrs.href,preset.keyPage);
+    const preset=e.val(id==='qwen'?"qwenLinks($('cfgQwenRegion').value)":`API_PRESETS.${id}`);assert.equal(e.elements.get('cfgRegister').attrs.href,preset.register);assert.equal(e.elements.get('cfgGetKey').attrs.href,preset.keyPage);
   }
   for(const id of ['cfgRegister','cfgGetKey'])assert.match(html,new RegExp(`id="${id}" target="_blank" rel="noopener noreferrer"`));
+});
+test('新选千问不强行默认北京，未选地域/地址时不会发送请求',async()=>{
+  const e=setup();e.run("$('cfgProvider').value='qwen';applyApiPreset();$('cfgKey').value='fixture';saveCfgFromFields();openSettings();");
+  assert.equal(e.run("$('cfgProvider').value"),'qwen');assert.equal(e.run("$('cfgQwenRegion').value"),'');assert.equal(e.run('cfg.base'),'');
+  await assert.rejects(e.send(),/选择服务地域/);assert.equal(e.calls.length,0);
+});
+test('六个官方地域分别保存地址、匹配密钥入口与登录回调，请求不回退北京',async()=>{
+  const e=setup();for(const [id,r] of Object.entries(e.val('QWEN_REGIONS'))){
+    e.run('id=>{$("cfgProvider").value="qwen";applyApiPreset();$("cfgQwenRegion").value=id;applyQwenRegion();}')(id);
+    const base=r.base||`https://workspace-test.${id}.maas.aliyuncs.com/compatible-mode/v1`;
+    e.run('base=>{$("cfgBase").value=base;saveCfgFromFields();$("cfgKey").value="region-fixture";saveCfgFromFields();openSettings();}')(base);
+    assert.equal(e.run("$('cfgQwenRegion').value"),id);assert.equal(e.run('cfg.base'),base);
+    const keyPage=`https://bailian.console.aliyun.com/${id}/model/settings/api-key`;
+    assert.equal(e.elements.get('cfgGetKey').attrs.href,keyPage);
+    assert.equal(new URL(e.elements.get('cfgRegister').attrs.href).searchParams.get('oauth_callback'),keyPage);
+    assert.equal(await e.send(),'{"ok":true}');assert.equal(e.calls.at(-1).url,base+'/chat/completions');assert.equal(e.calls.at(-1).body.enable_thinking,false);
+  }
+});
+test('切换百炼地域清空旧密钥，东京/德国未填专属地址的草稿可恢复',()=>{
+  const e=setup();e.run("cfg={...API_PRESETS.qwen,key:'beijing-only',think:false};openSettings();$('cfgQwenRegion').value='ap-southeast-1';applyQwenRegion();");
+  assert.equal(e.run('cfg.key'),'');assert.match(e.run('cfg.base'),/dashscope-intl/);
+  for(const id of ['ap-northeast-1','eu-central-1']){
+    e.run('id=>{$("cfgQwenRegion").value=id;applyQwenRegion();openSettings();}')(id);
+    assert.equal(e.run("$('cfgProvider').value"),'qwen');assert.equal(e.run("$('cfgQwenRegion').value"),id);assert.equal(e.run('cfg.base'),'');
+  }
+});
+test('已有国际区/专属域名配置按真实地址识别，原模型和密钥不覆盖',()=>{
+  const e=setup();for(const base of ['https://dashscope-intl.aliyuncs.com/compatible-mode/v1','https://workspace.eu-central-1.maas.aliyuncs.com/compatible-mode/v1']){
+    e.run('base=>{cfg={base,model:"qwen-plus",key:"existing-regional-key",think:false};openSettings();}')(base);
+    assert.equal(e.run("$('cfgProvider').value"),'qwen');assert.equal(e.run("$('cfgQwenRegion').value"),base.includes('intl')?'ap-southeast-1':'eu-central-1');
+    assert.equal(e.run("$('cfgKey').value"),'existing-regional-key');assert.equal(e.run("$('cfgModel').value"),'qwen-plus');
+  }
+});
+test('其他地域专属域名不受枚举地域限制，支持手填地址与非思考参数',async()=>{
+  const e=setup();e.run("$('cfgProvider').value='qwen';applyApiPreset();$('cfgQwenRegion').value='custom';applyQwenRegion();$('cfgBase').value='https://workspace.other-region.maas.aliyuncs.com/compatible-mode/v1';saveCfgFromFields();$('cfgKey').value='fixture';saveCfgFromFields();openSettings();");
+  assert.equal(e.run("$('cfgQwenRegion').value"),'custom');assert.equal(e.run('apiProvider(cfg.base)'),'qwen');
+  await e.send();assert.match(e.calls[0].url,/other-region/);assert.equal(e.calls[0].body.enable_thinking,false);
 });
 (async()=>{for(const [name,fn]of tests){await fn();console.log('✓ '+name);}console.log(`${tests.length} API preset regressions passed`);})().catch(err=>{console.error(err);process.exitCode=1;});
