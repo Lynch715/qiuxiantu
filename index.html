@@ -339,6 +339,9 @@ body{
 .field input,.field select{width:100%;background:rgba(255,255,255,.7);border:1px solid var(--paper-edge);border-radius:5px;font-family:inherit;font-size:15px;padding:9px 12px;color:var(--ink);outline:none}
 .field input:focus{border-color:var(--gold)}
 .field .note{font-size:12.5px;color:var(--ink-soft);margin-top:4px;line-height:1.6}
+.api-links{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.api-links a{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:7px 12px;border:1px solid var(--paper-edge);border-radius:5px;color:var(--accent);font-size:13px;text-decoration:none;background:rgba(255,255,255,.5)}
+.api-links a:hover,.api-links a:focus-visible{border-color:var(--gold)}
 .contact{margin-top:18px;padding:12px 14px;border:1px dashed var(--paper-edge);border-radius:6px;background:rgba(0,0,0,.03);font-size:13px;color:var(--ink-soft);line-height:1.7}
 .contact b{color:var(--ink);letter-spacing:1px}
 .contact .wx{display:inline-flex;align-items:center;gap:8px;margin-top:4px}
@@ -936,18 +939,33 @@ details.eggd.fate>summary{color:inherit;font-size:inherit}
     <h2>设置</h2>
     <div class="sub">连接你自己的大模型接口，密钥保存在本机浏览器，请求时仅发送到你设置的接口</div>
     <div class="field">
-      <label>接口地址（OpenAI 兼容 Base URL）</label>
-      <input id="cfgBase" placeholder="https://api.deepseek.com">
-      <div class="note">DeepSeek 填 https://api.deepseek.com；其他兼容服务填各自地址</div>
+      <label for="cfgProvider">API 服务商预设</label>
+      <select id="cfgProvider">
+        <option value="deepseek">DeepSeek</option>
+        <option value="glm">智谱 GLM · 免费模型</option>
+        <option value="qwen">千问 · 阿里云百炼</option>
+        <option value="custom">自定义 OpenAI 兼容接口</option>
+      </select>
+      <div class="note" id="cfgProviderNote"></div>
+      <div class="api-links" id="cfgProviderLinks">
+        <a id="cfgRegister" target="_blank" rel="noopener noreferrer">前往官方注册 / 登录 ↗</a>
+        <a id="cfgGetKey" target="_blank" rel="noopener noreferrer">获取 API Key ↗</a>
+      </div>
+      <div class="note">配置会自动保存；切换服务商会清空当前密钥，请填写对应平台的 API Key。官网将在新页面打开，登录后创建密钥，再回到游戏粘贴。</div>
     </div>
     <div class="field">
-      <label>密钥（API Key）</label>
+      <label for="cfgBase">接口地址（OpenAI 兼容 Base URL）</label>
+      <input id="cfgBase" placeholder="https://api.deepseek.com">
+      <div class="note">选择预设后自动填写，仍可手动修改；地址末尾不需要加 /chat/completions。</div>
+    </div>
+    <div class="field">
+      <label for="cfgKey">密钥（API Key）</label>
       <input id="cfgKey" type="password" placeholder="sk-...">
     </div>
     <div class="field">
-      <label>模型名</label>
+      <label for="cfgModel">模型名</label>
       <input id="cfgModel" placeholder="deepseek-v4-flash">
-      <div class="note">推荐 deepseek-v4-flash（快且便宜）；追求更强剧情可填 deepseek-v4-pro（较慢较贵）。旧模型名 deepseek-chat / deepseek-reasoner 已停用</div>
+      <div class="note" id="cfgModelNote"></div>
     </div>
     <div class="field">
       <label for="cfgFont">阅读字号</label>
@@ -955,11 +973,12 @@ details.eggd.fate>summary{color:inherit;font-size:inherit}
       <div class="note">也可以双指放大页面。</div>
     </div>
     <div class="field">
-      <label>思考模式（仅 DeepSeek V4 生效）</label>
+      <label for="cfgThink">思考模式</label>
       <select id="cfgThink">
         <option value="off">关闭 —— 出剧情快，推荐</option>
         <option value="on">开启 —— 剧情更缜密但等待更久</option>
       </select>
+      <div class="note" id="cfgThinkNote"></div>
     </div>
     <div class="field" id="cfgProseWrap">
       <label>本局文笔（随时可换，下一回合起生效）</label>
@@ -1144,6 +1163,27 @@ details.eggd.fate>summary{color:inherit;font-size:inherit}
 "use strict";
 /* ================= 配置 ================= */
 const LS_CFG='xian_cfg', LS_SAVE='xian_save_v1', LS_HALL='xian_hall';
+const API_PRESETS={
+  deepseek:{base:'https://api.deepseek.com',model:'deepseek-v4-flash',register:'https://platform.deepseek.com',keyPage:'https://platform.deepseek.com/api_keys',
+    note:'DeepSeek 官方 API 平台，使用该平台创建的密钥。',modelNote:'默认 deepseek-v4-flash；追求更强剧情可改为 deepseek-v4-pro（较慢较贵）。'},
+  glm:{base:'https://open.bigmodel.cn/api/paas/v4',model:'glm-4.7-flash',register:'https://open.bigmodel.cn/login',keyPage:'https://open.bigmodel.cn/usercenter/proj-mgmt/apikeys',
+    note:'智谱开放平台。默认 GLM-4.7-Flash，当前官方标价免费；可用额度、并发限制与后续价格以平台为准。请使用通用 API 密钥。',modelNote:'默认 glm-4.7-flash（免费）；也可手填 glm-4.7-flashx 或 glm-4.5-air 等付费模型，请先查看平台价格。'},
+  qwen:{base:'https://dashscope.aliyuncs.com/compatible-mode/v1',model:'qwen-flash',register:'https://account.aliyun.com/login/login.htm?oauth_callback=https%3A%2F%2Fbailian.console.aliyun.com%2Fcn-beijing%2Fmodel%2Fsettings%2Fapi-key',keyPage:'https://bailian.console.aliyun.com/cn-beijing/model/settings/api-key',
+    note:'阿里云百炼北京区。注册 / 登录后开通模型服务，在北京地域创建 API Key；其他地域的密钥请配套修改接口地址。',modelNote:'默认 qwen-flash（低成本）；也可手填 qwen-plus。按实际 token 用量计费，试用额度与价格以百炼控制台为准。'}
+};
+function apiProvider(base){
+  const b=String(base||'').trim().replace(/\/+$/,'');
+  if(/^https:\/\/api\.deepseek\.com(?:\/v1)?$/i.test(b))return 'deepseek';
+  if(/^https:\/\/open\.bigmodel\.cn\/api\/paas\/v4$/i.test(b))return 'glm';
+  if(/^https:\/\/(?:dashscope(?:-intl|-us)?\.aliyuncs\.com|[a-z0-9-]+\.(?:cn-beijing|ap-southeast-1|us-east-1|ap-northeast-1)\.maas\.aliyuncs\.com)\/compatible-mode\/v1$/i.test(b))return 'qwen';
+  return 'custom';
+}
+function apiOrigin(base){const m=String(base||'').trim().match(/^https?:\/\/[^/]+/i);return m?m[0].toLowerCase():'';}
+function apiThinkMode(c){
+  if(apiProvider(c.base)==='qwen'&&/^qwen/i.test(c.model))return 'off'; // JSON 输出使用非思考模式
+  if(apiProvider(c.base)==='glm'&&/^glm-(?:4\.[5-9]|[5-9])/i.test(c.model))return 'thinking';
+  return /deepseek/i.test(c.model)?'thinking':'custom';
+}
 // 第二版再开：开宗立派、招徕门人、宗门战、一统修真界（代码留着，入口关掉）
 const FEATURE_CLAN=false;
 let storedCfg=null;try{storedCfg=JSON.parse(localStorage.getItem(LS_CFG)||'null');}catch(_){}
@@ -8070,8 +8110,13 @@ async function callLLMOnce(prompt, onPartial, opt){
   if(!cfg.key){openSettings();throw new Error('请先在设置中填写密钥');}
   const url=cfg.base.replace(/\/+$/,'')+'/chat/completions';
   const body={model:cfg.model||'deepseek-v4-flash',messages:opt.noSystem?[{role:'user',content:prompt}]:[{role:'system',content:styleSystem()},{role:'user',content:prompt}],temperature:opt.temperature!=null?opt.temperature:styleTemp(),max_tokens:opt.maxTokens||7000,stream:true,response_format:{type:'json_object'}};
-  if(/deepseek/i.test(body.model))body.thinking={type:cfg.think?'enabled':'disabled'};
-  if(cfg.think) body.max_tokens=Math.max(body.max_tokens,(opt.maxTokens||7000)+8000);   // 思考过程也算在 max_tokens 里，不放宽就容易截断
+  const thinkMode=apiThinkMode(cfg),thinking=thinkMode!=='off'&&cfg.think;
+  if(thinkMode==='thinking')body.thinking={type:thinking?'enabled':'disabled'};
+  if(thinkMode==='off'){
+    body.enable_thinking=false;
+    if(!body.messages.some(m=>/json/i.test(m.content)))body.messages[body.messages.length-1].content+='\n'+JSON_RULE;
+  }
+  if(thinking) body.max_tokens=Math.max(body.max_tokens,(opt.maxTokens||7000)+8000);   // 思考过程也算在 max_tokens 里，不放宽就容易截断
   const ac=typeof AbortController!=='undefined'?new AbortController():null;
   const ms=opt.timeout||90000;let timer=null,total=null;
   const abort=()=>{if(ac)ac.abort();};
@@ -14836,11 +14881,19 @@ async function slotsLoad(){
     SLOTS[i]=v;
   }
 }
+let settingsKeyOrigin='';
+function readCfgFields(){
+  const p=API_PRESETS[$('cfgProvider').value]||API_PRESETS.deepseek;
+  const base=$('cfgBase').value.trim()||p.base;
+  if(settingsKeyOrigin!==apiOrigin(base))$('cfgKey').value='';
+  settingsKeyOrigin=apiOrigin(base);
+  const c={base,key:$('cfgKey').value.trim(),model:$('cfgModel').value.trim()||p.model,think:$('cfgThink').value==='on',fontSize:Number($('cfgFont').value)||16};
+  if(apiThinkMode(c)==='off')c.think=false;
+  return c;
+}
 function saveCfgFromFields(){
   if(!$('settingsMask').classList.contains('on')) return;
-  const c={base:$('cfgBase').value.trim()||'https://api.deepseek.com', key:$('cfgKey').value.trim(), model:$('cfgModel').value.trim()||'deepseek-v4-flash', think:$('cfgThink').value==='on',fontSize:Number($('cfgFont').value)||16};
-  if(!c.key&&!cfg.key) return;
-  cfg=c; localStorage.setItem(LS_CFG,JSON.stringify(cfg));
+  cfg=readCfgFields(); localStorage.setItem(LS_CFG,JSON.stringify(cfg));
 }
 // 退出/切后台时兜底保存（含斗法、对话进行中的状态）
 function flushAll(){ try{ saveCfgFromFields(); snapshotDuel(); snapshotConvo(); saveGame(); }catch(_){} }
@@ -15013,9 +15066,33 @@ $('importFile').onchange=e=>{
   r.readAsText(f);
   e.target.value='';
 };
+function renderApiPreset(){
+  const p=API_PRESETS[$('cfgProvider').value];
+  $('cfgProviderNote').textContent=p?p.note:'填写服务商提供的 OpenAI 兼容地址、模型名和密钥。';
+  $('cfgModelNote').textContent=p?p.modelNote:'按服务商文档填写模型名；游戏需要支持流式回复与 JSON 输出的文本模型。';
+  $('cfgBase').placeholder=p?p.base:'https://你的接口地址/v1';
+  $('cfgModel').placeholder=p?p.model:'服务商提供的模型名';
+  $('cfgProviderLinks').hidden=!p;
+  $('cfgProviderLinks').style.display=p?'flex':'none';
+  for(const [id,url] of [['cfgRegister',p&&p.register],['cfgGetKey',p&&p.keyPage]]){
+    if(url)$(id).setAttribute('href',url);else $(id).removeAttribute('href');
+  }
+  const mode=apiThinkMode({base:$('cfgBase').value,model:$('cfgModel').value});
+  $('cfgThink').disabled=mode==='off';
+  if(mode==='off')$('cfgThink').value='off';
+  $('cfgThinkNote').textContent=mode==='off'?'千问使用非思考模式，配合游戏 JSON 输出，并减少等待与思考 token。':mode==='thinking'?'DeepSeek 与智谱 GLM 支持此开关；关闭可减少等待与思考 token。':'此模型的思考参数由服务商决定；此开关仅适配 DeepSeek 与智谱 GLM。';
+}
+function applyApiPreset(){
+  const p=API_PRESETS[$('cfgProvider').value];
+  if(p){$('cfgBase').value=p.base;$('cfgModel').value=p.model;$('cfgThink').value='off';}
+  renderApiPreset();saveCfgFromFields();
+}
 function openSettings(){
   $('cfgBase').value=cfg.base; $('cfgKey').value=cfg.key; $('cfgModel').value=cfg.model;
+  settingsKeyOrigin=apiOrigin(cfg.base);
+  $('cfgProvider').value=apiProvider(cfg.base);
   $('cfgThink').value=cfg.think?'on':'off';
+  renderApiPreset();
   $('cfgFont').value=String(cfg.fontSize||16);
   $('cfgFreeWrap').style.display=S?'block':'none';
   $('cfgProseWrap').style.display=S?'block':'none';
@@ -15042,6 +15119,9 @@ function applyFreedomChange(){
   toast('自由度已改为「'+FREEDOM[v].label+'」，下一回合起生效');
 }
 $('btnSettings').onclick=openSettings;
+$('cfgProvider').addEventListener('change',applyApiPreset);
+$('cfgBase').addEventListener('input',()=>{$('cfgProvider').value=apiProvider($('cfgBase').value);renderApiPreset();});
+$('cfgModel').addEventListener('input',renderApiPreset);
 ['cfgBase','cfgKey','cfgModel','cfgThink'].forEach(id=>$(id).addEventListener('change',saveCfgFromFields));
 $('cfgFreedom').addEventListener('change',applyFreedomChange);
 $('cfgProse').addEventListener('change',()=>{ if(!S) return; const v=$('cfgProse').value; if(!PROSE[v]||v===S.prose) return; S.prose=v; saveGame(); $('cfgProseNote').textContent='已换成「'+PROSE[v].label+'」'; toast('文笔已换成「'+PROSE[v].label+'」，下一回合起生效'); });
@@ -15062,7 +15142,7 @@ $('cfgMem').addEventListener('change',()=>{
 ['cfgBase','cfgKey','cfgModel'].forEach(id=>$(id).addEventListener('input',saveCfgFromFields));
 $('cfgCancel').onclick=()=>$('settingsMask').classList.remove('on');
 $('cfgSave').onclick=()=>{
-  cfg={base:$('cfgBase').value.trim()||'https://api.deepseek.com', key:$('cfgKey').value.trim(), model:$('cfgModel').value.trim()||'deepseek-v4-flash', think:$('cfgThink').value==='on',fontSize:Number($('cfgFont').value)||16};
+  cfg=readCfgFields();
   localStorage.setItem(LS_CFG,JSON.stringify(cfg));
   $('settingsMask').classList.remove('on');
   toast('设置已保存');
