@@ -9977,7 +9977,13 @@ function npcDeathEvidence(n,text){
       const victim=new RegExp(kill+'(?:了|掉)?\\s*$').test(prefix)||/(?:将|把)$/.test(prefix)&&new RegExp('^[^，,]{0,20}'+kill).test(after);
       const clause=after.split(/[，,]/)[0];
       const passive=/^[^，,]{0,12}(?:被|遭)/.test(clause)&&new RegExp(kill).test(clause);
-      const death=/(?:身死|身亡|死亡|死去|已死|死于|死在|命丧|丧生|(?<![杀毒害打拍刺砍烧轰震勒掐冻射])死了(?!父|母|妻|夫|儿|女|兄|弟|姐|妹)|陨落|殒落|殒命|毙命|丧了?命|气绝|断了?气|咽了?气|没了气息|魂飞魄散|身首异处|尸首分离|首级落地|人头落地|坐化|病故|寿终)/.exec(after);
+      // iOS 16.4 之前不支持正则后行断言；字面量会让整段核心脚本解析失败。
+      const deaths=/(?:身死|身亡|死亡|死去|已死|死于|死在|命丧|丧生|死了(?!父|母|妻|夫|儿|女|兄|弟|姐|妹)|陨落|殒落|殒命|毙命|丧了?命|气绝|断了?气|咽了?气|没了气息|魂飞魄散|身首异处|尸首分离|首级落地|人头落地|坐化|病故|寿终)/g;
+      let death=null;
+      for(let m;(m=deaths.exec(after));){
+        if(m[0]==='死了'&&/[杀毒害打拍刺砍烧轰震勒掐冻射]/.test(after.charAt(m.index-1)))continue;
+        death=m;break;
+      }
       const gone=!!death&&!/看|望|想|忆|悼|祭|听|闻|说|道|谈|提起|得知|目睹|见|盼|希望|害怕|担心|惧|关于|他人|别人|对方|[你他她]的|一[位名个]|有人/.test(after.slice(0,death.index));
       const otherSubject=/^的(?:父|母|兄|弟|姐|妹|师|妻|夫|徒|儿|女|同门|亲友|朋友|仇|敌)/.test(after);
       if(!otherSubject&&(victim||passive||gone)){
@@ -14760,40 +14766,73 @@ function setDot(tab,on){ const d=$(tab==='people'?'dotPeople':'dotWorld'); if(d)
 /* ================= 章节库（IndexedDB） ================= */
 // 章节正文很占地方，全塞 localStorage 迟早撑爆，挪到 IndexedDB 里
 const IDB_NAME='xian_book', IDB_STORE='chapters';
+// 打开、读取与写入都要有期限。超时仅结束等待，不删除数据库或旧存档。
+const STORAGE_TIMEOUT_MS=4000;
+function storageError(code){const e=new Error(code);e.code=code;return e;}
+function openGameDb(name,upgrade){
+  return new Promise((resolve,reject)=>{
+    let settled=false,rq;
+    const timer=setTimeout(()=>finish(storageError('IDB_TIMEOUT')),STORAGE_TIMEOUT_MS);
+    function finish(error,db){
+      if(settled){if(db)db.close();return;}
+      settled=true;clearTimeout(timer);
+      if(error)reject(error);else resolve(db);
+    }
+    try{
+      if(typeof indexedDB==='undefined'){finish(storageError('IDB_UNAVAILABLE'));return;}
+      rq=indexedDB.open(name,1);
+      rq.onupgradeneeded=()=>{
+        if(settled){try{rq.transaction.abort();}catch(_){}return;}
+        try{upgrade(rq.result);}catch(e){try{rq.transaction.abort();}catch(_){}finish(e);}
+      };
+      rq.onsuccess=()=>finish(null,rq.result);
+      rq.onerror=()=>finish(rq.error||storageError('IDB_OPEN_FAILED'));
+      rq.onblocked=()=>finish(storageError('IDB_BLOCKED'));
+    }catch(e){finish(e);}
+  });
+}
+function gameDbTransaction(db,store,mode,action){
+  return new Promise((resolve,reject)=>{
+    let settled=false,tx,rq;
+    const timer=setTimeout(()=>{
+      if(tx)try{tx.abort();}catch(_){}
+      finish(storageError('IDB_TIMEOUT'));
+    },STORAGE_TIMEOUT_MS);
+    function finish(error){
+      if(settled)return;settled=true;clearTimeout(timer);
+      if(error){
+        try{db.close();}catch(_){}
+        if(db.name===SAVE_DB)sdbP=null;
+        if(db.name===IDB_NAME)idbP=null;
+        reject(error);
+      }else resolve(rq&&rq.result);
+    }
+    try{
+      tx=db.transaction(store,mode);
+      tx.oncomplete=()=>finish();
+      tx.onerror=()=>finish(tx.error||storageError('IDB_TRANSACTION_FAILED'));
+      tx.onabort=()=>finish(tx.error||storageError('IDB_ABORTED'));
+      rq=action(tx.objectStore(store));
+    }catch(e){if(tx)try{tx.abort();}catch(_){}finish(e);}
+  });
+}
 let idbP=null;
 function idb(){
-  if(idbP) return idbP;
-  idbP=new Promise((res,rej)=>{
-    if(typeof indexedDB==='undefined') return rej(new Error('no idb'));
-    const rq=indexedDB.open(IDB_NAME,1);
-    rq.onupgradeneeded=()=>{
-      const db=rq.result;
-      if(!db.objectStoreNames.contains(IDB_STORE)){
-        const st=db.createObjectStore(IDB_STORE,{keyPath:'id'});
-        st.createIndex('run','run',{unique:false});
-      }
-    };
-    rq.onsuccess=()=>res(rq.result);
-    rq.onerror=()=>rej(rq.error);
-  }).catch(e=>{ idbP=null; throw e; });
+  if(idbP)return idbP;
+  idbP=openGameDb(IDB_NAME,db=>{
+    if(!db.objectStoreNames.contains(IDB_STORE)){
+      const st=db.createObjectStore(IDB_STORE,{keyPath:'id'});
+      st.createIndex('run','run',{unique:false});
+    }
+  }).then(db=>{db.onversionchange=()=>{db.close();idbP=null;};return db;}).catch(e=>{idbP=null;throw e;});
   return idbP;
 }
 async function bookPut(rec){
-  const db=await idb();
-  return new Promise((res,rej)=>{
-    const tx=db.transaction(IDB_STORE,'readwrite');
-    tx.objectStore(IDB_STORE).put(rec);
-    tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error);
-  });
+  return gameDbTransaction(await idb(),IDB_STORE,'readwrite',st=>st.put(rec));
 }
 async function bookAll(run){
-  const db=await idb();
-  return new Promise((res,rej)=>{
-    const tx=db.transaction(IDB_STORE,'readonly');
-    const rq=tx.objectStore(IDB_STORE).index('run').getAll(run);
-    rq.onsuccess=()=>res((rq.result||[]).sort((a,b)=>a.seq-b.seq));
-    rq.onerror=()=>rej(rq.error);
-  });
+  const rows=await gameDbTransaction(await idb(),IDB_STORE,'readonly',st=>st.index('run').getAll(run));
+  return (rows||[]).sort((a,b)=>a.seq-b.seq);
 }
 // 存档停在第 chapSeq 章，全本里却还有更后面的：那几章写出来了、数值没存上。
 // 挪到另一个 run 名下（不然下一章会按同样的编号盖上去），在正文底下说一声，给个导出。
@@ -14808,10 +14847,8 @@ async function bookLost(){
   const run=S.runId+'~lost'+Date.now().toString(36);
   try{
     const db=await idb();
-    await new Promise((res,rej)=>{
-      const tx=db.transaction(IDB_STORE,'readwrite'); const st=tx.objectStore(IDB_STORE);
+    await gameDbTransaction(db,IDB_STORE,'readwrite',st=>{
       for(const r of lost){ st.delete(r.id); st.put(Object.assign({},r,{id:run+':'+String(r.seq).padStart(5,'0'),run})); }
-      tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error);
     });
   }catch(_){}
   const n=lost.length;
@@ -14825,11 +14862,8 @@ async function bookLost(){
 async function bookClear(run){
   const db=await idb();
   const rows=await bookAll(run);
-  return new Promise((res,rej)=>{
-    const tx=db.transaction(IDB_STORE,'readwrite');
-    const st=tx.objectStore(IDB_STORE);
-    for(const r of rows) st.delete(r.id);
-    tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error);
+  return gameDbTransaction(db,IDB_STORE,'readwrite',st=>{
+    for(const r of rows)st.delete(r.id);
   });
 }
 // 把一章 DOM 抽成纯文本，供导出全本用
@@ -14865,27 +14899,21 @@ function slotMeta(i){
 const SAVE_DB='xian_saves';
 let sdbP=null;
 function sdb(){
-  if(sdbP) return sdbP;
-  sdbP=new Promise((res,rej)=>{
-    if(typeof indexedDB==='undefined') return rej(new Error('no idb'));
-    const rq=indexedDB.open(SAVE_DB,1);
-    rq.onupgradeneeded=()=>{ const db=rq.result; if(!db.objectStoreNames.contains('kv')) db.createObjectStore('kv'); };
-    rq.onsuccess=()=>res(rq.result);
-    rq.onerror=()=>rej(rq.error);
-  }).catch(e=>{ sdbP=null; throw e; });
+  if(sdbP)return sdbP;
+  sdbP=openGameDb(SAVE_DB,db=>{if(!db.objectStoreNames.contains('kv'))db.createObjectStore('kv');})
+    .then(db=>{db.onversionchange=()=>{db.close();sdbP=null;};return db;})
+    .catch(e=>{sdbP=null;throw e;});
   return sdbP;
 }
 async function kvGet(k){
-  const db=await sdb();
-  return new Promise((res,rej)=>{ const rq=db.transaction('kv','readonly').objectStore('kv').get(k); rq.onsuccess=()=>res(rq.result==null?null:rq.result); rq.onerror=()=>rej(rq.error); });
+  const value=await gameDbTransaction(await sdb(),'kv','readonly',st=>st.get(k));
+  return value==null?null:value;
 }
 async function kvPut(k,v){
-  const db=await sdb();
-  return new Promise((res,rej)=>{ const tx=db.transaction('kv','readwrite'); tx.objectStore('kv').put(v,k); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); tx.onabort=()=>rej(tx.error||new Error('abort')); });
+  return gameDbTransaction(await sdb(),'kv','readwrite',st=>st.put(v,k));
 }
 async function kvDel(k){
-  const db=await sdb();
-  return new Promise((res,rej)=>{ const tx=db.transaction('kv','readwrite'); tx.objectStore('kv').delete(k); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); });
+  return gameDbTransaction(await sdb(),'kv','readwrite',st=>st.delete(k));
 }
 function lsDel(k){ try{ localStorage.removeItem(k); }catch(_){} }
 // 写盘排队：一回里 saveGame 会叫好几次，只写最新那份，前一笔没落地不开第二笔
@@ -14926,7 +14954,7 @@ function saveWipe(){ saveQ=null; lsDel(LS_SAVE); kvDel('main').catch(()=>{}); }
 function parseSave(raw){ if(!raw) return null; try{ const d=JSON.parse(raw); return d&&d.player?d:null; }catch(_){ return null; } }
 async function readMain(){
   let a=null,b=null;
-  try{ a=parseSave(await kvGet('main')); }catch(_){}
+  try{ a=parseSave(await kvGet('main')); }catch(e){if(e.code!=='IDB_UNAVAILABLE')throw e;}
   try{ b=parseSave(localStorage.getItem(LS_SAVE)); }catch(_){}
   if(a&&b) return num(b.savedAt)>num(a.savedAt)?b:a;
   return a||b;
@@ -14934,14 +14962,15 @@ async function readMain(){
 // 存档位：开局读进缓存，存档阁是同步画的
 var SLOTS={};
 async function slotsLoad(){
-  for(let i=1;i<=3;i++){
+  const loaded={};
+  await Promise.all([1,2,3].map(async i=>{
     let v=null;
-    try{ v=await kvGet('slot'+i); }catch(_){}
+    try{ v=await kvGet('slot'+i); }catch(e){if(e.code!=='IDB_UNAVAILABLE')throw e;}
     let ls=null; try{ ls=localStorage.getItem(LS_SLOT+i); }catch(_){}
-    if(ls&&!v){ try{ await kvPut('slot'+i,ls); v=ls; lsDel(LS_SLOT+i); }catch(_){ v=ls; } }
-    else if(ls&&v) lsDel(LS_SLOT+i);
-    SLOTS[i]=v;
-  }
+    if(ls&&!v)v=ls;
+    loaded[i]=v;
+  }));
+  SLOTS=loaded;
 }
 let settingsKeyOrigin='';
 function readCfgFields(){
@@ -15332,13 +15361,31 @@ function showDemo(){
 })();
 
 /* ================= 启动 ================= */
-(async function boot(){
-  applyReadingSize();
-  await slotsLoad();
-  if(await loadGame()){ saveGame(); toast('已载入上次进度'); return; }
-  if(!cfg.key||!cfg.base){ showDemo(); return; }
-  openCreate();
-})();
+let bootRunning=false;
+async function boot(){
+  if(bootRunning)return;
+  bootRunning=true;
+  let mask=$('storageBootMask');
+  if(!mask){
+    mask=document.createElement('div');mask.id='storageBootMask';mask.className='modal-mask on';mask.style.zIndex='10000';
+    mask.setAttribute('role','dialog');mask.setAttribute('aria-modal','true');mask.setAttribute('aria-label','读取存档');
+    document.body.appendChild(mask);
+  }
+  mask.innerHTML='<div class="modal"><h2>读取存档</h2><div class="sub">正在读取本机进度，请稍候……</div></div>';
+  try{
+    applyReadingSize();
+    await slotsLoad();
+    const loaded=await loadGame();
+    mask.remove();
+    if(loaded){saveGame();toast('已载入上次进度');return;}
+    if(!cfg.key||!cfg.base){showDemo();return;}
+    openCreate();
+  }catch(e){
+    mask.innerHTML='<div class="modal"><h2>存档暂时无法读取</h2><div class="sub">读取超时或被浏览器阻止，原有存档仍保留在本机。请关闭其他游戏标签页后重试。</div><div class="mbtnrow"><button class="mbtn primary" id="storageBootRetry" style="width:100%">重试读取</button></div></div>';
+    $('storageBootRetry').onclick=boot;
+  }finally{bootRunning=false;}
+}
+boot();
 </script>
 </body>
 </html>
