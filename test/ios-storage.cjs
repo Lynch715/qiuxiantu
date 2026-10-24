@@ -10,6 +10,7 @@ function setup(mode='ok'){
   const db={close(){state.closed++;},transaction(store,kind){
     const changes=[];let aborted=false;
     const tx={error:null,abort(){aborted=true;state.aborts++;queueMicrotask(()=>tx.onabort&&tx.onabort());},objectStore(){return {
+      getAllKeys(){return {result:[...data.keys()]};},
       get(k){const r={result:data.get(k)};if(state.mode==='read-error')queueMicrotask(()=>{tx.error=new Error('read failure');tx.onerror();});return r;},
       put(v,k){changes.push(()=>{data.set(k,v);state.writes++;});return {result:k};},
       delete(k){changes.push(()=>data.delete(k));return {};},
@@ -27,7 +28,7 @@ function setup(mode='ok'){
   e.run('x=>Object.assign(globalThis,x)')({indexedDB,setTimeout:(fn,ms)=>{const id=++timerId;timers.set(id,{fn,ms});return id;},clearTimeout:id=>timers.delete(id),localStorage:{getItem:k=>ls.get(k)||null,setItem:(k,v)=>ls.set(k,v),removeItem:k=>ls.delete(k)}});
   const fixture=e.val('S');e.run('S=null;');
   e.run('saveGame='+html.slice(html.indexOf('function saveGame(options)'),html.indexOf('async function saveDrain()')).replace('function saveGame(options)','function(options)'));
-  e.run(html.slice(html.indexOf('let bootRunning=false;'),html.lastIndexOf('\nboot();')));
+  e.run(html.slice(html.indexOf('let bootRunning=false'),html.lastIndexOf('\nboot();')));
   e.run("applyReadingSize=()=>{};showGame=()=>true;toast=()=>{};showDemo=()=>{$('story').innerHTML='demo';};openCreate=()=>{$('createMask').classList.add('on');};");
   const mask=e.run("$('storageBootMask')");mask.removed=false;mask.remove=()=>mask.removed=true;
   return {...e,ls,data,state,requests,connections,fixture,mask,expire:async()=>{await flush();for(const [id,t]of [...timers])if(t.ms===4000){timers.delete(id);t.fn();}await flush();},timers};
@@ -51,8 +52,8 @@ test('Blocked open never falls through to new game and retry recovers original m
   const saved=JSON.parse(e.data.get('main'));assert.equal(saved.player.name,e.fixture.player.name);assert.deepEqual(saved.chapters,e.fixture.chapters);
 });
 test('Read transaction timeout aborts instead of showing a fresh game, retaining both copies',async()=>{
-  const e=setup('tx-hang');e.data.set('main',JSON.stringify(e.fixture));e.ls.set('xian_save_v1','backup');const disk=[...e.data];const p=e.run('boot()');await e.expire();await p;
-  assert.match(e.mask.innerHTML,/重试读取/);assert.equal(e.run('S'),null);assert(e.state.aborts>=1);assert.deepEqual([...e.data],disk);assert.equal(e.ls.get('xian_save_v1'),'backup');assert.equal(e.run('sdbP'),null);
+  const e=setup('tx-hang');e.data.set('main',JSON.stringify(e.fixture));const backup=JSON.stringify({...e.fixture,savedAt:1});e.ls.set('xian_save_v1',backup);const disk=[...e.data];const p=e.run('boot()');await e.expire();await p;
+  assert.match(e.mask.innerHTML,/重试读取/);assert.equal(e.run('S'),null);assert(e.state.aborts>=1);assert.deepEqual([...e.data],disk);assert.equal(e.ls.get('xian_save_v1'),backup);assert.equal(e.run('sdbP'),null);
   e.state.mode='ok';await e.elements.get('storageBootRetry').onclick();await flush();assert.equal(e.run('S.player.name'),e.fixture.player.name);assert.equal(e.connections.length,2);
 });
 test('Explicit read error also keeps saves and displays recoverable error',async()=>{const e=setup('read-error');e.data.set('main','old');await e.run('boot()');assert.match(e.mask.innerHTML,/重试读取/);assert.equal(e.data.get('main'),'old');assert.equal(e.run('S'),null);});
@@ -70,4 +71,5 @@ test('Timed out writes abort and fall back without a late stale IDB overwrite',a
 test('Chapter writes/reads also finish on timeout and do not change stored data',async()=>{const e=setup('tx-hang');const p=e.run("bookPut({id:'a',run:'r',seq:1})");const rejected=assert.rejects(p);await e.expire();await rejected;assert.equal(e.data.size,0);assert(e.state.aborts);});
 test('Version change closes cached connection and subsequent access reopens it',async()=>{const e=setup();const db=await e.run('sdb()');db.onversionchange();assert.equal(e.run('sdbP'),null);await e.run('sdb()');assert.equal(e.connections.length,2);assert.equal(e.state.closed,1);});
 test('Repeated retry clicks share one boot attempt',async()=>{const e=setup('open-hang');const p=e.run('boot()');await e.run('boot()');assert.equal(e.connections.length,1);await e.expire();await p;assert.equal(e.run('bootRunning'),false);});
-(async()=>{for(const [name,fn]of tests){await fn();console.log('✓ '+name);}console.log(tests.length+' iOS/storage regressions passed');})().catch(e=>{console.error(e);process.exitCode=1;});
+module.exports={setup,flush};
+if(require.main===module)(async()=>{for(const [name,fn]of tests){await fn();console.log('✓ '+name);}console.log(tests.length+' iOS/storage regressions passed');})().catch(e=>{console.error(e);process.exitCode=1;});
