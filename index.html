@@ -2,6 +2,39 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
+<script>
+/* 独立启动提示：保持 ES5，不读取或写入任何存档与接口配置。 */
+(function (w, d) {
+  'use strict';
+  var done=false, failed=false, code='', timer=null;
+  function paint() {
+    if(done || !d.body)return;
+    var box=d.getElementById('startupError');
+    if(!box){
+      box=d.createElement('div');box.id='startupError';
+      box.setAttribute('role','alert');box.setAttribute('aria-live','assertive');
+      box.style.cssText='position:fixed;top:0;right:0;bottom:0;left:0;z-index:30000;overflow:auto;padding:40px 20px;background:#E4ECE6;color:#1F2E28;font:16px/1.7 sans-serif;';
+      box.innerHTML='<div style="max-width:560px;margin:0 auto;background:#fff;padding:24px;border:1px solid #BDCDC3;border-radius:8px"><h2 id="startupErrorTitle" style="font-size:22px;margin:0 0 12px"></h2><p id="startupErrorText"></p><p>请勿清理浏览器数据，原有存档仍保留在本机。重新加载后仍失败时，请截图提供下方诊断信息。</p><button id="startupRetry" type="button" style="padding:12px 20px;background:#34765B;color:white;border:0;border-radius:4px;font:inherit">重新加载此页</button><pre id="startupDiagnostic" style="white-space:pre-wrap;word-wrap:break-word;font:12px/1.6 monospace;margin-top:20px"></pre></div>';
+      d.body.appendChild(box);
+      d.getElementById('startupRetry').onclick=function(){w.location.reload();};
+    }
+    d.getElementById('startupErrorTitle').textContent=failed?'游戏启动未完成':'游戏仍在启动';
+    d.getElementById('startupErrorText').textContent=failed?'页面脚本未能正常运行，可能与浏览器兼容性或页面加载异常有关。':'启动等待时间较长。可继续等待，或重新加载此页；读取完成后此提示会自动关闭。';
+    d.getElementById('startupDiagnostic').textContent='求仙途 android-20261029\n启动代码：'+code+'\n'+(w.navigator&&w.navigator.userAgent||'浏览器信息不可用');
+  }
+  function fail(next){if(done)return;failed=true;if(!code||code==='START_WAIT')code=next;clearTimeout(timer);paint();}
+  w.xianStartup={
+    failed:function(){return failed;},
+    ready:function(){if(failed)return;done=true;clearTimeout(timer);var box=d.getElementById('startupError');if(box&&box.parentNode)box.parentNode.removeChild(box);}
+  };
+  w.addEventListener('error',function(e){if(e.target===w)fail('START_SCRIPT');});
+  w.addEventListener('unhandledrejection',function(){fail('START_PROMISE');});
+  d.addEventListener('DOMContentLoaded',function(){if(code)paint();});
+  // 尽早开始等待提示，覆盖主脚本尚未下载完的情况；慢读档不能被当成坏档。
+  timer=setTimeout(function(){if(!done&&!failed){code='START_WAIT';paint();}},12000);
+})(window,document);
+</script>
+
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>求仙途</title>
 <meta name="theme-color" content="#E4ECE6">
@@ -1194,6 +1227,22 @@ details.eggd.fate>summary{color:inherit;font-size:inherit}
 
 <script>
 "use strict";
+/* 旧安卓缺少 flat/flatMap/padStart；局部实现，不改写浏览器原型。 */
+function flatValues(rows){
+  const out=[];rows.forEach(value=>{if(Array.isArray(value))value.forEach(item=>out.push(item));else out.push(value);});return out;
+}
+function flatMapValues(rows,map){
+  const out=[];rows.forEach((value,index)=>{const mapped=map(value,index,rows);if(Array.isArray(mapped))mapped.forEach(item=>out.push(item));else out.push(mapped);});return out;
+}
+function chapterSequence(seq){let text=String(seq);while(text.length<5)text='0'+text;return text;}
+// 无原生 AbortController 时仍能取消等待与阻止迟到结果写入；不把替代 signal 传给 fetch。
+function requestController(){
+  if(typeof AbortController!=='undefined')return new AbortController();
+  let listeners=[];
+  const signal={aborted:false,addEventListener(type,fn){if(type==='abort')listeners.push(fn);},removeEventListener(type,fn){if(type==='abort')listeners=listeners.filter(f=>f!==fn);}};
+  return {signal,abort(){if(signal.aborted)return;signal.aborted=true;const pending=listeners;listeners=[];pending.forEach(fn=>fn.call(signal));}};
+}
+
 /* ================= 配置 ================= */
 const LS_CFG='xian_cfg', LS_SAVE='xian_save_v1', LS_HALL='xian_hall';
 const API_PRESETS={
@@ -1943,7 +1992,7 @@ function appendPlaneMail(pl,m){
   const mail=S.planeMail=S.planeMail||[];
   // 旧信没有事发日期，只按既有同界同文识别；新信保留日期，不吞掉下一月的同文通知。
   if(mail.some(x=>x.from===pl&&x.text===rec.text&&(!rec.date||x.date===rec.date)))return false;
-  mail.push({from:pl,...rec});while(mail.length>40)mail.shift();return true;
+  mail.push(Object.assign({from:pl},rec));while(mail.length>40)mail.shift();return true;
 }
 function news(t){ S.engineNews=S.engineNews||[]; t=plain(t); if(!t) return; if(S._bg){ const date=S.date||dateStr(); S.engineNews.push({text:t,date}); while(S.engineNews.length>40) S.engineNews.shift(); (S.bgNew=S.bgNew||[]).push({pl:S.plane,t,date}); return; } if(S.engineNews.length<8) S.engineNews.push(t); }
 /* ================= 两界（仙界扩展 X2） =================
@@ -3595,7 +3644,7 @@ const XIAN_GEAR_FORMS=[
   ['太乙仙金铸钟，钟腹刻周天星位','九宸星丝织幡，幡骨以星核打磨','周天仙玉琢盘，盘上星轨环环相扣'],
   ['归墟道石为尺，尺面留有大道刻痕','混元道金铸鼎，鼎壁道纹浑然一体','先天道丝织图，图中明暗如天地初分']
 ];
-const XIAN_GEAR=XIAN_GEAR_NAMES.flatMap((names,t)=>names.map((name,q)=>({
+const XIAN_GEAR=flatMapValues(XIAN_GEAR_NAMES,(names,t)=>names.map((name,q)=>({
   id:`xgear_${13+t*3+q}`,name,g:13+t*3+q,desc:XIAN_GEAR_FORMS[t][q],
   source:t===0?'仙市采买、仙宗兑换、小仙府':t===1?'小仙府、天仙炼器师':t<4?'古仙遗迹、同阶炼器师':'混沌秘境、同阶炼器师'
 })));
@@ -4319,7 +4368,7 @@ function relKindOf(text){
 // 不改人物、记忆、旧历史或时间；已有正式关系和解除凭据优先。
 function repairPlayerSpouseAliases(s){
   const p=s&&s.player;if(!p||!p.name)return;
-  const rows=(s.npcs||[]).concat(Object.entries(s.planes||{}).filter(([pl])=>pl!==(s.plane||'下界')).flatMap(([,bag])=>bag.npcs||[]),s.xianLimbo||[]);
+  const rows=(s.npcs||[]).concat(flatMapValues(Object.entries(s.planes||{}).filter(([pl])=>pl!==(s.plane||'下界')),([,bag])=>bag.npcs||[]),s.xianLimbo||[]);
   const edges=s.rels||[],mine=edges.filter(r=>r.a===p.name||r.b===p.name);
   const byName=new Map(mine.map(r=>[r.a===p.name?r.b:r.a,r]));
   const people=new Map();for(const n of rows)if(n&&n.name&&!people.has(n.name))people.set(n.name,n);
@@ -4515,7 +4564,7 @@ function requestEndRelation(name,kind){
   });
 }
 function relationshipExitBlock(){
-  const rows=(S.npcs||[]).flatMap(n=>Object.values(n.relationshipExits||{}).map(e=>`${n.name}：${e.label}（${e.date||''}）；当前关系${n.relation}`));
+  const rows=flatMapValues(S.npcs||[],n=>Object.values(n.relationshipExits||{}).map(e=>`${n.name}：${e.label}（${e.date||''}）；当前关系${n.relation}`));
   return rows.length?'【玩家已结束的关系约定】'+rows.join('；')+'。往事与子女仍在；未经玩家主动重新缔结，不得恢复婚恋、师徒或被逐后的门下资格。\n':'';
 }
 
@@ -5172,7 +5221,7 @@ function relicMonth(){
   const p=S.player; if(!p||inXianjie()) return;
   for(const [id,cost] of [['stonebug',5],['moonbug',2]]){
     if(!relicHas(p,id)) continue;
-    const it=Object.values(p.items).flat().find(x=>x&&x.relic===id), life=RELIC[id].life;
+    const it=flatValues(Object.values(p.items)).find(x=>x&&x.relic===id), life=RELIC[id].life;
     if(life&&it&&it.bornAge!=null&&num(p.age)>=it.bornAge+life){ takeItemsRelic(p,id); news(`${RELIC[id].name}老死了，蜷在袖口里一动不动`); syncRelics(p); continue; }
     if(p.money>=cost) p.money-=cost;
     else{ takeItemsRelic(p,id); news(`${RELIC[id].name}断了粮，饿死了`); syncRelics(p); }
@@ -5779,9 +5828,9 @@ function renderFamily(){
   const preg=[S.player].concat(S.npcs).filter(o=>o&&o.alive!==false&&o.preg&&(o.name===me||o.preg.with===me));
   if(preg.length)h+=preg.map(o=>`<div class="family-pregnancy"><strong>${esc(o.name)} · 已有身孕</strong>距预产期尚有 ${Math.max(0,num(o.preg.due)-num(S.elapsedDays))} 天，约 ${Math.max(0,Math.ceil((num(o.preg.due)-num(S.elapsedDays))/30))} 个月。<div class="panel-note">孕期按实际游戏时间推进，闭关也只结算这次已记录的孕期。</div></div>`).join('');
   h+=familyPartnerCards();
-  if(hist.length) h+=`<details class="panel-details"><summary>婚恋往事</summary>${hist.flatMap(r=>r.history.filter(x=>/成婚|结为夫妻|纳为|走到了一起|私情|断了|和离|解除婚姻|解除妾室|结束恋情|解除婚约/.test(x.text)).map(x=>esc(x.date+'　'+x.text))).slice(-8).join('<br>')}</details>`;
+  if(hist.length) h+=`<details class="panel-details"><summary>婚恋往事</summary>${flatMapValues(hist,r=>r.history.filter(x=>/成婚|结为夫妻|纳为|走到了一起|私情|断了|和离|解除婚姻|解除妾室|结束恋情|解除婚约/.test(x.text)).map(x=>esc(x.date+'　'+x.text))).slice(-8).join('<br>')}</details>`;
   if(num(S.player.age)<18) h+='<div class="note">不满十八，还不能婚嫁。</div>';
-  const exits=S.npcs.flatMap(n=>relationActions(n).filter(a=>a.kind==='romance').map(a=>({n,a})));
+  const exits=flatMapValues(S.npcs,n=>relationActions(n).filter(a=>a.kind==='romance').map(a=>({n,a})));
   if(exits.length)h+='<div class="mbtnrow">'+exits.map(({n,a})=>`<button class="mbtn" data-end-love="${esc(n.name)}" ${managementBlock()?'disabled':''}>${esc(n.name)} · ${esc(a.label)}</button>`).join('')+'</div>';
   $('fLove').innerHTML=h;
   $('fLove').querySelectorAll('[data-intimacy]').forEach(b=>b.onclick=()=>requestIntimacy(b.dataset.intimacy));
@@ -6216,7 +6265,7 @@ function clanNpcCultivationFactor(n){
   const c=clanOf(),d=c&&(c.disciples||[]).find(d=>d.alive&&linkedDisciple(d)===n);
   if(!d)return 1;
   const talent=Math.max(1,num(d.talent)||5);
-  return clanJobGrowth({...d,talent},clanTeachBonus())/(talent*0.25);
+  return clanJobGrowth(Object.assign({},d,{talent}),clanTeachBonus())/(talent*0.25);
 }
 /* ---- 势力与威望：每月往目标值挪一截 ---- */
 function clanForce(){
@@ -6806,7 +6855,7 @@ function hireProtected(n,s){
   if(family.test(relation)||family.test(String((s.origRel||{})[n.name]||''))) return true;
   if(/老婆|老公|妻子|妻|丈夫|夫君|夫人|相公|道侣|妾|恋人|情人|未婚|师父|师尊|师傅|恩师|徒弟|徒儿|挚友|好友|结义/.test(relation)&&!/^前|^原|已休|已和离|已断绝/.test(relation)) return true;
   const parents=o=>[o&&o.parents&&o.parents.father,o&&o.parents&&o.parents.mother].filter(Boolean);
-  const all=[p,...(s.npcs||[]),...Object.values(s.planes||{}).flatMap(b=>b.npcs||[])];
+  const all=[p,...(s.npcs||[]),...flatMapValues(Object.values(s.planes||{}),b=>b.npcs||[])];
   const byName=name=>all.find(x=>x.name===name);
   const kin=(a,b)=>{
     if(!a||!b) return false;
@@ -8202,9 +8251,9 @@ async function callLLMOnce(prompt, onPartial, opt){
   const ms=opt.timeout||90000;let timer=null,total=null;
   let rejectStopped;const stopped=new Promise((_,reject)=>{rejectStopped=reject;});
   const abort=()=>{if(ac)ac.abort();const e=new Error('请求已中止');e.name='AbortError';rejectStopped(e);};
-  const bump=()=>{if(ac){clearTimeout(timer);timer=setTimeout(abort,ms);}};
+  const bump=()=>{clearTimeout(timer);timer=setTimeout(abort,ms);};
   if(opt.signal){if(opt.signal.aborted)throw new Error('接口调用失败（请求已取消）');opt.signal.addEventListener('abort',abort,{once:true});}
-  bump();if(ac)total=setTimeout(abort,opt.totalTimeout||240000);
+  bump();total=setTimeout(abort,opt.totalTimeout||240000);
   let raw='',buf='',usage={},firstTextMs=null,requestStatus='failed';
   const started=llmClock();
   try{
@@ -10355,7 +10404,7 @@ function applyTurn(d, action, judge){
     else addAilment(t);
   }
   for(const t of asArr(ch.statusRemove)) dropAilment(t);
-  if(ch.itemsAdd&&failed){ const got=Object.values(ch.itemsAdd).flat().filter(x=>x&&x.name).map(x=>'【'+x.name+'】'); if(got.length) refused.push(...got); }
+  if(ch.itemsAdd&&failed){ const got=flatValues(Object.values(ch.itemsAdd)).filter(x=>x&&x.name).map(x=>'【'+x.name+'】'); if(got.length) refused.push(...got); }
   const upgraded=new Set();   // 本回就地升阶的同名物件：模型同时写的 itemsRemove 不再拿走它
   if(ch.itemsAdd&&!failed) for(const cat in ch.itemsAdd){
     if(!p.items[cat]) p.items[cat]=[];
@@ -12149,7 +12198,7 @@ async function convoSend(text, gift){
   // 「告辞」永不禁用：接口再慢也要能走人
   busy=true; $('convoSend').disabled=true; $('convoGiftBtn').disabled=true;
   const request=++convoRequest;
-  const controller=typeof AbortController!=='undefined'?new AbortController():null;
+  const controller=requestController();
   myConvo.request=controller;
   const roll=operation.roll===undefined?convoAttempt(n,text):operation.roll;operation.roll=roll;
   snapshotConvo();saveGame();   // 引擎先定成败；模型看不到骰子
@@ -13132,7 +13181,7 @@ function logChapter(div){
   S.chapSeq=(S.chapSeq||0)+1;
   const html=div.outerHTML;
   // IndexedDB 存全本，localStorage 只留最近十几章兜底
-  bookPut({id:S.runId+':'+String(S.chapSeq).padStart(5,'0'), run:S.runId, seq:S.chapSeq, html, text:chapterText(div), ts:Date.now()})
+  bookPut({id:S.runId+':'+chapterSequence(S.chapSeq), run:S.runId, seq:S.chapSeq, html, text:chapterText(div), ts:Date.now()})
     .catch(()=>{ idbOk=false; });
   S.chapters=S.chapters||[];
   S.chapters.push(html);
@@ -14600,7 +14649,7 @@ function closeDaoEnding(){
 }
 async function generateDaoEnding(){
   const v=daoView;if(!v||daoTextRequest||daoSealing||busy||daoEndingBlock(v.owner)||v.owner!==S||isDaoSealed(S))return false;
-  const request={view:v,controller:new AbortController()};daoTextRequest=request;v.message='正在写此生终章；关闭可中止，不改变游戏进度。';daoEndingRender();
+  const request={view:v,controller:requestController()};daoTextRequest=request;v.message='正在写此生终章；关闭可中止，不改变游戏进度。';daoEndingRender();
   try{
     const raw=await llmJSON(daoEndingPrompt(v.facts),null,{kind:'bio',maxTokens:3500,signal:request.controller.signal,validate:r=>daoEndingBio(r,v.facts)});
     if(daoTextRequest!==request||daoView!==v||S!==v.owner||busy||daoEndingBlock(S)||daoEndingSource(daoEndingFacts(S))!==v.source){if(daoView===v)v.message='当前进度已有变化，这次文字未写入。请重新打开终章。';return false;}
@@ -14671,7 +14720,7 @@ async function runTurn(action, judge, extra){
     if(previous&&previous.forecast)recordQuestCombat(finishedCombat,previous.forecast.state);
   }
   let committed=false;
-  const controller=typeof AbortController!=='undefined'?new AbortController():null;
+  const controller=requestController();
   activeTurnAbort=controller;
   let pending;
   $('choices').innerHTML='';
@@ -14870,7 +14919,7 @@ async function bookLost(){
   try{
     const db=await idb();
     await gameDbTransaction(db,IDB_STORE,'readwrite',st=>{
-      for(const r of lost){ st.delete(r.id); st.put(Object.assign({},r,{id:run+':'+String(r.seq).padStart(5,'0'),run})); }
+      for(const r of lost){ st.delete(r.id); st.put(Object.assign({},r,{id:run+':'+chapterSequence(r.seq),run})); }
     });
   }catch(_){}
   const n=lost.length;
@@ -14959,6 +15008,7 @@ function protectSaveConflict(error){
   renderStorageRecovery(mask,error);
 }
 function mayWriteCurrentSave(){
+  if(window.xianStartup&&window.xianStartup.failed())return false;
   try{
     const raw=localStorage.getItem(LS_RECOVERY),current=parseSave(raw);
     if(raw!=null&&!current){rememberSave('关闭前恢复副本',raw);protectSaveConflict(storageError('SAVE_CORRUPT'));return false;}
@@ -15126,6 +15176,7 @@ function saveCfgFromFields(){
 }
 // 退出/切后台时兜底保存（含斗法、对话进行中的状态）
 function flushAll(){
+  if(window.xianStartup&&window.xianStartup.failed())return;
   for(const step of [saveCfgFromFields,snapshotDuel,snapshotConvo])try{step();}catch(_){}
   try{saveGame();}catch(_){}
 }
@@ -15328,7 +15379,7 @@ function renderApiPreset(){
   for(const [id,url] of [['cfgRegister',links&&links.register],['cfgGetKey',links&&links.keyPage]]){
     if(url)$(id).setAttribute('href',url);else $(id).removeAttribute('href');
   }
-  const mode=apiThinkMode({base:$('cfgBase').value,model:$('cfgModel').value,...(isQwen?{qwenRegion:region}:{})});
+  const mode=apiThinkMode(Object.assign({base:$('cfgBase').value,model:$('cfgModel').value},isQwen?{qwenRegion:region}:{}));
   $('cfgThink').disabled=mode==='off'||mode==='required';
   if(mode==='off')$('cfgThink').value='off';
   if(mode==='required')$('cfgThink').value='on';
@@ -15552,8 +15603,8 @@ function renderStorageRecovery(mask,error){
   });
 }
 async function boot(){
-  if(bootRunning||recoveryRunning)return;
-  bootRunning=true;storageProtected=true;
+  if(bootRunning||recoveryRunning||(window.xianStartup&&window.xianStartup.failed()))return;
+  bootRunning=true;storageProtected=true;let presented=false;
   saveRecovery={records:{},candidates:[],unread:false,archived:false};
   let mask=$('storageBootMask');
   if(!mask){
@@ -15566,11 +15617,11 @@ async function boot(){
     applyReadingSize();await slotsLoad();
     const loaded=await loadGame();
     storageProtected=false;mask.remove();
-    if(loaded){saveGame();toast('已载入上次进度');return;}
-    if(!cfg.key||!cfg.base){showDemo();return;}
-    openCreate();
-  }catch(e){storageProtected=true;S=null;renderStorageRecovery(mask,e);}
-  finally{bootRunning=false;}
+    if(loaded){saveGame();toast('已载入上次进度');presented=true;return;}
+    if(!cfg.key||!cfg.base){showDemo();presented=true;return;}
+    openCreate();presented=true;
+  }catch(e){storageProtected=true;S=null;renderStorageRecovery(mask,e);presented=true;}
+  finally{bootRunning=false;if(presented&&window.xianStartup)window.xianStartup.ready();}
 }
 boot();
 </script>
