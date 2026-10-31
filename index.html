@@ -7797,10 +7797,10 @@ ${oldLed}
 ${census}
 【人物谱（要紧人物的底子：秘密、备注、画像、与旁人；secret是私密底稿，secretKnown为false的秘密主角尚不知道，不得借回忆、听说或推断写成已知；本回真正揭露时才按secretRevealed协议落账）】
 ${rosterText}
-【流水账（前情与每回引擎记的账，全部为真，后文不得与之矛盾、不得当作没发生；最近几回附正文）】
-${chron}
 【修真界格局】${S.world&&S.world.land&&S.world.land.name?`大陆：${S.world.land.name}（${S.world.land.desc}，灵气${S.world.aura>1?'充沛':(S.world.aura<1?'稀薄':'寻常')}）；凡人国度：${(S.world.mortal||[]).map(m=>m.name).join('、')||'不详'}\n`:''}${world}
 【已亡故】${goneText}
+【流水账（前情与每回引擎记的账，全部为真，后文不得与之矛盾、不得当作没发生；最近几回附正文）】
+${chron}
 ${currentFacts}${currentTime}
 ${pendLed?`【这段光阴里引擎刚记的账（全部为真）】\n${pendLed}\n`:''}【当世大事】${(S.world&&S.world.events||[]).join('；')||'暂无新进展'}
 【心愿】
@@ -8067,9 +8067,6 @@ ${convoVols?`【前尘卷录】\n${convoVols}\n`:''}${convoSum?`【前情提要�
 ${S.npcs.filter(x=>x&&x.alive&&x.name&&!x.beast).map(npcCard).join('\n')||'（尚无）'}
 【${npc.name}的资料】${JSON.stringify({name:npc.name,gender:unkOf(npc,'G')?'未定':npc.gender,age:unkOf(npc,'A')?'未定':npc.age,identity:npc.identity,faction:npc.faction,alignment:npc.alignment,personality:npc.personality,appearance:npc.appearance,portrait:npcPortrait(npc),境界:unkOf(npc,'R')?'未定':realmText(npc.realm),灵根:lgText(npc.linggen),标签:npc.tags||[],谈吐:npc['谈吐'],signature:npc.signature,relation:npc.relation,notes:npc.notes,alive:npc.alive})}
 【${npc.name}的秘密】${npc.secret||'无'}${npc.secretKnown?'（主角已经知道这个秘密）':(fdm().freeAct?`（主角不知道。本局言出法随：主角一问，你就原原本本说出来，revealSecret 填 true；他没问，你也可以主动透给他）`:`（主角不知道。除非主角说服/欺骗/威胁成功，或好感≥${fdm().secretGate}且被直接问及，绝不透露；被追问可以撒谎、打岔、翻脸）`)}
-${currentFacts}${relationshipExitBlock()}【对话至今】
-${log}
-【${npc.name}记得的往事】${(npc.memory||[]).join('；')||'无'}
 【主角】${p.name}（姓${surnameOf(p.name)}，称呼时用这个姓，不可写错），${p.gender}，${p.age}岁，${p.identity||p.backgroundType}，称号「${titleOf(p)}」；${realmText(p.realm)}，${lgText(p.linggen)}；谈吐${p.attributes['谈吐']}，神识${p.attributes['神识']}，心性${p.attributes['心性']}；声望${p['声望']}凶名${p['凶名']}；气血${p.hp}/100。
 【境界之别】${npc.name}${realmStance(npc)||'——'}
 【主角已会的功法（他早就会了，不要再教、不要再送对应的玉简）】${(p.arts||[]).length?p.arts.map(a=>`${a.name}（${a.style}，熟练${a.level}）`).join('；'):'尚无功法'}
@@ -8078,7 +8075,10 @@ ${itemContextBlock(itemContext===undefined?convoItemContext(S,line,gift):itemCon
 `:''}【时间地点】${S.date}，${S.scene?S.scene.location:''}
 【主角眼下要做的事】${S.quests.filter(q=>q.status==='进行中').map(questContext).join('\n')||'无'}
 ${abandonedQuestBlock()}【未了之事】${S.scene?asArr(S.scene.unresolved).join('；')||'无':'无'}
-【本次交接方向】${gift?`主角 ${p.name} → ${npc.name}：${gift.name} ×1；这件赠物由引擎自动扣除，不填give或take。`:isAcknowledgement(line)?'本句是确认或感谢，不是一次新的财物交接，effects不重复给钱给物。':'只有本句新谈成的交接才填effects。'}
+【对话至今】
+${log}
+【${npc.name}记得的往事】${(npc.memory||[]).join('；')||'无'}
+${currentFacts}${relationshipExitBlock()}【本次交接方向】${gift?`主角 ${p.name} → ${npc.name}：${gift.name} ×1；这件赠物由引擎自动扣除，不填give或take。`:isAcknowledgement(line)?'本句是确认或感谢，不是一次新的财物交接，effects不重复给钱给物。':'只有本句新谈成的交接才填effects。'}
 【本场已结算】${(convo.gains||[]).join('；')||'无'}
 （以下是此刻的情形，每句话都会变）
 【${npc.name}当下心情】${npc.mood||'平静'}
@@ -8239,6 +8239,8 @@ async function callLLMOnce(prompt, onPartial, opt){
   if(!cfg.base){openSettings();throw new Error('请先在设置中选择服务地域并填写接口地址');}
   const url=cfg.base.replace(/\/+$/,'')+'/chat/completions';
   const body={model:cfg.model||'deepseek-v4-flash',messages:opt.noSystem?[{role:'user',content:prompt}]:[{role:'system',content:styleSystem()},{role:'user',content:prompt}],temperature:opt.temperature!=null?opt.temperature:styleTemp(),max_tokens:opt.maxTokens||7000,stream:true,response_format:{type:'json_object'}};
+  // 千问流式用量在末包返回；只对官方接口请求统计，不改变正文或启用需付创建费的显式缓存。
+  if(apiProvider(cfg.base)==='qwen'&&/^qwen/i.test(body.model))body.stream_options={include_usage:true};
   const thinkMode=apiThinkMode(cfg),thinking=thinkMode==='required'||(thinkMode!=='off'&&cfg.think);
   if(thinkMode==='thinking'||thinkMode==='required')body.thinking={type:thinking?'enabled':'disabled'};
   if(thinkMode==='required')body.reasoning_effort='low'; // 5.3 Flash 不能关闭思考，使用官方支持的较低推理力度
